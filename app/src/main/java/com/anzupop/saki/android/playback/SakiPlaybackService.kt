@@ -37,6 +37,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -56,6 +59,9 @@ class SakiPlaybackService : MediaSessionService() {
 
     @Inject
     lateinit var streamCache: SimpleCache
+
+    @Inject
+    lateinit var lyricsHolder: LyricsHolder
 
     private val serviceScope = CoroutineScope(SupervisorJob())
     private val playerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -117,6 +123,45 @@ class SakiPlaybackService : MediaSessionService() {
                     soundBalancingMode = mode
                     val audioSessionId = player?.audioSessionId ?: C.AUDIO_SESSION_ID_UNSET
                     syncSoundBalancingEffect(audioSessionId)
+                }
+        }
+
+        playerScope.launch {
+            combine(
+                playbackPreferencesRepository.observePreferences()
+                    .map { it.bluetoothLyricsEnabled }
+                    .distinctUntilChanged(),
+                lyricsHolder.lyrics,
+            ) { enabled, lyrics -> if (enabled) lyrics else null }
+                .collectLatest { lyrics ->
+                    if (lyrics == null || !lyrics.synced) {
+                        return@collectLatest
+                    }
+                    var lastLyricText: String? = null
+                    while (true) {
+                        val activePlayer = player ?: break
+                        if (!activePlayer.isPlaying) {
+                            delay(500)
+                            continue
+                        }
+                        val positionMs = activePlayer.currentPosition
+                        val line = lyrics.lines.lastOrNull { it.startMs <= positionMs }
+                        val text = line?.text?.takeIf { it.isNotBlank() }
+                        if (text != null && text != lastLyricText) {
+                            lastLyricText = text
+                            val session = mediaSession ?: break
+                            val item = activePlayer.currentMediaItem ?: break
+                            val updated = item.buildUpon()
+                                .setMediaMetadata(
+                                    item.mediaMetadata.buildUpon()
+                                        .setTitle(text)
+                                        .build(),
+                                )
+                                .build()
+                            activePlayer.replaceMediaItem(activePlayer.currentMediaItemIndex, updated)
+                        }
+                        delay(500)
+                    }
                 }
         }
     }

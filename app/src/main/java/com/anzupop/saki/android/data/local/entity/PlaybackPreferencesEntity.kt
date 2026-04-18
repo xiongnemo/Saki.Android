@@ -11,6 +11,7 @@ data class PlaybackPreferencesEntity(
     val soundBalancingEnabled: Boolean,
     val soundBalancingModeKey: String,
     val streamCacheSizeMb: Int,
+    val bluetoothLyricsEnabled: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_ID = 0

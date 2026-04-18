@@ -195,6 +195,12 @@ object DatabaseModule {
                 )
                 """.trimIndent(),
             )
+            db.execSQL(
+                """
+                ALTER TABLE `playback_preferences`
+                ADD COLUMN `bluetoothLyricsEnabled` INTEGER NOT NULL DEFAULT 0
+                """.trimIndent(),
+            )
         }
     }
 

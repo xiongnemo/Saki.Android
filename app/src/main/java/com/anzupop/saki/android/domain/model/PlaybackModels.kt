@@ -112,6 +112,7 @@ data class PlaybackPreferences(
     val streamQuality: StreamQuality = StreamQuality.ORIGINAL,
     val soundBalancingMode: SoundBalancingMode = SoundBalancingMode.OFF,
     val streamCacheSizeMb: Int = DEFAULT_STREAM_CACHE_SIZE_MB,
+    val bluetoothLyricsEnabled: Boolean = false,
 ) {
     val streamCacheSizeBytes: Long
         get() = streamCacheSizeMb.toLong() * 1024L * 1024L

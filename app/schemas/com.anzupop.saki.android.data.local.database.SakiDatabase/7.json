@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 7,
-    "identityHash": "8e4fdf5a91b0e4cb91492564b56f5737",
+    "identityHash": "ac0bf7ba39888df53ce23328d64322f9",
     "entities": [
       {
         "tableName": "app_preferences",
@@ -31,208 +31,6 @@
           "autoGenerate": false,
           "columnNames": [
             "id"
-          ]
-        }
-      },
-      {
-        "tableName": "cached_albums",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `albumId` TEXT NOT NULL, `listType` TEXT NOT NULL, `name` TEXT NOT NULL, `artist` TEXT, `artistId` TEXT, `coverArtId` TEXT, `songCount` INTEGER, `durationSeconds` INTEGER, `year` INTEGER, `genre` TEXT, `created` TEXT, `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`serverId`, `albumId`, `listType`))",
-        "fields": [
-          {
-            "fieldPath": "serverId",
-            "columnName": "serverId",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "albumId",
-            "columnName": "albumId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "listType",
-            "columnName": "listType",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "name",
-            "columnName": "name",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "artist",
-            "columnName": "artist",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "artistId",
-            "columnName": "artistId",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "coverArtId",
-            "columnName": "coverArtId",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "songCount",
-            "columnName": "songCount",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "durationSeconds",
-            "columnName": "durationSeconds",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "year",
-            "columnName": "year",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "genre",
-            "columnName": "genre",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "created",
-            "columnName": "created",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "sortOrder",
-            "columnName": "sortOrder",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "serverId",
-            "albumId",
-            "listType"
-          ]
-        }
-      },
-      {
-        "tableName": "cached_artists",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `artistId` TEXT NOT NULL, `name` TEXT NOT NULL, `sectionName` TEXT NOT NULL, `albumCount` INTEGER, `coverArtId` TEXT, `artistImageUrl` TEXT, PRIMARY KEY(`serverId`, `artistId`))",
-        "fields": [
-          {
-            "fieldPath": "serverId",
-            "columnName": "serverId",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "artistId",
-            "columnName": "artistId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "name",
-            "columnName": "name",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "sectionName",
-            "columnName": "sectionName",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "albumCount",
-            "columnName": "albumCount",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "coverArtId",
-            "columnName": "coverArtId",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "artistImageUrl",
-            "columnName": "artistImageUrl",
-            "affinity": "TEXT"
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "serverId",
-            "artistId"
-          ]
-        }
-      },
-      {
-        "tableName": "cached_playlists",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `playlistId` TEXT NOT NULL, `name` TEXT NOT NULL, `owner` TEXT, `isPublic` INTEGER, `songCount` INTEGER, `durationSeconds` INTEGER, `coverArtId` TEXT, `created` TEXT, `changed` TEXT, PRIMARY KEY(`serverId`, `playlistId`))",
-        "fields": [
-          {
-            "fieldPath": "serverId",
-            "columnName": "serverId",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "playlistId",
-            "columnName": "playlistId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "name",
-            "columnName": "name",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "owner",
-            "columnName": "owner",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "isPublic",
-            "columnName": "isPublic",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "songCount",
-            "columnName": "songCount",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "durationSeconds",
-            "columnName": "durationSeconds",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "coverArtId",
-            "columnName": "coverArtId",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "created",
-            "columnName": "created",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "changed",
-            "columnName": "changed",
-            "affinity": "TEXT"
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "serverId",
-            "playlistId"
           ]
         }
       },
@@ -365,7 +163,7 @@
       },
       {
         "tableName": "playback_preferences",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `streamQualityKey` TEXT NOT NULL, `soundBalancingEnabled` INTEGER NOT NULL, `soundBalancingModeKey` TEXT NOT NULL, `streamCacheSizeMb` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `streamQualityKey` TEXT NOT NULL, `soundBalancingEnabled` INTEGER NOT NULL, `soundBalancingModeKey` TEXT NOT NULL, `streamCacheSizeMb` INTEGER NOT NULL, `bluetoothLyricsEnabled` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -394,6 +192,12 @@
           {
             "fieldPath": "streamCacheSizeMb",
             "columnName": "streamCacheSizeMb",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bluetoothLyricsEnabled",
+            "columnName": "bluetoothLyricsEnabled",
             "affinity": "INTEGER",
             "notNull": true
           }
@@ -540,7 +344,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8e4fdf5a91b0e4cb91492564b56f5737')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ac0bf7ba39888df53ce23328d64322f9')"
     ]
   }
 }

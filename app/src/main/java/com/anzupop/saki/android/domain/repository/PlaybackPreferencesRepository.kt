@@ -15,4 +15,6 @@ interface PlaybackPreferencesRepository {
     suspend fun updateSoundBalancing(mode: SoundBalancingMode)
 
     suspend fun updateStreamCacheSizeMb(sizeMb: Int)
+
+    suspend fun updateBluetoothLyrics(enabled: Boolean)
 }
