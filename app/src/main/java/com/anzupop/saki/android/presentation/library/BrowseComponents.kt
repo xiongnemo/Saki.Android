@@ -67,7 +67,7 @@ fun ArtistDetailScreen(
     isLoading: Boolean,
     error: String?,
     onOpenAlbum: (String) -> Unit,
-    onPlaySong: (Song) -> Unit,
+    onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
     LibraryDetailScaffold(
@@ -88,7 +88,7 @@ fun ArtistDetailScreen(
                             cachedSong = cachedSongsBySongId[song.id],
                             isStreamCached = song.id in streamCachedSongIds,
                             isDownloading = song.id in downloadingSongIds,
-                            onClick = { onPlaySong(song) },
+                            onClick = { onPlaySongs(topSongs, topSongs.indexOf(song)) },
                             onMore = { onShowActions(song) },
                         )
                     }
@@ -118,7 +118,6 @@ fun AlbumDetailScreen(
     isLoading: Boolean,
     error: String?,
     onPlaySongs: (List<Song>, Int) -> Unit,
-    onPlaySong: (Song) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
     LibraryDetailScaffold(
@@ -145,7 +144,7 @@ fun AlbumDetailScreen(
                         cachedSong = cachedSongsBySongId[song.id],
                         isStreamCached = song.id in streamCachedSongIds,
                         isDownloading = song.id in downloadingSongIds,
-                        onClick = { onPlaySong(song) },
+                        onClick = { onPlaySongs(album.songs, album.songs.indexOf(song)) },
                         onMore = { onShowActions(song) },
                     )
                 }
@@ -164,7 +163,6 @@ fun PlaylistDetailScreen(
     isLoading: Boolean,
     error: String?,
     onPlaySongs: (List<Song>, Int) -> Unit,
-    onPlaySong: (Song) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
     LibraryDetailScaffold(
@@ -191,7 +189,7 @@ fun PlaylistDetailScreen(
                         cachedSong = cachedSongsBySongId[song.id],
                         isStreamCached = song.id in streamCachedSongIds,
                         isDownloading = song.id in downloadingSongIds,
-                        onClick = { onPlaySong(song) },
+                        onClick = { onPlaySongs(playlist.songs, playlist.songs.indexOf(song)) },
                         onMore = { onShowActions(song) },
                     )
                 }

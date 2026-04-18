@@ -164,7 +164,6 @@ fun BrowseScreen(
                         isLoading = uiState.isAlbumLoading,
                         error = uiState.albumError,
                         onPlaySongs = onPlaySongs,
-                        onPlaySong = onPlaySong,
                         onShowActions = { actionSong = it },
                     )
 
@@ -178,7 +177,7 @@ fun BrowseScreen(
                         isLoading = uiState.isArtistLoading,
                         error = uiState.artistError,
                         onOpenAlbum = onOpenAlbum,
-                        onPlaySong = onPlaySong,
+                        onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
                     )
 
@@ -191,7 +190,6 @@ fun BrowseScreen(
                         isLoading = uiState.isPlaylistLoading,
                         error = uiState.playlistError,
                         onPlaySongs = onPlaySongs,
-                        onPlaySong = onPlaySong,
                         onShowActions = { actionSong = it },
                     )
 
@@ -209,6 +207,7 @@ fun BrowseScreen(
                         onOpenAlbum = onOpenAlbum,
                         onOpenPlaylist = onOpenPlaylist,
                         onPlaySong = onPlaySong,
+                        onPlaySongs = onPlaySongs,
                         onShowSongActions = { actionSong = it },
                     )
                 }
@@ -268,6 +267,7 @@ private fun BrowsePager(
     onOpenAlbum: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
     onPlaySong: (Song) -> Unit,
+    onPlaySongs: (List<Song>, Int) -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
     val sections = BrowseSection.entries
@@ -319,6 +319,7 @@ private fun BrowsePager(
                 onOpenArtist = onOpenArtist,
                 onOpenAlbum = onOpenAlbum,
                 onPlaySong = onPlaySong,
+                onPlaySongs = onPlaySongs,
                 onShowSongActions = onShowSongActions,
             )
         } else {
@@ -385,7 +386,7 @@ private fun BrowsePager(
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isSongsLoading,
                         error = uiState.songsError,
-                        onPlaySong = onPlaySong,
+                        onPlaySongs = onPlaySongs,
                         onShowSongActions = onShowSongActions,
                     )
                 }
@@ -466,6 +467,7 @@ private fun SearchResultsPage(
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onPlaySong: (Song) -> Unit,
+    onPlaySongs: (List<Song>, Int) -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
     val trimmedQuery = query.trim()
@@ -534,7 +536,7 @@ private fun SearchResultsPage(
                         cachedSong = cachedSongsBySongId[song.id],
                         isStreamCached = song.id in streamCachedSongIds,
                         isDownloading = song.id in downloadingSongIds,
-                        onClick = { onPlaySong(song) },
+                        onClick = { onPlaySongs(results.songs, results.songs.indexOf(song)) },
                         onMore = { onShowSongActions(song) },
                     )
                 }
@@ -686,7 +688,7 @@ private fun SongsPage(
     downloadingSongIds: Set<String>,
     isLoading: Boolean,
     error: String?,
-    onPlaySong: (Song) -> Unit,
+    onPlaySongs: (List<Song>, Int) -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
     if (isLoading && songs.isEmpty()) {
@@ -713,7 +715,7 @@ private fun SongsPage(
                 cachedSong = cachedSongsBySongId[song.id],
                 isStreamCached = song.id in streamCachedSongIds,
                 isDownloading = song.id in downloadingSongIds,
-                onClick = { onPlaySong(song) },
+                onClick = { onPlaySongs(songs, songs.indexOf(song)) },
                 onMore = { onShowSongActions(song) },
             )
         }
