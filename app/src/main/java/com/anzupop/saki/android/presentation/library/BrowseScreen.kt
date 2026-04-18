@@ -50,7 +50,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -101,8 +100,8 @@ fun BrowseScreen(
             .filter { cachedSong -> cachedSong.serverId == uiState.selectedServerId }
             .associateBy(CachedSong::songId)
     }
-    var actionSong by rememberSaveable { mutableStateOf<Song?>(null) }
-    var detailSong by rememberSaveable { mutableStateOf<Song?>(null) }
+    var actionSong by remember { mutableStateOf<Song?>(null) }
+    var detailSong by remember { mutableStateOf<Song?>(null) }
 
     BackHandler(
         enabled = uiState.selectedArtist != null ||
