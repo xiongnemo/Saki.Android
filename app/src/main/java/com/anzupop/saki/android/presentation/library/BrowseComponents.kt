@@ -245,7 +245,7 @@ private fun LibraryDetailScaffold(
 }
 
 @Composable
-fun ArtistRow(artist: ArtistSummary, server: ServerConfig, onOpenArtist: (String) -> Unit) {
+fun ArtistRow(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
     RowCard(
         title = artist.name,
         subtitle = artist.albumCount?.let { "$it ${if (it == 1) "album" else "albums"}" } ?: "Artist",

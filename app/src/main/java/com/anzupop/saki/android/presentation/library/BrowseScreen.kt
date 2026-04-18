@@ -504,7 +504,7 @@ private fun SearchResultsPage(
                     )
                 }
                 items(results.artists, key = { it.id }) { artist ->
-                    ArtistRow(artist = artist, server = currentServer, onOpenArtist = onOpenArtist)
+                    ArtistRow(artist = artist, onOpenArtist = onOpenArtist)
                 }
             }
 
@@ -582,7 +582,7 @@ private fun ArtistsPage(
             if (section.artists.isNotEmpty()) {
                 item { SectionTitle(section.name, "${section.artists.size} ${if (section.artists.size == 1) "artist" else "artists"}") }
                 items(section.artists, key = { it.id }) { artist ->
-                    ArtistRow(artist = artist, server = server, onOpenArtist = onOpenArtist)
+                    ArtistRow(artist = artist, onOpenArtist = onOpenArtist)
                 }
             }
         }
