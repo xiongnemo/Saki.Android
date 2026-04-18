@@ -15,6 +15,7 @@ import com.anzupop.saki.android.domain.model.PlaylistSummary
 import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.Song
+import com.anzupop.saki.android.domain.model.SongLyrics
 import com.anzupop.saki.android.domain.model.SoundBalancingMode
 import com.anzupop.saki.android.domain.model.StreamQuality
 import com.anzupop.saki.android.domain.model.TextScale
@@ -27,6 +28,7 @@ import com.anzupop.saki.android.domain.repository.SubsonicRepository
 import com.anzupop.saki.android.domain.repository.StreamCacheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -102,6 +104,34 @@ class SakiAppViewModel @Inject constructor(
                     state.copy(playbackState = playbackState)
                 }
             }
+        }
+
+        // Fetch lyrics when current track changes
+        viewModelScope.launch {
+            playbackManager.playbackState
+                .map { state ->
+                    state.currentItem?.let {
+                        val sid = it.serverId ?: return@let null
+                        sid to it.songId
+                    }
+                }
+                .distinctUntilChanged()
+                .collectLatest { pair ->
+                    if (pair == null) {
+                        mutableUiState.update { it.copy(currentLyrics = null) }
+                        return@collectLatest
+                    }
+                    val (serverId, songId) = pair
+                    mutableUiState.update { it.copy(currentLyrics = null) }
+                    try {
+                        val lyrics = subsonicRepository.getLyrics(serverId, songId).data
+                        mutableUiState.update { it.copy(currentLyrics = lyrics) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // Lyrics not available — silently ignore
+                    }
+                }
         }
 
         viewModelScope.launch {
@@ -1041,6 +1071,7 @@ data class SakiAppUiState(
     val streamCachedSongIds: Set<String> = emptySet(),
     val downloadingSongIds: Set<String> = emptySet(),
     val playbackState: PlaybackSessionState = PlaybackSessionState(),
+    val currentLyrics: SongLyrics? = null,
 )
 
 private fun Song.withFallbackAlbumMetadata(album: Album): Song {

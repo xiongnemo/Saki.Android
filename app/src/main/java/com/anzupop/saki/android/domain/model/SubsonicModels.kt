@@ -160,3 +160,13 @@ data class SubsonicCoverArtRequest(
     val coverArtId: String,
     val candidates: List<AuthenticatedUrlCandidate>,
 )
+
+data class LyricLine(
+    val startMs: Long,
+    val text: String,
+)
+
+data class SongLyrics(
+    val synced: Boolean,
+    val lines: List<LyricLine>,
+)

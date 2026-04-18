@@ -13,6 +13,7 @@ import com.anzupop.saki.android.data.remote.subsonic.toArtist
 import com.anzupop.saki.android.data.remote.subsonic.toAlbum
 import com.anzupop.saki.android.data.remote.subsonic.toAlbumSummaries
 import com.anzupop.saki.android.data.remote.subsonic.toLibraryIndexes
+import com.anzupop.saki.android.data.remote.subsonic.toLyrics
 import com.anzupop.saki.android.data.remote.subsonic.toMusicFolders
 import com.anzupop.saki.android.data.remote.subsonic.toPingResult
 import com.anzupop.saki.android.data.remote.subsonic.toPlaylist
@@ -33,6 +34,7 @@ import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.ServerEndpoint
 import com.anzupop.saki.android.domain.model.Song
+import com.anzupop.saki.android.domain.model.SongLyrics
 import com.anzupop.saki.android.domain.model.SubsonicCallResult
 import com.anzupop.saki.android.domain.model.SubsonicCoverArtRequest
 import com.anzupop.saki.android.domain.model.SubsonicDownloadRequest
@@ -270,6 +272,19 @@ class DefaultSubsonicRepository @Inject constructor(
                 ),
             ),
         )
+    }
+
+    override suspend fun getLyrics(
+        serverId: Long,
+        songId: String,
+    ): SubsonicCallResult<SongLyrics?> = withContext(ioDispatcher) {
+        executeWithFallback(
+            serverId = serverId,
+            path = "getLyricsBySongId.view",
+            extraQuery = mapOf("id" to songId),
+        ) { response ->
+            response.toLyrics()
+        }
     }
 
     private suspend fun <T> executeWithFallback(
