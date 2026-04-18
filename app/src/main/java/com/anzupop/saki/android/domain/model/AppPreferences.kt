@@ -1,0 +1,44 @@
+package com.anzupop.saki.android.domain.model
+
+enum class TextScale(
+    val storageKey: String,
+    val label: String,
+    val multiplier: Float,
+) {
+    EXTRA_SMALL(
+        storageKey = "extra_small",
+        label = "Extra small",
+        multiplier = 0.8f,
+    ),
+    SMALL(
+        storageKey = "small",
+        label = "Small",
+        multiplier = 0.92f,
+    ),
+    DEFAULT(
+        storageKey = "default",
+        label = "Default",
+        multiplier = 1.0f,
+    ),
+    LARGE(
+        storageKey = "large",
+        label = "Large",
+        multiplier = 1.12f,
+    ),
+    EXTRA_LARGE(
+        storageKey = "extra_large",
+        label = "Extra large",
+        multiplier = 1.24f,
+    );
+
+    companion object {
+        fun fromStorageKey(storageKey: String?): TextScale {
+            return entries.firstOrNull { it.storageKey == storageKey } ?: DEFAULT
+        }
+    }
+}
+
+data class AppPreferences(
+    val hasCompletedOnboarding: Boolean = false,
+    val textScale: TextScale = TextScale.DEFAULT,
+)
