@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -67,7 +68,7 @@ fun ArtistDetailScreen(
     isLoading: Boolean,
     error: String?,
     onOpenAlbum: (String) -> Unit,
-    onPlaySong: (Song) -> Unit,
+    onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
     LibraryDetailScaffold(
@@ -81,14 +82,14 @@ fun ArtistDetailScreen(
             else -> {
                 if (topSongs.isNotEmpty()) {
                     item { SectionTitle("Popular songs", "Quick picks for ${artist.name}") }
-                    items(topSongs, key = { it.id }) { song ->
+                    itemsIndexed(topSongs, key = { _, s -> s.id }) { index, song ->
                         SongRow(
                             song = song,
                             server = server,
                             cachedSong = cachedSongsBySongId[song.id],
                             isStreamCached = song.id in streamCachedSongIds,
                             isDownloading = song.id in downloadingSongIds,
-                            onClick = { onPlaySong(song) },
+                            onClick = { onPlaySongs(topSongs, index) },
                             onMore = { onShowActions(song) },
                         )
                     }
@@ -118,7 +119,6 @@ fun AlbumDetailScreen(
     isLoading: Boolean,
     error: String?,
     onPlaySongs: (List<Song>, Int) -> Unit,
-    onPlaySong: (Song) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
     LibraryDetailScaffold(
@@ -138,14 +138,14 @@ fun AlbumDetailScreen(
                         onAction = { if (album.songs.isNotEmpty()) onPlaySongs(album.songs, 0) },
                     )
                 }
-                items(album.songs, key = { it.id }) { song ->
+                itemsIndexed(album.songs, key = { _, s -> s.id }) { index, song ->
                     SongRow(
                         song = song,
                         server = server,
                         cachedSong = cachedSongsBySongId[song.id],
                         isStreamCached = song.id in streamCachedSongIds,
                         isDownloading = song.id in downloadingSongIds,
-                        onClick = { onPlaySong(song) },
+                        onClick = { onPlaySongs(album.songs, index) },
                         onMore = { onShowActions(song) },
                     )
                 }
@@ -164,7 +164,6 @@ fun PlaylistDetailScreen(
     isLoading: Boolean,
     error: String?,
     onPlaySongs: (List<Song>, Int) -> Unit,
-    onPlaySong: (Song) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
     LibraryDetailScaffold(
@@ -184,14 +183,14 @@ fun PlaylistDetailScreen(
                         onAction = { if (playlist.songs.isNotEmpty()) onPlaySongs(playlist.songs, 0) },
                     )
                 }
-                items(playlist.songs, key = { it.id }) { song ->
+                itemsIndexed(playlist.songs, key = { index, s -> "${s.id}_$index" }) { index, song ->
                     SongRow(
                         song = song,
                         server = server,
                         cachedSong = cachedSongsBySongId[song.id],
                         isStreamCached = song.id in streamCachedSongIds,
                         isDownloading = song.id in downloadingSongIds,
-                        onClick = { onPlaySong(song) },
+                        onClick = { onPlaySongs(playlist.songs, index) },
                         onMore = { onShowActions(song) },
                     )
                 }

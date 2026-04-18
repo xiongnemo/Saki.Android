@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerSnapDistance
@@ -87,7 +88,6 @@ fun BrowseScreen(
     onCloseAlbum: () -> Unit,
     onOpenPlaylist: (String) -> Unit,
     onClosePlaylist: () -> Unit,
-    onPlaySong: (Song) -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onQueueSong: (Song) -> Unit,
     onPlaySongNext: (Song) -> Unit,
@@ -164,7 +164,6 @@ fun BrowseScreen(
                         isLoading = uiState.isAlbumLoading,
                         error = uiState.albumError,
                         onPlaySongs = onPlaySongs,
-                        onPlaySong = onPlaySong,
                         onShowActions = { actionSong = it },
                     )
 
@@ -178,7 +177,7 @@ fun BrowseScreen(
                         isLoading = uiState.isArtistLoading,
                         error = uiState.artistError,
                         onOpenAlbum = onOpenAlbum,
-                        onPlaySong = onPlaySong,
+                        onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
                     )
 
@@ -191,7 +190,6 @@ fun BrowseScreen(
                         isLoading = uiState.isPlaylistLoading,
                         error = uiState.playlistError,
                         onPlaySongs = onPlaySongs,
-                        onPlaySong = onPlaySong,
                         onShowActions = { actionSong = it },
                     )
 
@@ -208,7 +206,7 @@ fun BrowseScreen(
                         onOpenArtist = onOpenArtist,
                         onOpenAlbum = onOpenAlbum,
                         onOpenPlaylist = onOpenPlaylist,
-                        onPlaySong = onPlaySong,
+                        onPlaySongs = onPlaySongs,
                         onShowSongActions = { actionSong = it },
                     )
                 }
@@ -267,7 +265,7 @@ private fun BrowsePager(
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
-    onPlaySong: (Song) -> Unit,
+    onPlaySongs: (List<Song>, Int) -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
     val sections = BrowseSection.entries
@@ -318,7 +316,7 @@ private fun BrowsePager(
                 downloadingSongIds = uiState.downloadingSongIds,
                 onOpenArtist = onOpenArtist,
                 onOpenAlbum = onOpenAlbum,
-                onPlaySong = onPlaySong,
+                onPlaySongs = onPlaySongs,
                 onShowSongActions = onShowSongActions,
             )
         } else {
@@ -385,7 +383,7 @@ private fun BrowsePager(
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isSongsLoading,
                         error = uiState.songsError,
-                        onPlaySong = onPlaySong,
+                        onPlaySongs = onPlaySongs,
                         onShowSongActions = onShowSongActions,
                     )
                 }
@@ -465,7 +463,7 @@ private fun SearchResultsPage(
     downloadingSongIds: Set<String>,
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
-    onPlaySong: (Song) -> Unit,
+    onPlaySongs: (List<Song>, Int) -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
     val trimmedQuery = query.trim()
@@ -527,14 +525,14 @@ private fun SearchResultsPage(
                         subtitle = "${results.songs.size} match${if (results.songs.size == 1) "" else "es"}",
                     )
                 }
-                items(results.songs, key = { it.id }) { song ->
+                itemsIndexed(results.songs, key = { _, s -> s.id }) { index, song ->
                     SongRow(
                         song = song,
                         server = currentServer,
                         cachedSong = cachedSongsBySongId[song.id],
                         isStreamCached = song.id in streamCachedSongIds,
                         isDownloading = song.id in downloadingSongIds,
-                        onClick = { onPlaySong(song) },
+                        onClick = { onPlaySongs(results.songs, index) },
                         onMore = { onShowSongActions(song) },
                     )
                 }
@@ -686,7 +684,7 @@ private fun SongsPage(
     downloadingSongIds: Set<String>,
     isLoading: Boolean,
     error: String?,
-    onPlaySong: (Song) -> Unit,
+    onPlaySongs: (List<Song>, Int) -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
     if (isLoading && songs.isEmpty()) {
@@ -706,14 +704,14 @@ private fun SongsPage(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item { SectionTitle("Songs", "Artwork, metadata, download state, and more actions") }
-        items(songs, key = { it.id }) { song ->
+        itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
             SongRow(
                 song = song,
                 server = server,
                 cachedSong = cachedSongsBySongId[song.id],
                 isStreamCached = song.id in streamCachedSongIds,
                 isDownloading = song.id in downloadingSongIds,
-                onClick = { onPlaySong(song) },
+                onClick = { onPlaySongs(songs, index) },
                 onMore = { onShowSongActions(song) },
             )
         }
