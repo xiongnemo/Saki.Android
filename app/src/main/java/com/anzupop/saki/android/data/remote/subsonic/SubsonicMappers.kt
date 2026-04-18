@@ -227,10 +227,10 @@ internal fun SubsonicResponseDto.toLyrics(): SongLyrics? {
     return SongLyrics(
         synced = best.synced,
         lines = best.line.map { dto ->
-            val rawStart = (dto.start ?: 0L) - offset
-            val words = parseWordCues(rawStart.coerceAtLeast(0L), dto.value)
+            val rawStart = dto.start ?: 0L
+            val words = parseWordCues(rawStart, dto.value)
             LyricLine(
-                startMs = rawStart.coerceAtLeast(0L),
+                startMs = (rawStart - offset).coerceAtLeast(0L),
                 text = words?.joinToString("") { it.text } ?: dto.value,
                 words = words?.map { it.copy(startMs = (it.startMs - offset).coerceAtLeast(0L)) },
             )
