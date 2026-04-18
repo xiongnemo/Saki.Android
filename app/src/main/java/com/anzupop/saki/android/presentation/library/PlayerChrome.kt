@@ -97,9 +97,9 @@ import com.anzupop.saki.android.domain.model.RepeatModeSetting
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.SongLyrics
 import java.io.File
-import java.net.URL
 import coil3.imageLoader
 import coil3.request.ImageRequest
+import coil3.toBitmap
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -881,23 +881,28 @@ private data class ArtworkPresentation(
 private fun rememberArtworkPresentation(
     fallbackModel: Any?,
 ): ArtworkPresentation {
+    val context = LocalContext.current
     return produceState(
         initialValue = ArtworkPresentation(),
         key1 = fallbackModel,
     ) {
-        value = loadArtworkPresentation(fallbackModel)
+        value = loadArtworkPresentation(context, fallbackModel)
     }.value
 }
 
 private suspend fun loadArtworkPresentation(
+    context: android.content.Context,
     model: Any?,
 ): ArtworkPresentation = withContext(Dispatchers.IO) {
     val bitmap = when (model) {
         is File -> if (model.exists()) BitmapFactory.decodeFile(model.absolutePath) else null
-        is String -> runCatching {
-            URL(model).openStream().use(BitmapFactory::decodeStream)
-        }.getOrNull()
-        else -> null
+        else -> if (model != null) {
+            val request = coil3.request.ImageRequest.Builder(context)
+                .data(model)
+                .size(300)
+                .build()
+            context.imageLoader.execute(request).image?.toBitmap()
+        } else null
     } ?: return@withContext ArtworkPresentation()
 
     val palette = Palette.from(bitmap).clearFilters().generate()
