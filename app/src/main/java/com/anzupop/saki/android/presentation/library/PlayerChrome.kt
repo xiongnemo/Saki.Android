@@ -2,14 +2,17 @@ package com.anzupop.saki.android.presentation.library
 
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -33,6 +36,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -67,7 +72,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -75,6 +82,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -86,8 +94,11 @@ import com.anzupop.saki.android.domain.model.RepeatModeSetting
 import com.anzupop.saki.android.domain.model.ServerConfig
 import java.io.File
 import java.net.URL
+import coil3.imageLoader
+import coil3.request.ImageRequest
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -127,12 +138,18 @@ fun NowPlayingCapsule(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ArtworkCard(
-                model = track?.queueArtworkModel(),
-                contentDescription = track?.title,
-                modifier = Modifier.size(46.dp),
-                cornerRadiusDp = 14,
-            )
+            AnimatedContent(
+                targetState = Pair(track?.queueArtworkModel(), track?.title),
+                transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
+                label = "capsule-artwork",
+            ) { (model, title) ->
+                ArtworkCard(
+                    model = model,
+                    contentDescription = title,
+                    modifier = Modifier.size(46.dp),
+                    cornerRadiusDp = 14,
+                )
+            }
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -194,6 +211,27 @@ fun NowPlayingOverlay(
     var showDetails by remember(track.songId) { mutableStateOf(false) }
     var showMenu by remember(track.songId) { mutableStateOf(false) }
 
+    // Preload adjacent cover art into Coil cache
+    val context = LocalContext.current
+    val queue = playbackState.queue
+    val currentIdx = playbackState.currentIndex
+    val prevSongId = queue.getOrNull(currentIdx - 1)?.songId
+    val nextSongId = queue.getOrNull(currentIdx + 1)?.songId
+    LaunchedEffect(track.songId, prevSongId, nextSongId) {
+        val adjacentIndices = listOfNotNull(
+            if (currentIdx > 0) currentIdx - 1 else null,
+            if (currentIdx < queue.lastIndex) currentIdx + 1 else null,
+        )
+        for (i in adjacentIndices) {
+            val model = queue[i].queueArtworkModel() ?: continue
+            val request = ImageRequest.Builder(context)
+                .data(model)
+                .size(coil3.size.Size.ORIGINAL)
+                .build()
+            context.imageLoader.enqueue(request)
+        }
+    }
+
     BackHandler(enabled = visible) {
         onDismiss()
     }
@@ -243,6 +281,31 @@ fun NowPlayingOverlay(
 
         LaunchedEffect(playbackState.positionMs, track.songId) {
             sliderValue = playbackState.positionMs.toFloat()
+        }
+
+        // Artwork pager state synced with playback queue
+        val artworkPagerState = rememberPagerState(
+            initialPage = playbackState.currentIndex.coerceAtLeast(0),
+            pageCount = { playbackState.queue.size.coerceAtLeast(1) },
+        )
+        // Sync pager when track changes externally (button skip, queue tap)
+        LaunchedEffect(playbackState.currentIndex) {
+            val target = playbackState.currentIndex.coerceAtLeast(0)
+            if (artworkPagerState.currentPage != target) {
+                artworkPagerState.animateScrollToPage(target)
+            }
+        }
+        // When user swipes pager, trigger skip
+        val currentPlaybackIndex by rememberUpdatedState(playbackState.currentIndex)
+        val currentQueueSize by rememberUpdatedState(playbackState.queue.size)
+        LaunchedEffect(artworkPagerState) {
+            snapshotFlow { artworkPagerState.settledPage }
+                .distinctUntilChanged()
+                .collect { page ->
+                    if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
+                        onSkipToQueueItem(page)
+                    }
+                }
         }
 
         BoxWithConstraints(
@@ -333,16 +396,24 @@ fun NowPlayingOverlay(
                         }
                     }
                     item {
-                        Box(
+                        HorizontalPager(
+                            state = artworkPagerState,
                             modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            ArtworkCard(
-                                model = track.queueArtworkModel(),
-                                contentDescription = track.title,
-                                modifier = Modifier.size(artworkSize),
-                                cornerRadiusDp = 34,
-                            )
+                            pageSpacing = 16.dp,
+                            beyondViewportPageCount = 1,
+                        ) { page ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val queueItem = playbackState.queue.getOrNull(page)
+                                ArtworkCard(
+                                    model = queueItem?.queueArtworkModel(),
+                                    contentDescription = queueItem?.title,
+                                    modifier = Modifier.size(artworkSize),
+                                    cornerRadiusDp = 34,
+                                )
+                            }
                         }
                     }
                     item {
