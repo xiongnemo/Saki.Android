@@ -8,6 +8,7 @@ import com.anzupop.saki.android.domain.model.ArtistSummary
 import com.anzupop.saki.android.domain.model.LibraryIndexes
 import com.anzupop.saki.android.domain.model.LyricLine
 import com.anzupop.saki.android.domain.model.MusicFolder
+import com.anzupop.saki.android.domain.model.WordCue
 import com.anzupop.saki.android.domain.model.PingResult
 import com.anzupop.saki.android.domain.model.Playlist
 import com.anzupop.saki.android.domain.model.PlaylistSummary
@@ -199,12 +200,40 @@ private fun PlaylistDto.toPlaylistSummary(): PlaylistSummary {
 private val AlbumDto.displayName: String
     get() = name ?: title ?: "Unknown Album"
 
+private val INLINE_TS = Regex("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})]")
+
+private fun parseWordCues(lineStartMs: Long, value: String): List<WordCue>? {
+    if (!value.contains(INLINE_TS)) return null
+    val cues = mutableListOf<WordCue>()
+    var lastEnd = 0
+    var nextStartMs = lineStartMs
+    for (match in INLINE_TS.findAll(value)) {
+        val text = value.substring(lastEnd, match.range.first)
+        if (text.isNotEmpty()) cues += WordCue(nextStartMs, text)
+        val (mm, ss, frac) = match.destructured
+        val ms = frac.padEnd(3, '0').toLong()
+        nextStartMs = mm.toLong() * 60_000 + ss.toLong() * 1_000 + ms
+        lastEnd = match.range.last + 1
+    }
+    val tail = value.substring(lastEnd)
+    if (tail.isNotEmpty()) cues += WordCue(nextStartMs, tail)
+    return cues.ifEmpty { null }
+}
+
 internal fun SubsonicResponseDto.toLyrics(): SongLyrics? {
     val candidates = lyricsList?.structuredLyrics ?: return null
-    // Prefer synced lyrics, fall back to unsynced
     val best = candidates.firstOrNull { it.synced } ?: candidates.firstOrNull() ?: return null
+    val offset = best.offset
     return SongLyrics(
         synced = best.synced,
-        lines = best.line.map { LyricLine(startMs = ((it.start ?: 0L) - best.offset).coerceAtLeast(0L), text = it.value) },
+        lines = best.line.map { dto ->
+            val rawStart = dto.start ?: 0L
+            val words = parseWordCues(rawStart, dto.value)
+            LyricLine(
+                startMs = (rawStart - offset).coerceAtLeast(0L),
+                text = words?.joinToString("") { it.text } ?: dto.value,
+                words = words?.map { it.copy(startMs = (it.startMs - offset).coerceAtLeast(0L)) },
+            )
+        },
     )
 }

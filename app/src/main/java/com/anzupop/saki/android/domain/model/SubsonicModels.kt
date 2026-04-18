@@ -161,9 +161,15 @@ data class SubsonicCoverArtRequest(
     val candidates: List<AuthenticatedUrlCandidate>,
 )
 
+data class WordCue(
+    val startMs: Long,
+    val text: String,
+)
+
 data class LyricLine(
     val startMs: Long,
     val text: String,
+    val words: List<WordCue>? = null,
 )
 
 data class SongLyrics(

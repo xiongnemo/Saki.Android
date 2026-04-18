@@ -16,10 +16,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,8 +39,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -65,8 +64,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,13 +75,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -943,6 +946,26 @@ private fun SyncedLyricsView(
     textColor: Color = MaterialTheme.colorScheme.onBackground,
 ) {
     val lines = lyrics.lines
+    val hasWordLevelTiming = lyrics.synced && lines.any { it.words != null }
+
+    // High-frequency position: interpolate between 500ms global updates (only for karaoke)
+    val smoothPositionMs by produceState(
+        initialValue = positionMs,
+        key1 = positionMs,
+        key2 = isPlaying,
+        key3 = hasWordLevelTiming,
+    ) {
+        value = positionMs
+        if (!isPlaying || !hasWordLevelTiming) return@produceState
+        var lastFrame = withFrameNanos { it }
+        while (true) {
+            val now = withFrameNanos { it }
+            val delta = (now - lastFrame) / 1_000_000
+            lastFrame = now
+            value += delta
+        }
+    }
+
     val activeIndex = if (lyrics.synced) {
         lines.indexOfLast { it.startMs <= positionMs }.coerceAtLeast(0)
     } else {
@@ -969,25 +992,75 @@ private fun SyncedLyricsView(
     ) {
         itemsIndexed(lines) { index, line ->
             val isActive = index == activeIndex
-            Text(
-                text = line.text.ifBlank { "♪" },
-                style = if (isActive) {
-                    MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
+            val style = if (isActive) {
+                MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
+            } else {
+                MaterialTheme.typography.bodyMedium
+            }
+            val activeColor = if (isActive) textColor else textColor.copy(alpha = 0.45f)
+            val dimColor = textColor.copy(alpha = 0.45f)
+
+            if (isActive && line.words != null) {
+                val lineEndMs = lines.getOrNull(index + 1)?.startMs ?: (line.words.last().startMs + 1000)
+                val lineDurationMs = lineEndMs - line.startMs
+                if (lineDurationMs > 0) {
+                    val progress = ((smoothPositionMs - line.startMs).toFloat() / lineDurationMs.toFloat()).coerceIn(0f, 1f)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (lyrics.synced && line.startMs >= 0) {
+                                    Modifier.clickable { onSeekTo(line.startMs) }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Text(text = line.text, style = style, color = dimColor)
+                        Text(
+                            text = line.text,
+                            style = style,
+                            color = textColor,
+                            modifier = Modifier.drawWithContent {
+                                clipRect(right = size.width * progress) { this@drawWithContent.drawContent() }
+                            },
+                        )
+                    }
                 } else {
-                    MaterialTheme.typography.bodyMedium
-                },
-                color = if (isActive) textColor else textColor.copy(alpha = 0.45f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (lyrics.synced && line.startMs >= 0) {
-                            Modifier.clickable { onSeekTo(line.startMs) }
-                        } else {
-                            Modifier
-                        },
+                    Text(
+                        text = line.text.ifBlank { "♪" },
+                        style = style,
+                        color = activeColor,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (lyrics.synced && line.startMs >= 0) {
+                                    Modifier.clickable { onSeekTo(line.startMs) }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .padding(vertical = 4.dp),
                     )
-                    .padding(vertical = 4.dp),
-            )
+                }
+            } else {
+                Text(
+                    text = line.text.ifBlank { "♪" },
+                    style = style,
+                    color = activeColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (lyrics.synced && line.startMs >= 0) {
+                                Modifier.clickable { onSeekTo(line.startMs) }
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(vertical = 4.dp),
+                )
+            }
         }
     }
 }
