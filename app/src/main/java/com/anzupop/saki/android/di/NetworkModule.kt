@@ -3,7 +3,6 @@ package com.anzupop.saki.android.di
 import com.anzupop.saki.android.BuildConfig
 import com.anzupop.saki.android.data.remote.subsonic.SubsonicApiService
 import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -47,7 +46,6 @@ object NetworkModule {
     @Singleton
     fun provideMoshi(): Moshi {
         return Moshi.Builder()
-            .add(KotlinJsonAdapterFactory())
             .build()
     }
 

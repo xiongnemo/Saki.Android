@@ -10,7 +10,6 @@ import com.anzupop.saki.android.data.remote.subsonic.SubsonicAuth
 import com.anzupop.saki.android.data.remote.subsonic.SubsonicHttpException
 import com.anzupop.saki.android.data.remote.subsonic.SubsonicResponseDto
 import com.anzupop.saki.android.data.remote.subsonic.toArtist
-import com.anzupop.saki.android.data.remote.subsonic.requireSuccess
 import com.anzupop.saki.android.data.remote.subsonic.toAlbum
 import com.anzupop.saki.android.data.remote.subsonic.toAlbumSummaries
 import com.anzupop.saki.android.data.remote.subsonic.toLibraryIndexes
@@ -352,7 +351,7 @@ class DefaultSubsonicRepository @Inject constructor(
             )
         }
 
-        return response.requireSuccess()
+        return response
     }
 
     private suspend fun buildAuthenticatedCandidates(

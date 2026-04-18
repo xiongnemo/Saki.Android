@@ -13,12 +13,6 @@ import com.anzupop.saki.android.domain.model.PlaylistSummary
 import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.Song
 
-internal fun SubsonicResponseDto.requireSuccess(): SubsonicResponseDto {
-    if (status == "ok") return this
-
-    throw IllegalStateException(error?.message ?: "The Subsonic server returned an unknown API failure.")
-}
-
 internal fun SubsonicResponseDto.toPingResult(): PingResult {
     return PingResult(
         apiVersion = version,
