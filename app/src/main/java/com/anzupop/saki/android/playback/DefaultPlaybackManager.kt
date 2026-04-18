@@ -292,10 +292,7 @@ class DefaultPlaybackManager @Inject constructor(
             withContext(mainDispatcher) {
                 val sessionToken = SessionToken(
                     appContext,
-                    ComponentName(
-                        appContext.packageName,
-                        "${appContext.packageName}.playback.SakiPlaybackService",
-                    ),
+                    ComponentName(appContext, SakiPlaybackService::class.java),
                 )
                 val controllerFuture = MediaController.Builder(appContext, sessionToken)
                     .setApplicationLooper(Looper.getMainLooper())
