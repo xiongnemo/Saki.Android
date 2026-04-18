@@ -24,7 +24,6 @@ import com.anzupop.saki.android.domain.model.ServerEndpoint
 import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
-import java.util.UUID
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 @Composable
@@ -91,7 +90,7 @@ private fun ServerConfig.buildCoverArtUrl(coverArtId: String?): String? {
             .thenBy(ServerEndpoint::order),
     ).firstOrNull() ?: return null
     val baseUrl = endpoint.baseUrl.toHttpUrlOrNull() ?: return null
-    val salt = UUID.randomUUID().toString().replace("-", "").take(8)
+    val salt = md5(coverArtId).take(8)
     val hash = md5("$password$salt")
 
     return baseUrl.newBuilder()

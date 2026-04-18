@@ -1,6 +1,7 @@
 package com.anzupop.saki.android
 
 import android.app.Application
+import android.content.Context
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
@@ -16,7 +17,7 @@ class SakiApplication : Application(), SingletonImageLoader.Factory {
     @Inject
     lateinit var okHttpClient: OkHttpClient
 
-    override fun newImageLoader(context: android.content.Context): ImageLoader {
+    override fun newImageLoader(context: Context): ImageLoader {
         return ImageLoader.Builder(context)
             .components {
                 add(OkHttpNetworkFetcherFactory(callFactory = { okHttpClient }))
