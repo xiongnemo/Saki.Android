@@ -94,7 +94,6 @@ fun SakiApp(
                             }
                         },
                         onDismissNowPlaying = { showNowPlaying = false },
-                        onSelectRootTab = viewModel::selectRootTab,
                         onSelectBrowseSection = viewModel::selectBrowseSection,
                         onSelectServer = viewModel::selectServer,
                         onSetSearchActive = viewModel::setSearchActive,
@@ -153,7 +152,6 @@ private fun RootShell(
     onManageServers: () -> Unit,
     onOpenNowPlaying: () -> Unit,
     onDismissNowPlaying: () -> Unit,
-    onSelectRootTab: (AppTab) -> Unit,
     onSelectBrowseSection: (BrowseSection) -> Unit,
     onSelectServer: (Long) -> Unit,
     onSetSearchActive: (Boolean) -> Unit,
@@ -192,7 +190,8 @@ private fun RootShell(
     onRemoveQueueItem: (Int) -> Unit,
 ) {
     val currentOrQueuedTrack = uiState.playbackState.currentItem ?: uiState.playbackState.queue.firstOrNull()
-    val shellBackgroundBrush = rememberAppTabBackgroundBrush(uiState.selectedAppTab)
+    val shellBackgroundBrush = rememberBrowseBackgroundBrush()
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     val availableArtistIds = remember(uiState.libraryIndexes) {
         uiState.libraryIndexes
             ?.let { indexes ->
@@ -208,9 +207,8 @@ private fun RootShell(
         onDismissNowPlaying()
     }
 
-    // Navigate back to Browse when pressing back on a non-Browse tab
-    BackHandler(enabled = !showNowPlaying && uiState.selectedAppTab != AppTab.BROWSE) {
-        onSelectRootTab(AppTab.BROWSE)
+    BackHandler(enabled = !showNowPlaying && showSettings) {
+        showSettings = false
     }
 
     Box(
@@ -221,8 +219,24 @@ private fun RootShell(
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.weight(1f)) {
-                    when (uiState.selectedAppTab) {
-                        AppTab.BROWSE -> BrowseScreen(
+                    if (showSettings) {
+                        SettingsScreen(
+                            uiState = uiState,
+                            contentPadding = PaddingValues(),
+                            onManageServers = onManageServers,
+                            onSelectServer = onSelectServer,
+                            onUpdateStreamQuality = onUpdateStreamQuality,
+                            onUpdateSoundBalancing = onUpdateSoundBalancing,
+                            onUpdateStreamCacheSizeMb = onUpdateStreamCacheSizeMb,
+                            onUpdateTextScale = onUpdateTextScale,
+                            onReplayOnboarding = onReplayOnboarding,
+                            onPlayCachedSong = onPlayCachedSong,
+                            onPlayCachedQueue = onPlayCachedQueue,
+                            onDeleteCachedSong = onDeleteCachedSong,
+                            onClearCachedSongs = onClearCachedSongs,
+                        )
+                    } else {
+                        BrowseScreen(
                             uiState = uiState,
                             contentPadding = PaddingValues(),
                             onManageServers = onManageServers,
@@ -239,24 +253,9 @@ private fun RootShell(
                             onClosePlaylist = onClosePlaylist,
                             onPlaySongs = onPlaySongs,
                             onQueueSong = onQueueSong,
-                    onPlaySongNext = onPlaySongNext,
-                    onToggleSongDownload = onToggleSongDownload,
-                )
-
-                        AppTab.SETTINGS -> SettingsScreen(
-                            uiState = uiState,
-                            contentPadding = PaddingValues(),
-                            onManageServers = onManageServers,
-                            onSelectServer = onSelectServer,
-                            onUpdateStreamQuality = onUpdateStreamQuality,
-                            onUpdateSoundBalancing = onUpdateSoundBalancing,
-                            onUpdateStreamCacheSizeMb = onUpdateStreamCacheSizeMb,
-                            onUpdateTextScale = onUpdateTextScale,
-                            onReplayOnboarding = onReplayOnboarding,
-                            onPlayCachedSong = onPlayCachedSong,
-                            onPlayCachedQueue = onPlayCachedQueue,
-                            onDeleteCachedSong = onDeleteCachedSong,
-                            onClearCachedSongs = onClearCachedSongs,
+                            onPlaySongNext = onPlaySongNext,
+                            onToggleSongDownload = onToggleSongDownload,
+                            onOpenSettings = { showSettings = true },
                         )
                     }
 
@@ -275,11 +274,6 @@ private fun RootShell(
                     },
                     onSkipToPrevious = onSkipToPrevious,
                     onSkipToNext = onSkipToNext,
-                )
-
-                RootTabDock(
-                    selectedTab = uiState.selectedAppTab,
-                    onSelectRootTab = onSelectRootTab,
                 )
             }
         }
