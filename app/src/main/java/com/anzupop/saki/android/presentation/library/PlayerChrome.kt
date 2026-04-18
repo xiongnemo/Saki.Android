@@ -17,6 +17,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,6 +42,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -92,6 +94,7 @@ import com.anzupop.saki.android.domain.model.PlaybackQueueItem
 import com.anzupop.saki.android.domain.model.PlaybackSessionState
 import com.anzupop.saki.android.domain.model.RepeatModeSetting
 import com.anzupop.saki.android.domain.model.ServerConfig
+import com.anzupop.saki.android.domain.model.SongLyrics
 import java.io.File
 import java.net.URL
 import coil3.imageLoader
@@ -204,12 +207,14 @@ fun NowPlayingOverlay(
     onSkipToQueueItem: (Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
     currentServer: ServerConfig?,
+    lyrics: SongLyrics? = null,
 ) {
     val artwork = rememberArtworkPresentation(
         fallbackModel = track.queueArtworkModel(),
     )
     var showDetails by remember(track.songId) { mutableStateOf(false) }
     var showMenu by remember(track.songId) { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
 
     // Preload adjacent cover art into Coil cache
     val context = LocalContext.current
@@ -234,6 +239,11 @@ fun NowPlayingOverlay(
 
     BackHandler(enabled = visible) {
         onDismiss()
+    }
+
+    // Reset lyrics overlay when Now Playing is dismissed
+    LaunchedEffect(visible) {
+        if (!visible) showLyrics = false
     }
 
     AnimatedVisibility(
@@ -396,23 +406,74 @@ fun NowPlayingOverlay(
                         }
                     }
                     item {
-                        HorizontalPager(
-                            state = artworkPagerState,
-                            modifier = Modifier.fillMaxWidth(),
-                            pageSpacing = 16.dp,
-                            beyondViewportPageCount = 1,
-                        ) { page ->
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center,
+                        val hasLyrics = lyrics != null && lyrics.lines.isNotEmpty()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (showLyrics) showLyrics = false
+                                    else if (hasLyrics) showLyrics = true
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            HorizontalPager(
+                                state = artworkPagerState,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(34.dp)),
+                                pageSpacing = 16.dp,
+                                beyondViewportPageCount = 1,
+                            ) { page ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    val queueItem = playbackState.queue.getOrNull(page)
+                                    ArtworkCard(
+                                        model = queueItem?.queueArtworkModel(),
+                                        contentDescription = queueItem?.title,
+                                        modifier = Modifier.size(artworkSize),
+                                        cornerRadiusDp = 34,
+                                    )
+                                }
+                            }
+                            // Lyrics overlay on artwork
+                            AnimatedVisibility(
+                                visible = showLyrics,
+                                enter = fadeIn(tween(250)),
+                                exit = fadeOut(tween(250)),
                             ) {
-                                val queueItem = playbackState.queue.getOrNull(page)
-                                ArtworkCard(
-                                    model = queueItem?.queueArtworkModel(),
-                                    contentDescription = queueItem?.title,
-                                    modifier = Modifier.size(artworkSize),
-                                    cornerRadiusDp = 34,
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(artworkSize)
+                                        .clip(RoundedCornerShape(34.dp))
+                                        .background(Color.Black.copy(alpha = 0.65f)),
+                                ) {
+                                    if (lyrics != null && lyrics.lines.isNotEmpty()) {
+                                        SyncedLyricsView(
+                                            lyrics = lyrics,
+                                        positionMs = playbackState.positionMs,
+                                        isPlaying = playbackState.isPlaying,
+                                        onSeekTo = onSeekTo,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 40.dp),
+                                        textColor = Color.White,
+                                    )
+                                    }
+                                    IconButton(
+                                        onClick = { showLyrics = false },
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(8.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Close,
+                                            contentDescription = "Close lyrics",
+                                            tint = Color.White.copy(alpha = 0.7f),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -867,3 +928,60 @@ private fun formatBitrate(bitrate: Int): String {
 }
 
 private fun formatSampleRate(sampleRate: Int): String = "$sampleRate Hz"
+
+@Composable
+private fun SyncedLyricsView(
+    lyrics: SongLyrics,
+    positionMs: Long,
+    isPlaying: Boolean,
+    onSeekTo: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+    textColor: Color = MaterialTheme.colorScheme.onBackground,
+) {
+    val lines = lyrics.lines
+    val activeIndex = if (lyrics.synced) {
+        lines.indexOfLast { it.startMs <= positionMs }.coerceAtLeast(0)
+    } else {
+        -1
+    }
+
+    val lyricsListState = rememberLazyListState()
+
+    if (lyrics.synced && activeIndex >= 0) {
+        LaunchedEffect(activeIndex) {
+            lyricsListState.animateScrollToItem(
+                index = activeIndex,
+                scrollOffset = -200,
+            )
+        }
+    }
+
+    LazyColumn(
+        state = lyricsListState,
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        itemsIndexed(lines) { index, line ->
+            val isActive = index == activeIndex
+            Text(
+                text = line.text.ifBlank { "♪" },
+                style = if (isActive) {
+                    MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
+                color = if (isActive) textColor else textColor.copy(alpha = 0.45f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (lyrics.synced && line.startMs > 0) {
+                            Modifier.clickable { onSeekTo(line.startMs) }
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .padding(vertical = 4.dp),
+            )
+        }
+    }
+}

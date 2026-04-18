@@ -312,6 +312,7 @@ private fun RootShell(
             onSkipToQueueItem = onSkipToQueueItem,
             onRemoveQueueItem = onRemoveQueueItem,
             currentServer = uiState.servers.firstOrNull { it.id == track.serverId },
+            lyrics = uiState.currentLyrics,
         )
     }
 }

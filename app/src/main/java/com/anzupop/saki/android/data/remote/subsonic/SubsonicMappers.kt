@@ -6,12 +6,14 @@ import com.anzupop.saki.android.domain.model.Artist
 import com.anzupop.saki.android.domain.model.ArtistSection
 import com.anzupop.saki.android.domain.model.ArtistSummary
 import com.anzupop.saki.android.domain.model.LibraryIndexes
+import com.anzupop.saki.android.domain.model.LyricLine
 import com.anzupop.saki.android.domain.model.MusicFolder
 import com.anzupop.saki.android.domain.model.PingResult
 import com.anzupop.saki.android.domain.model.Playlist
 import com.anzupop.saki.android.domain.model.PlaylistSummary
 import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.Song
+import com.anzupop.saki.android.domain.model.SongLyrics
 
 internal fun SubsonicResponseDto.toPingResult(): PingResult {
     return PingResult(
@@ -196,3 +198,13 @@ private fun PlaylistDto.toPlaylistSummary(): PlaylistSummary {
 
 private val AlbumDto.displayName: String
     get() = name ?: title ?: "Unknown Album"
+
+internal fun SubsonicResponseDto.toLyrics(): SongLyrics? {
+    val candidates = lyricsList?.structuredLyrics ?: return null
+    // Prefer synced lyrics, fall back to unsynced
+    val best = candidates.firstOrNull { it.synced } ?: candidates.firstOrNull() ?: return null
+    return SongLyrics(
+        synced = best.synced,
+        lines = best.line.map { LyricLine(startMs = ((it.start ?: 0L) - best.offset).coerceAtLeast(0L), text = it.value) },
+    )
+}

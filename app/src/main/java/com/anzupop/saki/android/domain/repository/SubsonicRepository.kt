@@ -11,6 +11,7 @@ import com.anzupop.saki.android.domain.model.Playlist
 import com.anzupop.saki.android.domain.model.PlaylistSummary
 import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.Song
+import com.anzupop.saki.android.domain.model.SongLyrics
 import com.anzupop.saki.android.domain.model.SubsonicCallResult
 import com.anzupop.saki.android.domain.model.SubsonicCoverArtRequest
 import com.anzupop.saki.android.domain.model.SubsonicDownloadRequest
@@ -92,4 +93,9 @@ interface SubsonicRepository {
         coverArtId: String,
         size: Int? = null,
     ): SubsonicCoverArtRequest
+
+    suspend fun getLyrics(
+        serverId: Long,
+        songId: String,
+    ): SubsonicCallResult<SongLyrics?>
 }

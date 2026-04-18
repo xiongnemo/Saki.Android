@@ -15,6 +15,7 @@ import com.anzupop.saki.android.domain.model.PlaylistSummary
 import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.Song
+import com.anzupop.saki.android.domain.model.SongLyrics
 import com.anzupop.saki.android.domain.model.SoundBalancingMode
 import com.anzupop.saki.android.domain.model.StreamQuality
 import com.anzupop.saki.android.domain.model.TextScale
@@ -102,6 +103,27 @@ class SakiAppViewModel @Inject constructor(
                     state.copy(playbackState = playbackState)
                 }
             }
+        }
+
+        // Fetch lyrics when current track changes
+        viewModelScope.launch {
+            playbackManager.playbackState
+                .map { it.currentItem?.songId }
+                .distinctUntilChanged()
+                .collectLatest { songId ->
+                    val serverId = uiState.value.selectedServerId
+                    if (songId == null || serverId == null) {
+                        mutableUiState.update { it.copy(currentLyrics = null) }
+                        return@collectLatest
+                    }
+                    mutableUiState.update { it.copy(currentLyrics = null) }
+                    try {
+                        val lyrics = subsonicRepository.getLyrics(serverId, songId).data
+                        mutableUiState.update { it.copy(currentLyrics = lyrics) }
+                    } catch (_: Exception) {
+                        // Lyrics not available — silently ignore
+                    }
+                }
         }
 
         viewModelScope.launch {
@@ -1041,6 +1063,7 @@ data class SakiAppUiState(
     val streamCachedSongIds: Set<String> = emptySet(),
     val downloadingSongIds: Set<String> = emptySet(),
     val playbackState: PlaybackSessionState = PlaybackSessionState(),
+    val currentLyrics: SongLyrics? = null,
 )
 
 private fun Song.withFallbackAlbumMetadata(album: Album): Song {
