@@ -42,8 +42,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -320,26 +318,23 @@ private fun BrowsePager(
                 onShowSongActions = onShowSongActions,
             )
         } else {
-            PrimaryTabRow(
-                selectedTabIndex = sections.indexOf(uiState.selectedBrowseSection).coerceAtLeast(0),
-                modifier = Modifier.padding(vertical = 12.dp),
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
-                divider = {},
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 sections.forEach { section ->
-                    Tab(
+                    FilterChip(
                         selected = uiState.selectedBrowseSection == section,
                         onClick = { onSelectBrowseSection(section) },
-                        text = {
+                        label = {
                             Text(
                                 text = section.label,
                                 style = MaterialTheme.typography.labelMedium,
                                 maxLines = 1,
-                                softWrap = false,
                             )
                         },
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
