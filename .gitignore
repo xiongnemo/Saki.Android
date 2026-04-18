@@ -15,3 +15,5 @@ PROCESS.md
 .externalNativeBuild
 .cxx
 local.properties
+scripts/setup-env.sh
+scripts/deploy.sh

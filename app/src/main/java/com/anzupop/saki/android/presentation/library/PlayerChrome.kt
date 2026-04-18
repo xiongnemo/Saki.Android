@@ -112,7 +112,7 @@ fun NowPlayingCapsule(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 4.dp),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
@@ -123,15 +123,15 @@ fun NowPlayingCapsule(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(enabled = track != null, onClick = onExpand)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ArtworkCard(
                 model = track?.queueArtworkModel(),
                 contentDescription = track?.title,
-                modifier = Modifier.size(56.dp),
-                cornerRadiusDp = 18,
+                modifier = Modifier.size(46.dp),
+                cornerRadiusDp = 14,
             )
             Column(
                 modifier = Modifier.weight(1f),

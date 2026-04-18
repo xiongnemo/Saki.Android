@@ -152,7 +152,7 @@ fun SettingsScreen(
         item {
             SettingsSectionCard(
                 title = "Stream quality",
-                body = "Subsonic stream uses `maxBitRate`; original keeps the source file when possible.",
+                body = "Limit streaming bitrate or keep the original source file when possible.",
                 action = null,
             ) {
                 FlowRow(
