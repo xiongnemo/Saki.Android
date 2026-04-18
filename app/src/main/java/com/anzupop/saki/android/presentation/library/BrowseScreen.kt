@@ -318,13 +318,13 @@ private fun BrowsePager(
                 onShowSongActions = onShowSongActions,
             )
         } else {
-            Row(
+            LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                sections.forEach { section ->
+                items(sections) { section ->
                     FilterChip(
                         selected = uiState.selectedBrowseSection == section,
                         onClick = { onSelectBrowseSection(section) },
