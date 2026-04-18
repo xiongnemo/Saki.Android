@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -16,7 +17,11 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +31,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -85,8 +91,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
@@ -943,8 +953,22 @@ private fun SyncedLyricsView(
     textColor: Color = MaterialTheme.colorScheme.onBackground,
 ) {
     val lines = lyrics.lines
+
+    // High-frequency position: interpolate between 500ms global updates
+    val smoothPositionMs by produceState(positionMs, positionMs, isPlaying) {
+        value = positionMs
+        if (!isPlaying) return@produceState
+        var lastFrame = withFrameNanos { it }
+        while (true) {
+            val now = withFrameNanos { it }
+            val delta = (now - lastFrame) / 1_000_000 // ns → ms
+            lastFrame = now
+            value += delta
+        }
+    }
+
     val activeIndex = if (lyrics.synced) {
-        lines.indexOfLast { it.startMs <= positionMs }.coerceAtLeast(0)
+        lines.indexOfLast { it.startMs <= smoothPositionMs }.coerceAtLeast(0)
     } else {
         -1
     }
@@ -969,25 +993,56 @@ private fun SyncedLyricsView(
     ) {
         itemsIndexed(lines) { index, line ->
             val isActive = index == activeIndex
-            Text(
-                text = line.text.ifBlank { "♪" },
-                style = if (isActive) {
-                    MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
-                } else {
-                    MaterialTheme.typography.bodyMedium
-                },
-                color = if (isActive) textColor else textColor.copy(alpha = 0.45f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (lyrics.synced && line.startMs >= 0) {
-                            Modifier.clickable { onSeekTo(line.startMs) }
-                        } else {
-                            Modifier
+            val style = if (isActive) {
+                MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
+            } else {
+                MaterialTheme.typography.bodyMedium
+            }
+            val activeColor = if (isActive) textColor else textColor.copy(alpha = 0.45f)
+            val dimColor = textColor.copy(alpha = 0.45f)
+
+            if (isActive && line.words != null) {
+                val lineEndMs = lines.getOrNull(index + 1)?.startMs ?: (line.words.last().startMs + 1000)
+                val progress = ((smoothPositionMs - line.startMs).toFloat() / (lineEndMs - line.startMs).toFloat()).coerceIn(0f, 1f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (lyrics.synced && line.startMs >= 0) {
+                                Modifier.clickable { onSeekTo(line.startMs) }
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(vertical = 4.dp),
+                ) {
+                    Text(text = line.text, style = style, color = dimColor)
+                    Text(
+                        text = line.text,
+                        style = style,
+                        color = textColor,
+                        modifier = Modifier.drawWithContent {
+                            clipRect(right = size.width * progress) { this@drawWithContent.drawContent() }
                         },
                     )
-                    .padding(vertical = 4.dp),
-            )
+                }
+            } else {
+                Text(
+                    text = line.text.ifBlank { "♪" },
+                    style = style,
+                    color = activeColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (lyrics.synced && line.startMs >= 0) {
+                                Modifier.clickable { onSeekTo(line.startMs) }
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(vertical = 4.dp),
+                )
+            }
         }
     }
 }
