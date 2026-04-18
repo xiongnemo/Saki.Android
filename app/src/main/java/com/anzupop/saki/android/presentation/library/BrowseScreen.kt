@@ -30,6 +30,7 @@ import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
@@ -579,7 +580,7 @@ private fun ArtistsPage(
         }
         indexes.sections.forEach { section ->
             if (section.artists.isNotEmpty()) {
-                item { SectionTitle(section.name, "${section.artists.size} artists") }
+                item { SectionTitle(section.name, "${section.artists.size} ${if (section.artists.size == 1) "artist" else "artists"}") }
                 items(section.artists, key = { it.id }) { artist ->
                     ArtistRow(artist = artist, onOpenArtist = onOpenArtist)
                 }
@@ -662,7 +663,7 @@ private fun PlaylistsPage(
         return
     }
     if (playlists.isEmpty()) {
-        EmptyStateCard("No playlists", "Create a playlist on your server to see it here.")
+        EmptyStateCard("No playlists", "Create a playlist on your server to see it here.", icon = Icons.AutoMirrored.Rounded.QueueMusic)
         return
     }
     LazyColumn(

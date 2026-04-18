@@ -72,7 +72,7 @@ fun ArtistDetailScreen(
 ) {
     LibraryDetailScaffold(
         title = artist.name,
-        subtitle = artist.albumCount?.let { "$it albums" } ?: "Artist",
+        subtitle = artist.albumCount?.let { "$it ${if (it == 1) "album" else "albums"}" } ?: "Artist",
         artwork = null,
     ) {
         when {
@@ -123,7 +123,7 @@ fun AlbumDetailScreen(
 ) {
     LibraryDetailScaffold(
         title = album.name,
-        subtitle = listOfNotNull(album.artist, album.year?.toString(), album.songCount?.let { "$it songs" }).joinToString(" • "),
+        subtitle = listOfNotNull(album.artist, album.year?.toString(), album.songCount?.let { "$it ${if (it == 1) "song" else "songs"}" }).joinToString(" • "),
         artwork = resolveArtworkModel(server, album.coverArtId, null),
     ) {
         when {
@@ -169,7 +169,7 @@ fun PlaylistDetailScreen(
 ) {
     LibraryDetailScaffold(
         title = playlist.name,
-        subtitle = listOfNotNull(playlist.owner, playlist.songCount?.let { "$it songs" }).joinToString(" • "),
+        subtitle = listOfNotNull(playlist.owner, playlist.songCount?.let { "$it ${if (it == 1) "song" else "songs"}" }).joinToString(" • "),
         artwork = resolveArtworkModel(server, playlist.coverArtId, null),
     ) {
         when {
@@ -248,7 +248,7 @@ private fun LibraryDetailScaffold(
 fun ArtistRow(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
     RowCard(
         title = artist.name,
-        subtitle = artist.albumCount?.let { "$it albums" } ?: "Artist",
+        subtitle = artist.albumCount?.let { "$it ${if (it == 1) "album" else "albums"}" } ?: "Artist",
         artwork = null,
         onClick = { onOpenArtist(artist.id) },
     )
@@ -258,7 +258,7 @@ fun ArtistRow(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
 fun PlaylistCard(playlist: PlaylistSummary, server: ServerConfig, onOpenPlaylist: (String) -> Unit) {
     RowCard(
         title = playlist.name,
-        subtitle = listOfNotNull(playlist.owner, playlist.songCount?.let { "$it songs" }).joinToString(" • "),
+        subtitle = listOfNotNull(playlist.owner, playlist.songCount?.let { "$it ${if (it == 1) "song" else "songs"}" }).joinToString(" • "),
         artwork = resolveArtworkModel(server, playlist.coverArtId, null),
         onClick = { onOpenPlaylist(playlist.id) },
     )
@@ -268,7 +268,7 @@ fun PlaylistCard(playlist: PlaylistSummary, server: ServerConfig, onOpenPlaylist
 fun AlbumRow(album: AlbumSummary, server: ServerConfig, onOpenAlbum: (String) -> Unit) {
     RowCard(
         title = album.name,
-        subtitle = listOfNotNull(album.artist, album.year?.toString(), album.songCount?.let { "$it songs" }).joinToString(" • "),
+        subtitle = listOfNotNull(album.artist, album.year?.toString(), album.songCount?.let { "$it ${if (it == 1) "song" else "songs"}" }).joinToString(" • "),
         artwork = resolveArtworkModel(server, album.coverArtId, null),
         onClick = { onOpenAlbum(album.id) },
     )
@@ -557,9 +557,12 @@ fun ErrorStateCard(message: String) {
 }
 
 @Composable
-fun EmptyStateCard(title: String, body: String) {
+fun EmptyStateCard(title: String, body: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) {
     Card(shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f))) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text(text = title, style = MaterialTheme.typography.titleLarge)
             Text(text = body, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -585,8 +588,8 @@ private fun RowCard(title: String, subtitle: String, artwork: Any?, onClick: () 
                     .weight(1f)
                     .padding(start = if (artwork != null) 12.dp else 0.dp),
             ) {
-                Text(text = title, style = MaterialTheme.typography.titleLarge)
-                Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
