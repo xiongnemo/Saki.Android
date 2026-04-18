@@ -1,6 +1,7 @@
 package com.anzupop.saki.android.presentation.library
 
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -300,9 +301,9 @@ fun ArtistShortcutCard(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
 @Composable
 fun AlbumCard(album: AlbumSummary, server: ServerConfig, onOpenAlbum: (String) -> Unit) {
     Card(
+        onClick = { onOpenAlbum(album.id) },
         modifier = Modifier
-            .padding(6.dp)
-            .clickable { onOpenAlbum(album.id) },
+            .padding(6.dp),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
     ) {
@@ -371,6 +372,7 @@ fun SongRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -571,10 +573,10 @@ fun EmptyStateCard(title: String, body: String, icon: androidx.compose.ui.graphi
 @Composable
 private fun RowCard(title: String, subtitle: String, artwork: Any?, onClick: () -> Unit) {
     Card(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clickable(onClick = onClick),
+            .padding(vertical = 6.dp),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)),
     ) {

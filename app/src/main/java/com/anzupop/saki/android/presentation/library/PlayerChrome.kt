@@ -124,6 +124,8 @@ fun NowPlayingCapsule(
     )
 
     Card(
+        onClick = onExpand,
+        enabled = track != null,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 4.dp),
@@ -136,7 +138,6 @@ fun NowPlayingCapsule(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = track != null, onClick = onExpand)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -804,6 +805,7 @@ private fun QueueRow(
     onRemove: () -> Unit,
 ) {
     Surface(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         color = if (isCurrent) {
@@ -815,7 +817,6 @@ private fun QueueRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
