@@ -208,7 +208,7 @@ private fun RootShell(
         onDismissNowPlaying()
     }
 
-    // Navigate back to Browse when pressing back on Settings tab
+    // Navigate back to Browse when pressing back on a non-Browse tab
     BackHandler(enabled = !showNowPlaying && uiState.selectedAppTab != AppTab.BROWSE) {
         onSelectRootTab(AppTab.BROWSE)
     }
