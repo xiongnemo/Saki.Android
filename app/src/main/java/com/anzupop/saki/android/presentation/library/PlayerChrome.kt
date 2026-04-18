@@ -72,6 +72,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -138,13 +139,13 @@ fun NowPlayingCapsule(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AnimatedContent(
-                targetState = track?.queueArtworkModel(),
+                targetState = Pair(track?.queueArtworkModel(), track?.title),
                 transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
                 label = "capsule-artwork",
-            ) { model ->
+            ) { (model, title) ->
                 ArtworkCard(
                     model = model,
-                    contentDescription = track?.title,
+                    contentDescription = title,
                     modifier = Modifier.size(46.dp),
                     cornerRadiusDp = 14,
                 )
@@ -212,13 +213,14 @@ fun NowPlayingOverlay(
 
     // Preload adjacent cover art into Coil cache
     val context = LocalContext.current
-    LaunchedEffect(track.songId, playbackState.queue) {
-        val queue = playbackState.queue
-        val idx = playbackState.currentIndex
-        if (queue.isEmpty() || idx < 0) return@LaunchedEffect
+    val queue = playbackState.queue
+    val currentIdx = playbackState.currentIndex
+    val prevSongId = queue.getOrNull(currentIdx - 1)?.songId
+    val nextSongId = queue.getOrNull(currentIdx + 1)?.songId
+    LaunchedEffect(track.songId, prevSongId, nextSongId) {
         val adjacentIndices = listOfNotNull(
-            if (idx > 0) idx - 1 else null,
-            if (idx < queue.lastIndex) idx + 1 else null,
+            if (currentIdx > 0) currentIdx - 1 else null,
+            if (currentIdx < queue.lastIndex) currentIdx + 1 else null,
         )
         for (i in adjacentIndices) {
             val model = queue[i].queueArtworkModel() ?: continue
@@ -294,11 +296,13 @@ fun NowPlayingOverlay(
             }
         }
         // When user swipes pager, trigger skip
+        val currentPlaybackIndex by rememberUpdatedState(playbackState.currentIndex)
+        val currentQueueSize by rememberUpdatedState(playbackState.queue.size)
         LaunchedEffect(artworkPagerState) {
             snapshotFlow { artworkPagerState.settledPage }
                 .distinctUntilChanged()
                 .collect { page ->
-                    if (page != playbackState.currentIndex && page in playbackState.queue.indices) {
+                    if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
                         onSkipToQueueItem(page)
                     }
                 }
