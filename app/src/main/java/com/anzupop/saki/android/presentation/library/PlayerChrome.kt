@@ -85,6 +85,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -439,7 +440,7 @@ fun NowPlayingOverlay(
                             }
                             // Lyrics overlay on artwork
                             AnimatedVisibility(
-                                visible = showLyrics,
+                                visible = showLyrics && hasLyrics,
                                 enter = fadeIn(tween(250)),
                                 exit = fadeOut(tween(250)),
                             ) {
@@ -946,12 +947,14 @@ private fun SyncedLyricsView(
     }
 
     val lyricsListState = rememberLazyListState()
+    val density = LocalDensity.current
 
-    if (lyrics.synced && activeIndex >= 0) {
+    if (lyrics.synced && activeIndex >= 0 && isPlaying) {
         LaunchedEffect(activeIndex) {
+            val offsetPx = with(density) { 80.dp.roundToPx() }
             lyricsListState.animateScrollToItem(
                 index = activeIndex,
-                scrollOffset = -200,
+                scrollOffset = -offsetPx,
             )
         }
     }
@@ -974,7 +977,7 @@ private fun SyncedLyricsView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
-                        if (lyrics.synced && line.startMs > 0) {
+                        if (lyrics.synced && line.startMs >= 0) {
                             Modifier.clickable { onSeekTo(line.startMs) }
                         } else {
                             Modifier

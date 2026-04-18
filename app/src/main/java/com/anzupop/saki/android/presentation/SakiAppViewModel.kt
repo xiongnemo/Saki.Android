@@ -28,6 +28,7 @@ import com.anzupop.saki.android.domain.repository.SubsonicRepository
 import com.anzupop.saki.android.domain.repository.StreamCacheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -108,18 +109,25 @@ class SakiAppViewModel @Inject constructor(
         // Fetch lyrics when current track changes
         viewModelScope.launch {
             playbackManager.playbackState
-                .map { it.currentItem?.songId }
+                .map { state ->
+                    state.currentItem?.let {
+                        val sid = it.serverId ?: return@let null
+                        sid to it.songId
+                    }
+                }
                 .distinctUntilChanged()
-                .collectLatest { songId ->
-                    val serverId = uiState.value.selectedServerId
-                    if (songId == null || serverId == null) {
+                .collectLatest { pair ->
+                    if (pair == null) {
                         mutableUiState.update { it.copy(currentLyrics = null) }
                         return@collectLatest
                     }
+                    val (serverId, songId) = pair
                     mutableUiState.update { it.copy(currentLyrics = null) }
                     try {
                         val lyrics = subsonicRepository.getLyrics(serverId, songId).data
                         mutableUiState.update { it.copy(currentLyrics = lyrics) }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (_: Exception) {
                         // Lyrics not available — silently ignore
                     }
