@@ -74,7 +74,6 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.moshi)
-    implementation(libs.moshi.kotlin)
     ksp(libs.moshi.kotlin.codegen)
     implementation(libs.androidx.media3.common.ktx)
     implementation(libs.androidx.media3.datasource.okhttp)
