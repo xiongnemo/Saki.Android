@@ -1,6 +1,9 @@
 package com.anzupop.saki.android.presentation.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,9 +20,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.Button
@@ -73,6 +78,8 @@ fun SettingsScreen(
     onUpdateTextScale: (TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
+    onExportConfig: ((String) -> Unit) -> Unit,
+    onImportConfig: (String) -> Unit,
     onPlayCachedSong: (CachedSong) -> Unit,
     onPlayCachedQueue: (List<CachedSong>, Int) -> Unit,
     onDeleteCachedSong: (String) -> Unit,
@@ -363,6 +370,47 @@ fun SettingsScreen(
                         checked = checked,
                         onCheckedChange = null,
                     )
+                }
+            }
+        }
+
+        item {
+            val context = LocalContext.current
+            val exportLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("application/json"),
+            ) { uri ->
+                if (uri != null) {
+                    onExportConfig { json ->
+                        runCatching {
+                            context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                        }
+                    }
+                }
+            }
+            val importLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument(),
+            ) { uri ->
+                if (uri != null) {
+                    val json = runCatching {
+                        context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                    }.getOrNull()
+                    if (json != null) onImportConfig(json)
+                }
+            }
+            SettingsSectionCard(
+                title = "Backup & Restore",
+                body = "Export or import server configuration and settings as a JSON file.",
+                action = null,
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { exportLauncher.launch("saki-backup.json") }) {
+                        Icon(Icons.Rounded.Upload, contentDescription = null)
+                        Text("Export", modifier = Modifier.padding(start = 8.dp))
+                    }
+                    OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }) {
+                        Icon(Icons.Rounded.Download, contentDescription = null)
+                        Text("Import", modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
         }

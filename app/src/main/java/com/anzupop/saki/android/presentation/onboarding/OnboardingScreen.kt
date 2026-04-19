@@ -1,5 +1,7 @@
 package com.anzupop.saki.android.presentation.onboarding
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -18,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,6 +28,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.CompositionLocalProvider
@@ -33,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.dp
@@ -41,6 +46,7 @@ import androidx.compose.ui.unit.dp
 fun OnboardingScreen(
     onContinue: () -> Unit,
     onSetUpNow: () -> Unit,
+    onImportConfig: (String) -> Unit = {},
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val background = remember(colorScheme) {
@@ -109,6 +115,24 @@ fun OnboardingScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Set up my library")
+                }
+                val context = LocalContext.current
+                val importLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument(),
+                ) { uri ->
+                    if (uri != null) {
+                        val json = runCatching {
+                            context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                        }.getOrNull()
+                        if (json != null) onImportConfig(json)
+                    }
+                }
+                OutlinedButton(
+                    onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Rounded.Upload, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text("Import backup")
                 }
                 TextButton(
                     onClick = onContinue,
