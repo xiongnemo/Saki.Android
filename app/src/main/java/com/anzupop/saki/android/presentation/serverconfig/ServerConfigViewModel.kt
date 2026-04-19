@@ -218,6 +218,7 @@ class ServerConfigViewModel @Inject constructor(
                         copy(
                             testState = EndpointConnectionState.Success(
                                 serverVersion = result.serverVersion,
+                                latencyMs = result.latencyMs,
                             ),
                         )
                     }
@@ -394,6 +395,7 @@ sealed interface EndpointConnectionState {
 
     data class Success(
         val serverVersion: String?,
+        val latencyMs: Long,
     ) : EndpointConnectionState
 
     data class Failure(

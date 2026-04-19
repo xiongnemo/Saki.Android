@@ -80,7 +80,9 @@ class SubsonicConnectionTester @Inject constructor(
         )
 
         try {
+            val startNanos = System.nanoTime()
             requestClient.newCall(networkRequest).execute().use { response ->
+                val latencyMs = (System.nanoTime() - startNanos) / 1_000_000
                 if (!response.isSuccessful) {
                     return@withContext ConnectionTestResult.Failure(
                         endpointUrl = endpointUrl,
@@ -109,6 +111,7 @@ class SubsonicConnectionTester @Inject constructor(
                     return@withContext ConnectionTestResult.Success(
                         endpointUrl = endpointUrl,
                         serverVersion = subsonicResponse.optString("version").ifBlank { null },
+                        latencyMs = latencyMs,
                     )
                 }
 
