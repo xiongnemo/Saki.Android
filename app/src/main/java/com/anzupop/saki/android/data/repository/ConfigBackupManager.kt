@@ -3,6 +3,9 @@ package com.anzupop.saki.android.data.repository
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import com.anzupop.saki.android.di.IoDispatcher
+import com.anzupop.saki.android.domain.model.DEFAULT_SUBSONIC_API_VERSION
+import com.anzupop.saki.android.domain.model.DEFAULT_SUBSONIC_CLIENT
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.ServerEndpoint
 import com.anzupop.saki.android.domain.repository.ServerConfigRepository
@@ -10,7 +13,14 @@ import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+
+private val EXCLUDED_SETTING_KEYS = setOf(
+    "room_migration_done",
+    DataStoreAppPreferencesRepository.KEY_ONBOARDING_COMPLETED.name,
+)
 
 @JsonClass(generateAdapter = true)
 data class BackupData(
@@ -41,8 +51,9 @@ class ConfigBackupManager @Inject constructor(
     private val serverConfigRepository: ServerConfigRepository,
     private val dataStore: DataStore<Preferences>,
     private val moshi: Moshi,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
-    suspend fun exportToJson(): String {
+    suspend fun exportToJson(): String = withContext(ioDispatcher) {
         val servers = serverConfigRepository.observeServerConfigs().first()
         val prefs = dataStore.data.first()
 
@@ -55,49 +66,46 @@ class ConfigBackupManager @Inject constructor(
                 apiVersion = server.apiVersion,
                 endpoints = server.endpoints
                     .sortedWith(compareByDescending<ServerEndpoint> { it.isPrimary }.thenBy { it.order })
-                    .map { ep ->
-                        BackupEndpoint(label = ep.label, url = ep.baseUrl, isPrimary = ep.isPrimary)
-                    },
+                    .map { ep -> BackupEndpoint(label = ep.label, url = ep.baseUrl, isPrimary = ep.isPrimary) },
             )
         }
 
         val settings = buildMap {
             prefs.asMap().forEach { (key, value) ->
-                // Skip migration flag and onboarding state
-                if (key.name != "room_migration_done" && key.name != "onboarding_completed") {
+                if (key.name !in EXCLUDED_SETTING_KEYS) {
                     put(key.name, value.toString())
                 }
             }
         }
 
         val backup = BackupData(servers = backupServers, settings = settings)
-        return moshi.adapter(BackupData::class.java).indent("  ").toJson(backup)
+        moshi.adapter(BackupData::class.java).indent("  ").toJson(backup)
     }
 
-    suspend fun importFromJson(json: String): ImportResult {
+    suspend fun importFromJson(json: String): ImportResult = withContext(ioDispatcher) {
         val backup = try {
             moshi.adapter(BackupData::class.java).fromJson(json)
         } catch (_: Exception) {
-            return ImportResult.InvalidFormat
-        } ?: return ImportResult.InvalidFormat
+            return@withContext ImportResult.InvalidFormat
+        } ?: return@withContext ImportResult.InvalidFormat
 
-        if (backup.version != 1) return ImportResult.UnsupportedVersion(backup.version)
+        if (backup.version != 1) return@withContext ImportResult.UnsupportedVersion(backup.version)
 
         var serversImported = 0
         val existingServers = serverConfigRepository.observeServerConfigs().first()
+        val seenKeys = existingServers.mapTo(mutableSetOf()) { it.name.trim() to it.username.trim() }
 
         for (backupServer in backup.servers) {
-            val isDuplicate = existingServers.any { existing ->
-                existing.name == backupServer.name && existing.username == backupServer.username
-            }
-            if (isDuplicate) continue
+            val key = backupServer.name.trim() to backupServer.username.trim()
+            if (key in seenKeys) continue
+            seenKeys.add(key)
 
             val config = ServerConfig(
-                name = backupServer.name,
-                username = backupServer.username,
+                name = backupServer.name.trim(),
+                username = backupServer.username.trim(),
                 password = backupServer.password,
-                clientName = backupServer.clientName ?: "Saki.Android",
-                apiVersion = backupServer.apiVersion ?: "1.16.1",
+                clientName = backupServer.clientName ?: DEFAULT_SUBSONIC_CLIENT,
+                apiVersion = backupServer.apiVersion ?: DEFAULT_SUBSONIC_API_VERSION,
                 endpoints = backupServer.endpoints.mapIndexed { index, ep ->
                     ServerEndpoint(label = ep.label, baseUrl = ep.url, isPrimary = ep.isPrimary, order = index)
                 },
@@ -106,27 +114,26 @@ class ConfigBackupManager @Inject constructor(
             serversImported++
         }
 
-        // Restore settings
         if (backup.settings.isNotEmpty()) {
             dataStore.edit { ds ->
                 backup.settings.forEach { (key, value) ->
-                    when {
-                        key == DataStorePlaybackPreferencesRepository.KEY_STREAM_CACHE_SIZE_MB.name ->
+                    when (key) {
+                        DataStorePlaybackPreferencesRepository.KEY_STREAM_CACHE_SIZE_MB.name ->
                             ds[DataStorePlaybackPreferencesRepository.KEY_STREAM_CACHE_SIZE_MB] = value.toIntOrNull() ?: return@forEach
-                        key == DataStorePlaybackPreferencesRepository.KEY_BLUETOOTH_LYRICS.name ->
+                        DataStorePlaybackPreferencesRepository.KEY_BLUETOOTH_LYRICS.name ->
                             ds[DataStorePlaybackPreferencesRepository.KEY_BLUETOOTH_LYRICS] = value.toBooleanStrictOrNull() ?: return@forEach
-                        key == DataStoreAppPreferencesRepository.KEY_TEXT_SCALE.name ->
+                        DataStoreAppPreferencesRepository.KEY_TEXT_SCALE.name ->
                             ds[DataStoreAppPreferencesRepository.KEY_TEXT_SCALE] = value
-                        key == DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY.name ->
+                        DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY.name ->
                             ds[DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY] = value
-                        key == DataStorePlaybackPreferencesRepository.KEY_SOUND_BALANCING_MODE.name ->
+                        DataStorePlaybackPreferencesRepository.KEY_SOUND_BALANCING_MODE.name ->
                             ds[DataStorePlaybackPreferencesRepository.KEY_SOUND_BALANCING_MODE] = value
                     }
                 }
             }
         }
 
-        return ImportResult.Success(serversImported = serversImported, settingsRestored = backup.settings.isNotEmpty())
+        ImportResult.Success(serversImported = serversImported, settingsRestored = backup.settings.isNotEmpty())
     }
 }
 

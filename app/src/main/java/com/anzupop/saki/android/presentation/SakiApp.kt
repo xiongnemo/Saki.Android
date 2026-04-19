@@ -82,8 +82,7 @@ fun SakiApp(
                             showServerManager = true
                         },
                         onImportConfig = { json ->
-                            viewModel.importConfig(json)
-                            viewModel.completeOnboarding()
+                            viewModel.importConfig(json) { viewModel.completeOnboarding() }
                         },
                     )
                 }
@@ -127,7 +126,7 @@ fun SakiApp(
                         onReplayOnboarding = viewModel::replayOnboarding,
                         onUpdateBluetoothLyrics = viewModel::updateBluetoothLyrics,
                         onExportConfig = viewModel::exportConfig,
-                        onImportConfig = viewModel::importConfig,
+                        onImportConfig = { json -> viewModel.importConfig(json) },
                         onOpenArtistFromPlayback = viewModel::openArtistFromPlayback,
                         onOpenAlbumFromPlayback = viewModel::openAlbumFromPlayback,
                         onPausePlayback = viewModel::pausePlayback,

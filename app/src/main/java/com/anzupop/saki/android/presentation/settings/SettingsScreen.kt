@@ -381,7 +381,9 @@ fun SettingsScreen(
             ) { uri ->
                 if (uri != null) {
                     onExportConfig { json ->
-                        context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                        runCatching {
+                            context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                        }
                     }
                 }
             }
@@ -389,7 +391,9 @@ fun SettingsScreen(
                 contract = ActivityResultContracts.OpenDocument(),
             ) { uri ->
                 if (uri != null) {
-                    val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+                    val json = runCatching {
+                        context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                    }.getOrNull()
                     if (json != null) onImportConfig(json)
                 }
             }

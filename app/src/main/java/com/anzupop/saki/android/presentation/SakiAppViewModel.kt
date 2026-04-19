@@ -1076,22 +1076,32 @@ class SakiAppViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { configBackupManager.exportToJson() }
                 .onSuccess { onResult(it) }
-                .onFailure { snackbarMessages.tryEmit("Export failed: ${it.message}") }
+                .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    snackbarMessages.tryEmit("Export failed: ${e.message}")
+                }
         }
     }
 
-    fun importConfig(json: String) {
+    fun importConfig(json: String, onSuccess: (() -> Unit)? = null) {
         viewModelScope.launch {
-            when (val result = configBackupManager.importFromJson(json)) {
-                is ImportResult.Success -> {
-                    val msg = buildString {
-                        append("Imported ${result.serversImported} server(s)")
-                        if (result.settingsRestored) append(", settings restored")
+            try {
+                when (val result = configBackupManager.importFromJson(json)) {
+                    is ImportResult.Success -> {
+                        val msg = buildString {
+                            append("Imported ${result.serversImported} server(s)")
+                            if (result.settingsRestored) append(", settings restored")
+                        }
+                        snackbarMessages.tryEmit(msg)
+                        onSuccess?.invoke()
                     }
-                    snackbarMessages.tryEmit(msg)
+                    is ImportResult.InvalidFormat -> snackbarMessages.tryEmit("Invalid backup file")
+                    is ImportResult.UnsupportedVersion -> snackbarMessages.tryEmit("Unsupported backup version ${result.version}")
                 }
-                is ImportResult.InvalidFormat -> snackbarMessages.tryEmit("Invalid backup file")
-                is ImportResult.UnsupportedVersion -> snackbarMessages.tryEmit("Unsupported backup version ${result.version}")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snackbarMessages.tryEmit("Import failed: ${e.message}")
             }
         }
     }
