@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.anzupop.saki.android.data.local.dao.AppPreferencesDao
 import com.anzupop.saki.android.data.local.dao.CachedSongDao
+import com.anzupop.saki.android.data.local.dao.LibraryCacheDao
 import com.anzupop.saki.android.data.local.dao.PlaybackPreferencesDao
 import com.anzupop.saki.android.data.local.dao.ServerConfigDao
 import com.anzupop.saki.android.data.local.database.SakiDatabase
@@ -141,6 +142,62 @@ object DatabaseModule {
         }
     }
 
+    private val migration6To7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_artists` (
+                    `serverId` INTEGER NOT NULL,
+                    `artistId` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `sectionName` TEXT NOT NULL,
+                    `albumCount` INTEGER,
+                    `coverArtId` TEXT,
+                    `artistImageUrl` TEXT,
+                    PRIMARY KEY(`serverId`, `artistId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_albums` (
+                    `serverId` INTEGER NOT NULL,
+                    `albumId` TEXT NOT NULL,
+                    `listType` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `artist` TEXT,
+                    `artistId` TEXT,
+                    `coverArtId` TEXT,
+                    `songCount` INTEGER,
+                    `durationSeconds` INTEGER,
+                    `year` INTEGER,
+                    `genre` TEXT,
+                    `created` TEXT,
+                    `sortOrder` INTEGER NOT NULL,
+                    PRIMARY KEY(`serverId`, `albumId`, `listType`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_playlists` (
+                    `serverId` INTEGER NOT NULL,
+                    `playlistId` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `owner` TEXT,
+                    `isPublic` INTEGER,
+                    `songCount` INTEGER,
+                    `durationSeconds` INTEGER,
+                    `coverArtId` TEXT,
+                    `created` TEXT,
+                    `changed` TEXT,
+                    PRIMARY KEY(`serverId`, `playlistId`)
+                )
+                """.trimIndent(),
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideSakiDatabase(
@@ -150,7 +207,7 @@ object DatabaseModule {
             context,
             SakiDatabase::class.java,
             "saki.db",
-        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6)
+        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7)
             .build()
     }
 
@@ -159,6 +216,9 @@ object DatabaseModule {
 
     @Provides
     fun provideCachedSongDao(database: SakiDatabase): CachedSongDao = database.cachedSongDao()
+
+    @Provides
+    fun provideLibraryCacheDao(database: SakiDatabase): LibraryCacheDao = database.libraryCacheDao()
 
     @Provides
     fun providePlaybackPreferencesDao(database: SakiDatabase): PlaybackPreferencesDao = database.playbackPreferencesDao()

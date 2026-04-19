@@ -4,12 +4,14 @@ import androidx.media3.common.util.UnstableApi
 import com.anzupop.saki.android.data.remote.SubsonicConnectionTester
 import com.anzupop.saki.android.data.repository.DefaultAppPreferencesRepository
 import com.anzupop.saki.android.data.repository.DefaultCachedSongRepository
+import com.anzupop.saki.android.data.repository.DefaultLibraryCacheRepository
 import com.anzupop.saki.android.data.repository.DefaultPlaybackPreferencesRepository
 import com.anzupop.saki.android.data.repository.DefaultServerConfigRepository
 import com.anzupop.saki.android.data.repository.DefaultStreamCacheRepository
 import com.anzupop.saki.android.data.repository.DefaultSubsonicRepository
 import com.anzupop.saki.android.domain.repository.AppPreferencesRepository
 import com.anzupop.saki.android.domain.repository.CachedSongRepository
+import com.anzupop.saki.android.domain.repository.LibraryCacheRepository
 import com.anzupop.saki.android.domain.repository.PlaybackManager
 import com.anzupop.saki.android.domain.repository.PlaybackPreferencesRepository
 import com.anzupop.saki.android.domain.repository.ServerConfigRepository
@@ -54,6 +56,11 @@ abstract class RepositoryModule {
     abstract fun bindCachedSongRepository(
         repository: DefaultCachedSongRepository,
     ): CachedSongRepository
+
+    @Binds
+    abstract fun bindLibraryCacheRepository(
+        repository: DefaultLibraryCacheRepository,
+    ): LibraryCacheRepository
 
     @Binds
     @UnstableApi
