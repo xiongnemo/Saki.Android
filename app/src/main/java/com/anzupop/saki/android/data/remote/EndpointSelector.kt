@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -109,7 +110,7 @@ class EndpointSelector @Inject constructor(
 
         if (best != null) {
             bestEndpoints[serverId] = best.id
-            Log.d("EndpointSelector", "Best endpoint for server $serverId: ${best.label} (${best.baseUrl})")
+        Log.d("EndpointSelector", "Best endpoint for server $serverId: ${best.label} (${best.baseUrl})")
         } else {
             bestEndpoints.remove(serverId)
         }
@@ -143,14 +144,17 @@ class EndpointSelector @Inject constructor(
         val url = urlBuilder.build()
 
         val request = Request.Builder().url(url).get().build()
-        return withTimeoutOrNull(3_000) {
-            val start = System.nanoTime()
-            try {
-                okHttpClient.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) (System.nanoTime() - start) / 1_000_000 else null
+        return withContext(ioDispatcher) {
+            withTimeoutOrNull(3_000) {
+                val start = System.nanoTime()
+                try {
+                    okHttpClient.newCall(request).execute().use { response ->
+                        val ms = (System.nanoTime() - start) / 1_000_000
+                        if (response.isSuccessful) ms else null
+                    }
+                } catch (_: Exception) {
+                    null
                 }
-            } catch (_: Exception) {
-                null
             }
         }
     }
