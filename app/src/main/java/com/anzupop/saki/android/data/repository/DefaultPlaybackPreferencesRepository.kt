@@ -38,6 +38,10 @@ class DefaultPlaybackPreferencesRepository @Inject constructor(
         }
     }
 
+    override suspend fun updateAdaptiveQuality(enabled: Boolean) = Unit
+    override suspend fun updateWifiStreamQuality(quality: StreamQuality) = Unit
+    override suspend fun updateMobileStreamQuality(quality: StreamQuality) = Unit
+
     override suspend fun updateSoundBalancing(mode: SoundBalancingMode): Unit = withContext(ioDispatcher) {
         updatePreferences { current ->
             current.copy(

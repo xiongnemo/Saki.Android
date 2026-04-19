@@ -43,6 +43,18 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
         dataStore.edit { it[KEY_STREAM_QUALITY] = quality.storageKey }
     }
 
+    override suspend fun updateAdaptiveQuality(enabled: Boolean) {
+        dataStore.edit { it[KEY_ADAPTIVE_QUALITY] = enabled }
+    }
+
+    override suspend fun updateWifiStreamQuality(quality: StreamQuality) {
+        dataStore.edit { it[KEY_WIFI_STREAM_QUALITY] = quality.storageKey }
+    }
+
+    override suspend fun updateMobileStreamQuality(quality: StreamQuality) {
+        dataStore.edit { it[KEY_MOBILE_STREAM_QUALITY] = quality.storageKey }
+    }
+
     override suspend fun updateSoundBalancing(mode: SoundBalancingMode) {
         dataStore.edit { it[KEY_SOUND_BALANCING_MODE] = mode.storageKey }
     }
@@ -57,6 +69,9 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
 
     companion object {
         val KEY_STREAM_QUALITY = stringPreferencesKey("stream_quality")
+        val KEY_ADAPTIVE_QUALITY = booleanPreferencesKey("adaptive_quality_enabled")
+        val KEY_WIFI_STREAM_QUALITY = stringPreferencesKey("wifi_stream_quality")
+        val KEY_MOBILE_STREAM_QUALITY = stringPreferencesKey("mobile_stream_quality")
         val KEY_SOUND_BALANCING_MODE = stringPreferencesKey("sound_balancing_mode")
         val KEY_STREAM_CACHE_SIZE_MB = intPreferencesKey("stream_cache_size_mb")
         val KEY_BLUETOOTH_LYRICS = booleanPreferencesKey("bluetooth_lyrics_enabled")
@@ -66,6 +81,13 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
 private fun Preferences.toPlaybackPreferences() = PlaybackPreferences(
     streamQuality = StreamQuality.fromStorageKey(
         this[DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY],
+    ),
+    adaptiveQualityEnabled = this[DataStorePlaybackPreferencesRepository.KEY_ADAPTIVE_QUALITY] ?: false,
+    wifiStreamQuality = StreamQuality.fromStorageKey(
+        this[DataStorePlaybackPreferencesRepository.KEY_WIFI_STREAM_QUALITY],
+    ),
+    mobileStreamQuality = StreamQuality.fromStorageKey(
+        this[DataStorePlaybackPreferencesRepository.KEY_MOBILE_STREAM_QUALITY] ?: StreamQuality.KBPS_320.storageKey,
     ),
     soundBalancingMode = SoundBalancingMode.fromStorageKey(
         this[DataStorePlaybackPreferencesRepository.KEY_SOUND_BALANCING_MODE],
