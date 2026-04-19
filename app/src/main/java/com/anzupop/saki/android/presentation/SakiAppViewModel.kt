@@ -844,57 +844,48 @@ class SakiAppViewModel @Inject constructor(
     ) {
         if (!forceRefresh && uiState.value.songs.isNotEmpty()) return
 
-        mutableUiState.update { state ->
-            state.copy(
-                isSongsLoading = true,
-                songsError = null,
-            )
-        }
-
         viewModelScope.launch {
+            if (!forceRefresh) {
+                val cached = runCatching { libraryCacheRepository.getSongs(serverId) }.getOrNull()
+                if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(songs = cached) }
+                }
+            }
+
+            mutableUiState.update { it.copy(isSongsLoading = true, songsError = null) }
+
             runCatching {
-                buildSongFeed(serverId)
+                fetchAllSongs(serverId)
             }.onSuccess { songs ->
                 if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { state ->
-                        state.copy(
-                            songs = songs,
-                            isSongsLoading = false,
-                            songsError = null,
-                        )
-                    }
+                    mutableUiState.update { it.copy(songs = songs, isSongsLoading = false, songsError = null) }
                 }
+                runCatching { libraryCacheRepository.saveSongs(serverId, songs) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache songs", it) }
             }.onFailure { throwable ->
-                mutableUiState.update { state ->
-                    state.copy(
-                        isSongsLoading = false,
-                        songsError = throwable.message ?: "Unable to load songs.",
-                    )
-                }
+                mutableUiState.update { it.copy(isSongsLoading = false, songsError = throwable.message ?: "Unable to load songs.") }
             }
         }
     }
 
-    private suspend fun buildSongFeed(serverId: Long): List<Song> = coroutineScope {
-        val newestAlbums = subsonicRepository.getAlbumList(
-            serverId = serverId,
-            type = AlbumListType.NEWEST,
-            size = 10,
-        ).data
-
-        newestAlbums.take(10)
-            .map { summary ->
-                async {
-                    subsonicRepository.getAlbum(serverId, summary.id).data
-                }
-            }
-            .map { deferred -> deferred.await() }
-            .flatMap { album ->
-                album.songs.map { song ->
-                    song.withFallbackAlbumMetadata(album)
-                }
-            }
-            .distinctBy(Song::id)
+    private suspend fun fetchAllSongs(serverId: Long): List<Song> {
+        val pageSize = 500
+        val allSongs = mutableListOf<Song>()
+        var offset = 0
+        while (true) {
+            val results = subsonicRepository.search(
+                serverId = serverId,
+                query = "",
+                artistCount = 0,
+                albumCount = 0,
+                songCount = pageSize,
+                songOffset = offset,
+            ).data
+            allSongs.addAll(results.songs)
+            if (results.songs.size < pageSize) break
+            offset += pageSize
+        }
+        return allSongs
     }
 
     private suspend fun buildArtistTopSongs(
