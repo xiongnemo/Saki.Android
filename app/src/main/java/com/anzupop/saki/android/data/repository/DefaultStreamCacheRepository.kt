@@ -69,14 +69,15 @@ class DefaultStreamCacheRepository @Inject constructor(
     ): String = buildStreamCacheKey(serverId, songId, quality)
 
     override fun findCachedQualityKey(serverId: Long, songId: String, preferredQuality: StreamQuality): String? {
-        val byQuality = lastSnapshot.cachedSongIdsByServerAndQuality[serverId] ?: return null
+        val byQuality = snapshotForQueries().cachedSongIdsByServerAndQuality[serverId] ?: return null
         // Exact match first
         if (byQuality[preferredQuality.storageKey]?.contains(songId) == true) {
             return preferredQuality.storageKey
         }
-        // Quality order: ORIGINAL is highest, then by maxBitRate descending
-        val qualityRank = StreamQuality.entries.map { it.storageKey }
-        for (key in qualityRank) {
+        // Only consider equal or higher qualities (ORIGINAL is highest, then by maxBitRate desc)
+        val preferredIndex = StreamQuality.entries.indexOf(preferredQuality)
+        for (i in 0..preferredIndex) {
+            val key = StreamQuality.entries[i].storageKey
             if (byQuality[key]?.contains(songId) == true) return key
         }
         return null

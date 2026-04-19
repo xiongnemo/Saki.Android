@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 @OptIn(FlowPreview::class)
 class SakiAppViewModel @Inject constructor(
+    @param:dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val appPreferencesRepository: AppPreferencesRepository,
     private val serverConfigRepository: ServerConfigRepository,
     private val subsonicRepository: SubsonicRepository,
@@ -1090,10 +1091,14 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
-    fun exportConfig(onResult: (String) -> Unit) {
+    fun exportConfig(uri: android.net.Uri) {
         viewModelScope.launch {
-            runCatching { configBackupManager.exportToJson() }
-                .onSuccess { onResult(it) }
+            runCatching {
+                val json = configBackupManager.exportToJson()
+                appContext.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                    ?: error("Cannot open output stream")
+            }
+                .onSuccess { snackbarMessages.tryEmit("Backup exported") }
                 .onFailure { e ->
                     if (e is CancellationException) throw e
                     snackbarMessages.tryEmit("Export failed: ${e.message}")
@@ -1101,9 +1106,15 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
-    fun importConfig(json: String, onSuccess: (() -> Unit)? = null) {
+    fun importConfig(uri: android.net.Uri, onSuccess: (() -> Unit)? = null) {
         viewModelScope.launch {
             try {
+                val json = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    appContext.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                } ?: run {
+                    snackbarMessages.tryEmit("Cannot read backup file")
+                    return@launch
+                }
                 when (val result = configBackupManager.importFromJson(json)) {
                     is ImportResult.Success -> {
                         val msg = buildString {
