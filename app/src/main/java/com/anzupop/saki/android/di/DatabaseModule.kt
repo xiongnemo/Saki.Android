@@ -256,9 +256,14 @@ object DatabaseModule {
             context,
             SakiDatabase::class.java,
             "saki.db",
-        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9)
+        ).addMigrations(*allMigrations())
             .build()
     }
+
+    fun allMigrations() = arrayOf(
+        migration1To2, migration2To3, migration3To4, migration4To5,
+        migration5To6, migration6To7, migration7To8, migration8To9,
+    )
 
     @Provides
     fun provideAppPreferencesDao(database: SakiDatabase): AppPreferencesDao = database.appPreferencesDao()

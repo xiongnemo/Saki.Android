@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.anzupop.saki.android.domain.model.DEFAULT_STREAM_CACHE_SIZE_MB
@@ -14,9 +15,11 @@ import com.anzupop.saki.android.domain.model.STREAM_CACHE_SIZE_STEP_MB
 import com.anzupop.saki.android.domain.model.SoundBalancingMode
 import com.anzupop.saki.android.domain.model.StreamQuality
 import com.anzupop.saki.android.domain.repository.PlaybackPreferencesRepository
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -26,7 +29,9 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
 ) : PlaybackPreferencesRepository {
 
     override fun observePreferences(): Flow<PlaybackPreferences> =
-        dataStore.data.map { it.toPlaybackPreferences() }
+        dataStore.data
+            .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+            .map { it.toPlaybackPreferences() }
 
     override suspend fun getPreferences(): PlaybackPreferences =
         dataStore.data.first().toPlaybackPreferences()
