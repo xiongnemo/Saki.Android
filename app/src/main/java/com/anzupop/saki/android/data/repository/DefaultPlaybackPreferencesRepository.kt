@@ -38,9 +38,12 @@ class DefaultPlaybackPreferencesRepository @Inject constructor(
         }
     }
 
-    override suspend fun updateAdaptiveQuality(enabled: Boolean) = Unit
-    override suspend fun updateWifiStreamQuality(quality: StreamQuality) = Unit
-    override suspend fun updateMobileStreamQuality(quality: StreamQuality) = Unit
+    override suspend fun updateAdaptiveQuality(enabled: Boolean) =
+        error("Room-backed repository does not support adaptive quality. Use DataStore implementation.")
+    override suspend fun updateWifiStreamQuality(quality: StreamQuality) =
+        error("Room-backed repository does not support adaptive quality. Use DataStore implementation.")
+    override suspend fun updateMobileStreamQuality(quality: StreamQuality) =
+        error("Room-backed repository does not support adaptive quality. Use DataStore implementation.")
 
     override suspend fun updateSoundBalancing(mode: SoundBalancingMode): Unit = withContext(ioDispatcher) {
         updatePreferences { current ->

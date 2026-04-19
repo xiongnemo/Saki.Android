@@ -81,8 +81,8 @@ fun SakiApp(
                             viewModel.completeOnboarding()
                             showServerManager = true
                         },
-                        onImportConfig = { json ->
-                            viewModel.importConfig(json) { viewModel.completeOnboarding() }
+                        onImportConfig = { uri ->
+                            viewModel.importConfig(uri) { viewModel.completeOnboarding() }
                         },
                     )
                 }
@@ -129,7 +129,7 @@ fun SakiApp(
                         onReplayOnboarding = viewModel::replayOnboarding,
                         onUpdateBluetoothLyrics = viewModel::updateBluetoothLyrics,
                         onExportConfig = viewModel::exportConfig,
-                        onImportConfig = { json -> viewModel.importConfig(json) },
+                        onImportConfig = { uri -> viewModel.importConfig(uri) },
                         onOpenArtistFromPlayback = viewModel::openArtistFromPlayback,
                         onOpenAlbumFromPlayback = viewModel::openAlbumFromPlayback,
                         onPausePlayback = viewModel::pausePlayback,
@@ -194,8 +194,8 @@ private fun RootShell(
     onUpdateTextScale: (com.anzupop.saki.android.domain.model.TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
-    onExportConfig: ((String) -> Unit) -> Unit,
-    onImportConfig: (String) -> Unit,
+    onExportConfig: (android.net.Uri) -> Unit,
+    onImportConfig: (android.net.Uri) -> Unit,
     onOpenArtistFromPlayback: (Long?, String?) -> Unit,
     onOpenAlbumFromPlayback: (Long?, String?) -> Unit,
     onPausePlayback: () -> Unit,

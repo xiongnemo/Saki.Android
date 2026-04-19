@@ -37,7 +37,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.dp
@@ -46,7 +45,7 @@ import androidx.compose.ui.unit.dp
 fun OnboardingScreen(
     onContinue: () -> Unit,
     onSetUpNow: () -> Unit,
-    onImportConfig: (String) -> Unit = {},
+    onImportConfig: (android.net.Uri) -> Unit = {},
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val background = remember(colorScheme) {
@@ -116,17 +115,9 @@ fun OnboardingScreen(
                 ) {
                     Text("Set up my library")
                 }
-                val context = LocalContext.current
                 val importLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument(),
-                ) { uri ->
-                    if (uri != null) {
-                        val json = runCatching {
-                            context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
-                        }.getOrNull()
-                        if (json != null) onImportConfig(json)
-                    }
-                }
+                ) { uri -> if (uri != null) onImportConfig(uri) }
                 OutlinedButton(
                     onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
                     modifier = Modifier.fillMaxWidth(),
