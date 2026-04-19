@@ -53,6 +53,12 @@ class DefaultPlaybackPreferencesRepository @Inject constructor(
         }
     }
 
+    override suspend fun updateBluetoothLyrics(enabled: Boolean): Unit = withContext(ioDispatcher) {
+        updatePreferences { current ->
+            current.copy(bluetoothLyricsEnabled = enabled)
+        }
+    }
+
     private suspend fun updatePreferences(
         transform: (PlaybackPreferencesEntity) -> PlaybackPreferencesEntity,
     ) {
@@ -74,6 +80,7 @@ private fun PlaybackPreferencesEntity.toDomain(): PlaybackPreferences {
             ?.let(SoundBalancingMode::fromStorageKey)
             ?: if (soundBalancingEnabled) SoundBalancingMode.MEDIUM else SoundBalancingMode.OFF,
         streamCacheSizeMb = streamCacheSizeMb.normalizeStreamCacheSizeMb(),
+        bluetoothLyricsEnabled = bluetoothLyricsEnabled,
     )
 }
 

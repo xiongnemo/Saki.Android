@@ -33,6 +33,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -69,6 +72,7 @@ fun SettingsScreen(
     onUpdateStreamCacheSizeMb: (Int) -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
+    onUpdateBluetoothLyrics: (Boolean) -> Unit,
     onPlayCachedSong: (CachedSong) -> Unit,
     onPlayCachedQueue: (List<CachedSong>, Int) -> Unit,
     onDeleteCachedSong: (String) -> Unit,
@@ -325,6 +329,40 @@ fun SettingsScreen(
                             onPlayFromHere = { onPlayCachedQueue(visibleCachedSongs, index) },
                         )
                     }
+                }
+            }
+        }
+
+        item {
+            SettingsSectionCard(
+                title = "Experimental",
+                body = "Features that may not work on all devices.",
+                action = null,
+            ) {
+                val checked = uiState.playbackState.preferences.bluetoothLyricsEnabled
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = checked,
+                            role = Role.Switch,
+                            onValueChange = onUpdateBluetoothLyrics,
+                        ),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Bluetooth / notification lyrics", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Show current lyric line in media notification, lock screen, and Bluetooth devices (car stereos, headphones).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = checked,
+                        onCheckedChange = null,
+                    )
                 }
             }
         }

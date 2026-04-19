@@ -24,6 +24,7 @@ import com.anzupop.saki.android.domain.repository.AppPreferencesRepository
 import com.anzupop.saki.android.domain.repository.CachedSongRepository
 import com.anzupop.saki.android.domain.repository.LibraryCacheRepository
 import com.anzupop.saki.android.domain.repository.PlaybackManager
+import com.anzupop.saki.android.playback.LyricsHolder
 import com.anzupop.saki.android.domain.repository.PlaybackPreferencesRepository
 import com.anzupop.saki.android.domain.repository.ServerConfigRepository
 import com.anzupop.saki.android.domain.repository.SubsonicRepository
@@ -56,6 +57,7 @@ class SakiAppViewModel @Inject constructor(
     private val playbackPreferencesRepository: PlaybackPreferencesRepository,
     private val libraryCacheRepository: LibraryCacheRepository,
     private val playbackManager: PlaybackManager,
+    private val lyricsHolder: LyricsHolder,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SakiAppUiState())
     private val snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -122,13 +124,16 @@ class SakiAppViewModel @Inject constructor(
                 .collectLatest { pair ->
                     if (pair == null) {
                         mutableUiState.update { it.copy(currentLyrics = null) }
+                        lyricsHolder.update(null)
                         return@collectLatest
                     }
                     val (serverId, songId) = pair
                     mutableUiState.update { it.copy(currentLyrics = null) }
+                    lyricsHolder.update(null)
                     try {
                         val lyrics = subsonicRepository.getLyrics(serverId, songId).data
                         mutableUiState.update { it.copy(currentLyrics = lyrics) }
+                        lyricsHolder.update(lyrics)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -606,6 +611,16 @@ class SakiAppViewModel @Inject constructor(
                 snackbarMessages.emit("Stream cache limit updated.")
             }.onFailure { throwable ->
                 snackbarMessages.emit(throwable.message ?: "Unable to update stream cache size.")
+            }
+        }
+    }
+
+    fun updateBluetoothLyrics(enabled: Boolean) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateBluetoothLyrics(enabled)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.message ?: "Unable to update Bluetooth lyrics.")
             }
         }
     }
