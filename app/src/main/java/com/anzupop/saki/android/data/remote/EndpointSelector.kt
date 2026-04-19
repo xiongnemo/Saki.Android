@@ -79,9 +79,17 @@ class EndpointSelector @Inject constructor(
         serverConfigs[server.id] = server
     }
 
+    private var reprobeJob: kotlinx.coroutines.Job? = null
+
     private fun onNetworkChanged() {
-        serverConfigs.forEach { (serverId, server) ->
-            scope.launch { probe(serverId, server) }
+        reprobeJob?.cancel()
+        reprobeJob = scope.launch {
+            // Immediate probe, then re-probe with exponential backoff: 3s, 6s, 12s, then stop
+            val delays = longArrayOf(0, 3_000, 6_000, 12_000)
+            for (delay in delays) {
+                if (delay > 0) kotlinx.coroutines.delay(delay)
+                serverConfigs.forEach { (serverId, server) -> probe(serverId, server) }
+            }
         }
     }
 
