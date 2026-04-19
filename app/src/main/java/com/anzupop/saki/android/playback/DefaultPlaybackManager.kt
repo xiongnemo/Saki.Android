@@ -350,7 +350,7 @@ class DefaultPlaybackManager @Inject constructor(
                 queue = queue,
                 positionMs = player.currentPosition.coerceKnownTime(),
                 durationMs = player.duration.coerceKnownTime().takeIf { it > 0 }
-                    ?: player.currentMediaItem?.toPlaybackRequestOrNull()?.durationMs
+                    ?: player.currentMediaItem?.metadataDurationMs()
                     ?: 0L,
                 bufferedPositionMs = player.bufferedPosition.coerceKnownTime(),
                 repeatMode = player.repeatMode.toRepeatModeSetting(),
