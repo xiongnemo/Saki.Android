@@ -105,33 +105,36 @@ class EndpointSelector @Inject constructor(
             return if (latency != null) ep else null
         }
 
-        val authQuery = SubsonicAuth.baseQuery(server)
-        val results = kotlinx.coroutines.coroutineScope {
+        val resultsList = java.util.Collections.synchronizedList(
+            mutableListOf<Pair<ServerEndpoint, Long?>>(),
+        )
+        kotlinx.coroutines.coroutineScope {
             endpoints.map { endpoint ->
                 async {
                     val latency = pingEndpoint(endpoint, server)
-                    endpoint to latency
+                    resultsList.add(endpoint to latency)
+                    // Update best as soon as each result arrives
+                    if (latency != null) {
+                        val currentBestId = bestEndpoints[serverId]
+                        val currentBestLatency = resultsList
+                            .firstOrNull { it.first.id == currentBestId }?.second
+                        if (currentBestLatency == null || latency < currentBestLatency) {
+                            bestEndpoints[serverId] = endpoint.id
+                            _probeVersion.value++
+                        }
+                    }
                 }
-            }.map { it.await() }
+            }.forEach { it.await() }
         }
 
-        lastProbeResults[serverId] = results.map { (ep, lat) ->
+        lastProbeResults[serverId] = resultsList.map { (ep, lat) ->
             EndpointProbeResult(ep, lat, lat != null)
         }
-
-        val best = results
-            .filter { it.second != null }
-            .minByOrNull { it.second!! }
-            ?.first
-
-        if (best != null) {
-            bestEndpoints[serverId] = best.id
-            Log.d("EndpointSelector", "Best endpoint for server $serverId: ${best.label} (${best.baseUrl})")
-        } else {
+        if (resultsList.none { it.second != null }) {
             bestEndpoints.remove(serverId)
         }
         _probeVersion.value++
-        return best
+        return endpoints.find { it.id == bestEndpoints[serverId] }
     }
 
     fun sortedEndpoints(serverId: Long, endpoints: List<ServerEndpoint>): List<ServerEndpoint> {
