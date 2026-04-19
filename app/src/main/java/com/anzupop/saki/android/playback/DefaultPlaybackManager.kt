@@ -253,6 +253,33 @@ class DefaultPlaybackManager @Inject constructor(
 
     override suspend fun skipToNext() {
         withController { activeController ->
+            val nextIndex = activeController.currentMediaItemIndex + 1
+            if (nextIndex < activeController.mediaItemCount) {
+                val nextItem = activeController.getMediaItemAt(nextIndex)
+                val request = nextItem.toPlaybackRequestOrNull()
+                if (request != null && !request.isCached) {
+                    val quality = resolveQualityForSong(request.serverId, request.songId)
+                    if (quality.maxBitRate != request.maxBitRate) {
+                        val rebuilt = request.copy(
+                            qualityLabel = quality.label,
+                            streamCacheKey = streamCacheRepository.buildCacheKey(request.serverId, request.songId, quality),
+                            maxBitRate = quality.maxBitRate,
+                            format = quality.format,
+                        ).let { updated ->
+                            MediaItem.Builder()
+                                .setMediaId(updated.songId)
+                                .setMediaMetadata(updated.toMediaMetadata())
+                                .setRequestMetadata(
+                                    MediaItem.RequestMetadata.Builder()
+                                        .setExtras(updated.toBundle())
+                                        .build(),
+                                )
+                                .build()
+                        }
+                        activeController.replaceMediaItem(nextIndex, rebuilt)
+                    }
+                }
+            }
             activeController.seekToNext()
             syncState(activeController)
         }
