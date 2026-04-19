@@ -27,6 +27,7 @@ data class SubsonicResponseDto(
     val playlist: PlaylistDto? = null,
     val searchResult3: SearchResult3Dto? = null,
     val lyricsList: LyricsListDto? = null,
+    val playQueue: PlayQueueDto? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -167,4 +168,14 @@ data class StructuredLyricsDto(
 data class LyricLineDto(
     val start: Long? = null,
     val value: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class PlayQueueDto(
+    val entry: List<SongDto> = emptyList(),
+    val current: String? = null,
+    val position: Long? = null,
+    val username: String? = null,
+    val changed: String? = null,
+    val changedBy: String? = null,
 )

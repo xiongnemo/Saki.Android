@@ -708,6 +708,9 @@ class SakiAppViewModel @Inject constructor(
 
         if (selectedServerId != null && (serverChanged || lastLoadedServerId != selectedServerId)) {
             loadServerContent(selectedServerId, forceRefresh = true)
+            if (uiState.value.playbackState.currentItem == null) {
+                restorePlayQueue(selectedServerId)
+            }
         }
     }
 
@@ -731,6 +734,27 @@ class SakiAppViewModel @Inject constructor(
             } else {
                 state
             }
+        }
+    }
+
+    private fun restorePlayQueue(serverId: Long) {
+        viewModelScope.launch {
+            runCatching {
+                subsonicRepository.getPlayQueue(serverId).data
+            }.onSuccess { savedQueue ->
+                if (savedQueue.songs.isEmpty()) return@onSuccess
+                val startIndex = if (savedQueue.currentSongId != null) {
+                    savedQueue.songs.indexOfFirst { it.id == savedQueue.currentSongId }.coerceAtLeast(0)
+                } else {
+                    0
+                }
+                playbackManager.restoreQueue(
+                    serverId = serverId,
+                    songs = savedQueue.songs,
+                    startIndex = startIndex,
+                    positionMs = savedQueue.positionMs,
+                )
+            }.onFailure { /* server unreachable, skip restore */ }
         }
     }
 

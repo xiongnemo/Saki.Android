@@ -12,6 +12,7 @@ import com.anzupop.saki.android.domain.model.WordCue
 import com.anzupop.saki.android.domain.model.PingResult
 import com.anzupop.saki.android.domain.model.Playlist
 import com.anzupop.saki.android.domain.model.PlaylistSummary
+import com.anzupop.saki.android.domain.model.SavedPlayQueue
 import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.Song
 import com.anzupop.saki.android.domain.model.SongLyrics
@@ -131,6 +132,15 @@ internal fun SubsonicResponseDto.toSearchResults(): SearchResults {
         artists = payload.artist.map(ArtistDto::toArtistSummary),
         albums = payload.album.map(AlbumDto::toAlbumSummary),
         songs = payload.song.map(SongDto::toSong),
+    )
+}
+
+internal fun SubsonicResponseDto.toSavedPlayQueue(): SavedPlayQueue {
+    val payload = playQueue ?: return SavedPlayQueue(emptyList(), null, 0)
+    return SavedPlayQueue(
+        songs = payload.entry.map(SongDto::toSong),
+        currentSongId = payload.current,
+        positionMs = payload.position ?: 0,
     )
 }
 

@@ -18,6 +18,7 @@ import com.anzupop.saki.android.data.remote.subsonic.toMusicFolders
 import com.anzupop.saki.android.data.remote.subsonic.toPingResult
 import com.anzupop.saki.android.data.remote.subsonic.toPlaylist
 import com.anzupop.saki.android.data.remote.subsonic.toPlaylistSummaries
+import com.anzupop.saki.android.data.remote.subsonic.toSavedPlayQueue
 import com.anzupop.saki.android.data.remote.subsonic.toSearchResults
 import com.anzupop.saki.android.data.remote.subsonic.toSong
 import com.anzupop.saki.android.di.IoDispatcher
@@ -30,6 +31,7 @@ import com.anzupop.saki.android.domain.model.MusicFolder
 import com.anzupop.saki.android.domain.model.PingResult
 import com.anzupop.saki.android.domain.model.Playlist
 import com.anzupop.saki.android.domain.model.PlaylistSummary
+import com.anzupop.saki.android.domain.model.SavedPlayQueue
 import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.ServerEndpoint
@@ -287,10 +289,39 @@ class DefaultSubsonicRepository @Inject constructor(
         }
     }
 
+    override suspend fun getPlayQueue(
+        serverId: Long,
+    ): SubsonicCallResult<SavedPlayQueue> = withContext(ioDispatcher) {
+        executeWithFallback(
+            serverId = serverId,
+            path = "getPlayQueue.view",
+        ) { response ->
+            response.toSavedPlayQueue()
+        }
+    }
+
+    override suspend fun savePlayQueue(
+        serverId: Long,
+        songIds: List<String>,
+        currentSongId: String?,
+        positionMs: Long,
+    ): SubsonicCallResult<Unit> = withContext(ioDispatcher) {
+        val query = mutableMapOf<String, String>()
+        if (currentSongId != null) query["current"] = currentSongId
+        query["position"] = positionMs.toString()
+        executeWithFallback(
+            serverId = serverId,
+            path = "savePlayQueue.view",
+            extraQuery = query,
+            extraQueryLists = mapOf("id" to songIds),
+        ) { }
+    }
+
     private suspend fun <T> executeWithFallback(
         serverId: Long,
         path: String,
         extraQuery: Map<String, String> = emptyMap(),
+        extraQueryLists: Map<String, List<String>> = emptyMap(),
         transform: (SubsonicResponseDto) -> T,
     ): SubsonicCallResult<T> {
         val server = serverConfigRepository.getServerConfig(serverId)
@@ -310,6 +341,7 @@ class DefaultSubsonicRepository @Inject constructor(
                     endpoint = endpoint,
                     url = requestUrl,
                     query = query,
+                    queryLists = extraQueryLists,
                 )
                 return SubsonicCallResult(
                     endpoint = endpoint,
@@ -340,9 +372,19 @@ class DefaultSubsonicRepository @Inject constructor(
         endpoint: ServerEndpoint,
         url: String,
         query: Map<String, String>,
+        queryLists: Map<String, List<String>> = emptyMap(),
     ): SubsonicResponseDto {
+        val finalUrl = if (queryLists.isEmpty()) {
+            url
+        } else {
+            val builder = url.toHttpUrlOrNull()?.newBuilder() ?: error("Invalid URL: $url")
+            queryLists.forEach { (key, values) ->
+                values.forEach { value -> builder.addQueryParameter(key, value) }
+            }
+            builder.build().toString()
+        }
         val httpResponse = subsonicApiService.get(
-            url = url,
+            url = finalUrl,
             query = query,
         )
 
