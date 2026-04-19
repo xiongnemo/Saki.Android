@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import com.anzupop.saki.android.data.local.entity.CachedAlbumEntity
 import com.anzupop.saki.android.data.local.entity.CachedArtistEntity
+import com.anzupop.saki.android.data.local.entity.CachedLibrarySongEntity
 import com.anzupop.saki.android.data.local.entity.CachedPlaylistEntity
 
 @Dao
@@ -55,5 +56,20 @@ interface LibraryCacheDao {
     suspend fun replacePlaylists(serverId: Long, playlists: List<CachedPlaylistEntity>) {
         clearPlaylists(serverId)
         insertPlaylists(playlists)
+    }
+
+    @Query("SELECT * FROM cached_library_songs WHERE serverId = :serverId ORDER BY title COLLATE NOCASE")
+    suspend fun getSongs(serverId: Long): List<CachedLibrarySongEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSongs(songs: List<CachedLibrarySongEntity>)
+
+    @Query("DELETE FROM cached_library_songs WHERE serverId = :serverId")
+    suspend fun clearSongs(serverId: Long)
+
+    @Transaction
+    suspend fun replaceSongs(serverId: Long, songs: List<CachedLibrarySongEntity>) {
+        clearSongs(serverId)
+        insertSongs(songs)
     }
 }

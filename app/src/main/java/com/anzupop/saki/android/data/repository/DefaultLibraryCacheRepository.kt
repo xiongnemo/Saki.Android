@@ -3,6 +3,7 @@ package com.anzupop.saki.android.data.repository
 import com.anzupop.saki.android.data.local.dao.LibraryCacheDao
 import com.anzupop.saki.android.data.local.entity.CachedAlbumEntity
 import com.anzupop.saki.android.data.local.entity.CachedArtistEntity
+import com.anzupop.saki.android.data.local.entity.CachedLibrarySongEntity
 import com.anzupop.saki.android.data.local.entity.CachedPlaylistEntity
 import com.anzupop.saki.android.di.IoDispatcher
 import com.anzupop.saki.android.domain.model.AlbumListType
@@ -11,6 +12,7 @@ import com.anzupop.saki.android.domain.model.ArtistSection
 import com.anzupop.saki.android.domain.model.ArtistSummary
 import com.anzupop.saki.android.domain.model.LibraryIndexes
 import com.anzupop.saki.android.domain.model.PlaylistSummary
+import com.anzupop.saki.android.domain.model.Song
 import com.anzupop.saki.android.domain.repository.LibraryCacheRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -105,6 +107,38 @@ class DefaultLibraryCacheRepository @Inject constructor(
         dao.replacePlaylists(serverId, entities)
     }
 
+    override suspend fun getSongs(serverId: Long): List<Song> = withContext(ioDispatcher) {
+        dao.getSongs(serverId).map { it.toDomain() }
+    }
+
+    override suspend fun saveSongs(serverId: Long, songs: List<Song>) = withContext(ioDispatcher) {
+        val entities = songs.map { song ->
+            CachedLibrarySongEntity(
+                serverId = serverId,
+                songId = song.id,
+                parentId = song.parentId,
+                title = song.title,
+                album = song.album,
+                albumId = song.albumId,
+                artist = song.artist,
+                artistId = song.artistId,
+                coverArtId = song.coverArtId,
+                durationSeconds = song.durationSeconds,
+                track = song.track,
+                discNumber = song.discNumber,
+                year = song.year,
+                genre = song.genre,
+                bitRate = song.bitRate,
+                suffix = song.suffix,
+                contentType = song.contentType,
+                sizeBytes = song.sizeBytes,
+                path = song.path,
+                created = song.created,
+            )
+        }
+        dao.replaceSongs(serverId, entities)
+    }
+
     private fun CachedArtistEntity.toDomain() = ArtistSummary(
         id = artistId,
         name = name,
@@ -136,5 +170,27 @@ class DefaultLibraryCacheRepository @Inject constructor(
         coverArtId = coverArtId,
         created = created,
         changed = changed,
+    )
+
+    private fun CachedLibrarySongEntity.toDomain() = Song(
+        id = songId,
+        parentId = parentId,
+        title = title,
+        album = album,
+        albumId = albumId,
+        artist = artist,
+        artistId = artistId,
+        coverArtId = coverArtId,
+        durationSeconds = durationSeconds,
+        track = track,
+        discNumber = discNumber,
+        year = year,
+        genre = genre,
+        bitRate = bitRate,
+        suffix = suffix,
+        contentType = contentType,
+        sizeBytes = sizeBytes,
+        path = path,
+        created = created,
     )
 }

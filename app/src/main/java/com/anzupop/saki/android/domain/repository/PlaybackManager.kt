@@ -23,6 +23,13 @@ interface PlaybackManager {
         startIndex: Int = 0,
     )
 
+    suspend fun restoreQueue(
+        serverId: Long,
+        songs: List<Song>,
+        startIndex: Int = 0,
+        positionMs: Long = 0,
+    )
+
     suspend fun playCachedQueue(
         songs: List<CachedSong>,
         startIndex: Int = 0,

@@ -44,6 +44,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 
 @AndroidEntryPoint
@@ -100,6 +102,7 @@ class SakiPlaybackService : MediaSessionService() {
             .build()
             .apply {
                 addListener(PlaybackRecoveryListener())
+                addListener(PlayQueueSaveListener())
             }
 
         val sessionActivity = PendingIntent.getActivity(
@@ -181,7 +184,17 @@ class SakiPlaybackService : MediaSessionService() {
         controllerInfo: ControllerInfo,
     ): MediaSession? = mediaSession
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        savePlayQueue(blocking = true)
+        val activePlayer = player ?: return super.onTaskRemoved(rootIntent)
+        if (!activePlayer.playWhenReady || activePlayer.mediaItemCount == 0) {
+            stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
+        savePlayQueue(blocking = true)
         releaseSoundBalancingEffect()
 
         mediaSession?.release()
@@ -193,6 +206,35 @@ class SakiPlaybackService : MediaSessionService() {
         playerScope.cancel()
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    private fun savePlayQueue(blocking: Boolean = false) {
+        val activePlayer = player ?: return
+        val itemCount = activePlayer.mediaItemCount
+        if (itemCount == 0) return
+        val request = activePlayer.currentMediaItem?.toPlaybackRequestOrNull() ?: return
+        val songIds = (0 until itemCount).mapNotNull { i ->
+            activePlayer.getMediaItemAt(i).toPlaybackRequestOrNull()?.songId
+        }
+        if (songIds.isEmpty()) return
+        val positionMs = activePlayer.currentPosition
+        val serverId = request.serverId
+        val currentSongId = request.songId
+        val save: suspend () -> Unit = {
+            runCatching {
+                subsonicRepository.savePlayQueue(
+                    serverId = serverId,
+                    songIds = songIds,
+                    currentSongId = currentSongId,
+                    positionMs = positionMs,
+                )
+            }
+        }
+        if (blocking) {
+            runBlocking { withTimeout(5_000) { save() } }
+        } else {
+            serviceScope.launch { save() }
+        }
     }
 
     private inner class SakiMediaSessionCallback : MediaSession.Callback {
@@ -285,7 +327,16 @@ class SakiPlaybackService : MediaSessionService() {
         }
     }
 
-    @Synchronized
+    private inner class PlayQueueSaveListener : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            savePlayQueue()
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (!isPlaying) savePlayQueue()
+        }
+    }
+
     private fun restoreOriginalTitle() {
         val activePlayer = player ?: return
         val title = originalMediaTitle ?: return

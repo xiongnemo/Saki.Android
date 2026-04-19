@@ -139,6 +139,12 @@ data class SearchResults(
     val songs: List<Song> = emptyList(),
 )
 
+data class SavedPlayQueue(
+    val songs: List<Song>,
+    val currentSongId: String?,
+    val positionMs: Long,
+)
+
 data class AuthenticatedUrlCandidate(
     val endpoint: ServerEndpoint,
     val url: String,

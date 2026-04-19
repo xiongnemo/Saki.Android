@@ -209,6 +209,44 @@ object DatabaseModule {
         }
     }
 
+    private val migration8To9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_library_songs` (
+                    `serverId` INTEGER NOT NULL,
+                    `songId` TEXT NOT NULL,
+                    `parentId` TEXT,
+                    `title` TEXT NOT NULL,
+                    `album` TEXT,
+                    `albumId` TEXT,
+                    `artist` TEXT,
+                    `artistId` TEXT,
+                    `coverArtId` TEXT,
+                    `durationSeconds` INTEGER,
+                    `track` INTEGER,
+                    `discNumber` INTEGER,
+                    `year` INTEGER,
+                    `genre` TEXT,
+                    `bitRate` INTEGER,
+                    `suffix` TEXT,
+                    `contentType` TEXT,
+                    `sizeBytes` INTEGER,
+                    `path` TEXT,
+                    `created` TEXT,
+                    PRIMARY KEY(`serverId`, `songId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE INDEX IF NOT EXISTS `index_cached_library_songs_serverId_title`
+                ON `cached_library_songs` (`serverId`, `title` COLLATE NOCASE)
+                """.trimIndent(),
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideSakiDatabase(
@@ -218,7 +256,7 @@ object DatabaseModule {
             context,
             SakiDatabase::class.java,
             "saki.db",
-        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8)
+        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9)
             .build()
     }
 

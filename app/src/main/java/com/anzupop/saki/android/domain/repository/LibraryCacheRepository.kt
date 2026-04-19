@@ -4,6 +4,7 @@ import com.anzupop.saki.android.domain.model.AlbumListType
 import com.anzupop.saki.android.domain.model.AlbumSummary
 import com.anzupop.saki.android.domain.model.LibraryIndexes
 import com.anzupop.saki.android.domain.model.PlaylistSummary
+import com.anzupop.saki.android.domain.model.Song
 
 interface LibraryCacheRepository {
     suspend fun getArtists(serverId: Long): LibraryIndexes?
@@ -12,4 +13,6 @@ interface LibraryCacheRepository {
     suspend fun saveAlbums(serverId: Long, type: AlbumListType, albums: List<AlbumSummary>)
     suspend fun getPlaylists(serverId: Long): List<PlaylistSummary>
     suspend fun savePlaylists(serverId: Long, playlists: List<PlaylistSummary>)
+    suspend fun getSongs(serverId: Long): List<Song>
+    suspend fun saveSongs(serverId: Long, songs: List<Song>)
 }

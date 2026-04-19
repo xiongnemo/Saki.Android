@@ -127,6 +127,33 @@ class DefaultPlaybackManager @Inject constructor(
         }
     }
 
+    override suspend fun restoreQueue(
+        serverId: Long,
+        songs: List<Song>,
+        startIndex: Int,
+        positionMs: Long,
+    ) {
+        if (songs.isEmpty()) return
+        val quality = playbackState.value.preferences.streamQuality
+        val mediaItems = songs.map { song ->
+            song.toPlaybackRequestMediaItem(
+                serverId = serverId,
+                qualityLabel = quality.label,
+                streamCacheKey = streamCacheRepository.buildCacheKey(serverId, song.id, quality),
+                artworkUri = buildArtworkUri(serverId, song.coverArtId),
+                maxBitRate = quality.maxBitRate,
+                format = quality.format,
+            )
+        }
+
+        withController { activeController ->
+            val safeStartIndex = startIndex.coerceIn(mediaItems.indices)
+            activeController.setMediaItems(mediaItems, safeStartIndex, positionMs)
+            activeController.prepare()
+            syncState(activeController)
+        }
+    }
+
     override suspend fun playCachedQueue(
         songs: List<CachedSong>,
         startIndex: Int,

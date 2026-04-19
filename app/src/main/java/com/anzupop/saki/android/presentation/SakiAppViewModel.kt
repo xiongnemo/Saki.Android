@@ -31,10 +31,12 @@ import com.anzupop.saki.android.domain.repository.SubsonicRepository
 import com.anzupop.saki.android.domain.repository.StreamCacheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -707,7 +709,10 @@ class SakiAppViewModel @Inject constructor(
         }
 
         if (selectedServerId != null && (serverChanged || lastLoadedServerId != selectedServerId)) {
-            loadServerContent(selectedServerId, forceRefresh = true)
+            loadServerContent(selectedServerId)
+            if (uiState.value.playbackState.currentItem == null) {
+                restorePlayQueue(selectedServerId)
+            }
         }
     }
 
@@ -730,6 +735,30 @@ class SakiAppViewModel @Inject constructor(
                 )
             } else {
                 state
+            }
+        }
+    }
+
+    private fun restorePlayQueue(serverId: Long) {
+        viewModelScope.launch {
+            runCatching {
+                subsonicRepository.getPlayQueue(serverId).data
+            }.onSuccess { savedQueue ->
+                if (savedQueue.songs.isEmpty()) return@onSuccess
+                if (uiState.value.playbackState.queue.isNotEmpty()) return@onSuccess
+                val startIndex = if (savedQueue.currentSongId != null) {
+                    savedQueue.songs.indexOfFirst { it.id == savedQueue.currentSongId }.coerceAtLeast(0)
+                } else {
+                    0
+                }
+                playbackManager.restoreQueue(
+                    serverId = serverId,
+                    songs = savedQueue.songs,
+                    startIndex = startIndex,
+                    positionMs = savedQueue.positionMs,
+                )
+            }.onFailure { e ->
+                if (e is CancellationException) throw e
             }
         }
     }
@@ -844,57 +873,56 @@ class SakiAppViewModel @Inject constructor(
     ) {
         if (!forceRefresh && uiState.value.songs.isNotEmpty()) return
 
-        mutableUiState.update { state ->
-            state.copy(
-                isSongsLoading = true,
-                songsError = null,
-            )
-        }
-
         viewModelScope.launch {
+            if (!forceRefresh) {
+                val cached = runCatching { libraryCacheRepository.getSongs(serverId) }.getOrNull()
+                if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(songs = cached) }
+                }
+            }
+
+            if (uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(isSongsLoading = true, songsError = null) }
+            }
+
             runCatching {
-                buildSongFeed(serverId)
+                fetchAllSongs(serverId)
             }.onSuccess { songs ->
                 if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { state ->
-                        state.copy(
-                            songs = songs,
-                            isSongsLoading = false,
-                            songsError = null,
-                        )
-                    }
+                    mutableUiState.update { it.copy(songs = songs, isSongsLoading = false, songsError = null) }
                 }
+                runCatching { libraryCacheRepository.saveSongs(serverId, songs) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache songs", it) }
             }.onFailure { throwable ->
-                mutableUiState.update { state ->
-                    state.copy(
-                        isSongsLoading = false,
-                        songsError = throwable.message ?: "Unable to load songs.",
-                    )
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(isSongsLoading = false, songsError = throwable.message ?: "Unable to load songs.") }
                 }
             }
         }
     }
 
-    private suspend fun buildSongFeed(serverId: Long): List<Song> = coroutineScope {
-        val newestAlbums = subsonicRepository.getAlbumList(
-            serverId = serverId,
-            type = AlbumListType.NEWEST,
-            size = 10,
-        ).data
-
-        newestAlbums.take(10)
-            .map { summary ->
-                async {
-                    subsonicRepository.getAlbum(serverId, summary.id).data
-                }
-            }
-            .map { deferred -> deferred.await() }
-            .flatMap { album ->
-                album.songs.map { song ->
-                    song.withFallbackAlbumMetadata(album)
-                }
-            }
-            .distinctBy(Song::id)
+    private suspend fun fetchAllSongs(serverId: Long): List<Song> = withContext(Dispatchers.IO) {
+        val pageSize = 500
+        val maxPages = 100
+        val allSongs = mutableListOf<Song>()
+        var offset = 0
+        var page = 0
+        while (page < maxPages) {
+            val results = subsonicRepository.search(
+                serverId = serverId,
+                query = "",
+                artistCount = 0,
+                albumCount = 0,
+                songCount = pageSize,
+                songOffset = offset,
+            ).data
+            allSongs.addAll(results.songs)
+            if (results.songs.isEmpty() || results.songs.size < pageSize) break
+            offset += pageSize
+            page++
+        }
+        allSongs.sortBy { it.title.lowercase() }
+        allSongs
     }
 
     private suspend fun buildArtistTopSongs(

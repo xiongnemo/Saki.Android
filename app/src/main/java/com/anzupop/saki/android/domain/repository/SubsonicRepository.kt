@@ -9,6 +9,7 @@ import com.anzupop.saki.android.domain.model.MusicFolder
 import com.anzupop.saki.android.domain.model.PingResult
 import com.anzupop.saki.android.domain.model.Playlist
 import com.anzupop.saki.android.domain.model.PlaylistSummary
+import com.anzupop.saki.android.domain.model.SavedPlayQueue
 import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.Song
 import com.anzupop.saki.android.domain.model.SongLyrics
@@ -98,4 +99,13 @@ interface SubsonicRepository {
         serverId: Long,
         songId: String,
     ): SubsonicCallResult<SongLyrics?>
+
+    suspend fun getPlayQueue(serverId: Long): SubsonicCallResult<SavedPlayQueue>
+
+    suspend fun savePlayQueue(
+        serverId: Long,
+        songIds: List<String>,
+        currentSongId: String?,
+        positionMs: Long,
+    ): SubsonicCallResult<Unit>
 }
