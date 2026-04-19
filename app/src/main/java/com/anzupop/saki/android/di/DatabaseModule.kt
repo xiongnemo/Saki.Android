@@ -217,7 +217,7 @@ object DatabaseModule {
                     `serverId` INTEGER NOT NULL,
                     `songId` TEXT NOT NULL,
                     `parentId` TEXT,
-                    `title` TEXT NOT NULL,
+                    `title` TEXT NOT NULL COLLATE NOCASE,
                     `album` TEXT,
                     `albumId` TEXT,
                     `artist` TEXT,
@@ -241,7 +241,7 @@ object DatabaseModule {
             db.execSQL(
                 """
                 CREATE INDEX IF NOT EXISTS `index_cached_library_songs_serverId_title`
-                ON `cached_library_songs` (`serverId`, `title` COLLATE NOCASE)
+                ON `cached_library_songs` (`serverId`, `title`)
                 """.trimIndent(),
             )
         }

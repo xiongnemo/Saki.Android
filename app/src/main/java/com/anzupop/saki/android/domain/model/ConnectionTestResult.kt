@@ -14,6 +14,7 @@ sealed interface ConnectionTestResult {
     data class Success(
         override val endpointUrl: String,
         val serverVersion: String?,
+        val latencyMs: Long,
     ) : ConnectionTestResult
 
     data class Failure(

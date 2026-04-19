@@ -3,6 +3,7 @@ package com.anzupop.saki.android.presentation
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.anzupop.saki.android.data.remote.EndpointSelector
 import com.anzupop.saki.android.domain.model.Album
 import com.anzupop.saki.android.domain.model.AlbumListType
 import com.anzupop.saki.android.domain.model.AlbumSummary
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -60,6 +62,7 @@ class SakiAppViewModel @Inject constructor(
     private val libraryCacheRepository: LibraryCacheRepository,
     private val playbackManager: PlaybackManager,
     private val lyricsHolder: LyricsHolder,
+    private val endpointSelector: EndpointSelector,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SakiAppUiState())
     private val snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -67,11 +70,17 @@ class SakiAppViewModel @Inject constructor(
     private val searchQueryFlow = MutableStateFlow("")
     private var lastLoadedServerId: Long? = null
 
+    private val mutableEndpointStatus = MutableStateFlow(EndpointStatus())
+    val endpointStatus: StateFlow<EndpointStatus> = mutableEndpointStatus.asStateFlow()
+
     val uiState = mutableUiState.asStateFlow()
     val messages = snackbarMessages.asSharedFlow()
     val openNowPlayingRequests = openNowPlayingRequestsFlow.asSharedFlow()
 
     init {
+        viewModelScope.launch {
+            endpointSelector.probeVersion.collectLatest { refreshEndpointStatus() }
+        }
         viewModelScope.launch {
             appPreferencesRepository.observePreferences().collectLatest { preferences ->
                 mutableUiState.update { state ->
@@ -709,7 +718,13 @@ class SakiAppViewModel @Inject constructor(
         }
 
         if (selectedServerId != null && (serverChanged || lastLoadedServerId != selectedServerId)) {
-            loadServerContent(selectedServerId)
+            loadServerContent(selectedServerId, forceRefresh = serverChanged)
+            servers.find { it.id == selectedServerId }?.let { server ->
+                viewModelScope.launch {
+                    endpointSelector.probe(selectedServerId, server)
+                    refreshEndpointStatus()
+                }
+            }
             if (uiState.value.playbackState.currentItem == null) {
                 restorePlayQueue(selectedServerId)
             }
@@ -901,6 +916,8 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    // Navidrome supports empty query in search3 to return all songs.
+    // This is not standard Subsonic behavior and may not work on other servers.
     private suspend fun fetchAllSongs(serverId: Long): List<Song> = withContext(Dispatchers.IO) {
         val pageSize = 500
         val maxPages = 100
@@ -1016,7 +1033,57 @@ class SakiAppViewModel @Inject constructor(
             )
         }
     }
+
+    fun refreshEndpointStatus() {
+        val serverId = uiState.value.selectedServerId ?: return
+        val results = endpointSelector.getLastProbeResults(serverId)
+        val activeId = endpointSelector.getActiveEndpointId(serverId)
+        mutableEndpointStatus.update { current ->
+            current.copy(
+                activeEndpointLabel = results.find { it.endpoint.id == activeId }?.endpoint?.label,
+                activeEndpointId = activeId,
+                probeResults = results.map { r ->
+                    EndpointProbeInfo(
+                        id = r.endpoint.id,
+                        label = r.endpoint.label,
+                        baseUrl = r.endpoint.baseUrl,
+                        latencyMs = r.latencyMs,
+                        reachable = r.reachable,
+                    )
+                },
+            )
+        }
+    }
+
+    fun reprobeEndpoints() {
+        val serverId = uiState.value.selectedServerId ?: return
+        val server = uiState.value.servers.find { it.id == serverId } ?: return
+        mutableEndpointStatus.update { it.copy(isProbing = true) }
+        viewModelScope.launch {
+            try {
+                endpointSelector.probe(serverId, server)
+                refreshEndpointStatus()
+            } finally {
+                mutableEndpointStatus.update { it.copy(isProbing = false) }
+            }
+        }
+    }
 }
+
+data class EndpointStatus(
+    val activeEndpointLabel: String? = null,
+    val activeEndpointId: Long? = null,
+    val probeResults: List<EndpointProbeInfo> = emptyList(),
+    val isProbing: Boolean = false,
+)
+
+data class EndpointProbeInfo(
+    val id: Long,
+    val label: String,
+    val baseUrl: String,
+    val latencyMs: Long?,
+    val reachable: Boolean,
+)
 
 enum class BrowseSection {
     ARTISTS,

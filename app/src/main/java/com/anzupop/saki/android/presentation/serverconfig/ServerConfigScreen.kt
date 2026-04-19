@@ -814,10 +814,12 @@ private fun ConnectionStateBanner(
                 color = MaterialTheme.colorScheme.secondaryContainer,
             ) {
                 Text(
-                    text = if (testState.serverVersion.isNullOrBlank()) {
-                        "Connection successful."
-                    } else {
-                        "Connection successful. Server API ${testState.serverVersion} responded."
+                    text = buildString {
+                        append("Connection successful.")
+                        if (!testState.serverVersion.isNullOrBlank()) {
+                            append(" Server API ${testState.serverVersion}.")
+                        }
+                        append(" ${testState.latencyMs} ms.")
                     },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     style = MaterialTheme.typography.bodyLarge,
@@ -881,7 +883,7 @@ private fun ServerConfigScreenPreview() {
                             label = "LAN",
                             baseUrl = "http://192.168.1.10:4040",
                             isPrimary = true,
-                            testState = EndpointConnectionState.Success(serverVersion = "1.16.1"),
+                            testState = EndpointConnectionState.Success(serverVersion = "1.16.1", latencyMs = 12),
                         ),
                         ServerEndpointEditorState(
                             editorId = 2,

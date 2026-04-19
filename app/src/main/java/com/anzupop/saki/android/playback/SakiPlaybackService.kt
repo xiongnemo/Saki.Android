@@ -44,8 +44,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 
 @AndroidEntryPoint
@@ -185,7 +183,7 @@ class SakiPlaybackService : MediaSessionService() {
     ): MediaSession? = mediaSession
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        savePlayQueue(blocking = true)
+        savePlayQueue(immediate = true)
         val activePlayer = player ?: return super.onTaskRemoved(rootIntent)
         if (!activePlayer.playWhenReady || activePlayer.mediaItemCount == 0) {
             stopSelf()
@@ -194,7 +192,7 @@ class SakiPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        savePlayQueue(blocking = true)
+        savePlayQueue(immediate = true)
         releaseSoundBalancingEffect()
 
         mediaSession?.release()
@@ -208,7 +206,9 @@ class SakiPlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
-    private fun savePlayQueue(blocking: Boolean = false) {
+    private var savePlayQueueJob: kotlinx.coroutines.Job? = null
+
+    private fun savePlayQueue(immediate: Boolean = false) {
         val activePlayer = player ?: return
         val itemCount = activePlayer.mediaItemCount
         if (itemCount == 0) return
@@ -220,7 +220,9 @@ class SakiPlaybackService : MediaSessionService() {
         val positionMs = activePlayer.currentPosition
         val serverId = request.serverId
         val currentSongId = request.songId
-        val save: suspend () -> Unit = {
+        savePlayQueueJob?.cancel()
+        savePlayQueueJob = serviceScope.launch {
+            if (!immediate) kotlinx.coroutines.delay(500)
             runCatching {
                 subsonicRepository.savePlayQueue(
                     serverId = serverId,
@@ -229,11 +231,6 @@ class SakiPlaybackService : MediaSessionService() {
                     positionMs = positionMs,
                 )
             }
-        }
-        if (blocking) {
-            runBlocking { withTimeout(5_000) { save() } }
-        } else {
-            serviceScope.launch { save() }
         }
     }
 

@@ -39,6 +39,7 @@ fun SakiApp(
     viewModel: SakiAppViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val endpointStatus by viewModel.endpointStatus.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showServerManager by rememberSaveable { mutableStateOf(false) }
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
@@ -62,6 +63,7 @@ fun SakiApp(
     LaunchedEffect(viewModel) {
         viewModel.openNowPlayingRequests.collectLatest {
             showNowPlaying = true
+            viewModel.refreshEndpointStatus()
         }
     }
 
@@ -131,6 +133,8 @@ fun SakiApp(
                         onToggleShuffle = viewModel::toggleShuffle,
                         onSkipToQueueItem = viewModel::skipToQueueItem,
                         onRemoveQueueItem = viewModel::removeQueueItem,
+                        endpointStatus = endpointStatus,
+                        onReprobeEndpoints = viewModel::reprobeEndpoints,
                     )
                 }
             }
@@ -190,6 +194,8 @@ private fun RootShell(
     onToggleShuffle: () -> Unit,
     onSkipToQueueItem: (Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
+    endpointStatus: EndpointStatus = EndpointStatus(),
+    onReprobeEndpoints: () -> Unit = {},
 ) {
     val currentOrQueuedTrack = uiState.playbackState.currentItem ?: uiState.playbackState.queue.firstOrNull()
     val shellBackgroundBrush = rememberBrowseBackgroundBrush()
@@ -314,6 +320,11 @@ private fun RootShell(
             onSkipToQueueItem = onSkipToQueueItem,
             onRemoveQueueItem = onRemoveQueueItem,
             currentServer = uiState.servers.firstOrNull { it.id == track.serverId },
+            activeEndpointLabel = endpointStatus.activeEndpointLabel,
+            activeEndpointId = endpointStatus.activeEndpointId,
+            endpointProbeResults = endpointStatus.probeResults,
+            isProbing = endpointStatus.isProbing,
+            onReprobeEndpoints = onReprobeEndpoints,
             lyrics = uiState.currentLyrics,
         )
     }

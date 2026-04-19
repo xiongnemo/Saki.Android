@@ -1,5 +1,6 @@
 package com.anzupop.saki.android.data.repository
 
+import com.anzupop.saki.android.data.remote.EndpointSelector
 import com.anzupop.saki.android.data.remote.subsonic.SubsonicApiException
 import com.anzupop.saki.android.data.remote.subsonic.SubsonicApiService
 import com.anzupop.saki.android.di.IoDispatcher
@@ -41,6 +42,11 @@ class DefaultSubsonicRepositoryTest {
         repository = DefaultSubsonicRepository(
             serverConfigRepository = FakeServerConfigRepository(),
             subsonicApiService = createApiService(),
+            endpointSelector = EndpointSelector(
+                context = android.content.ContextWrapper(null),
+                okHttpClient = okhttp3.OkHttpClient(),
+                ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
+            ),
             ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
         )
     }
