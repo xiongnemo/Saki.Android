@@ -437,7 +437,7 @@ class DefaultSubsonicRepository @Inject constructor(
     }
 
     private fun orderedEndpoints(server: ServerConfig): List<ServerEndpoint> {
-        endpointSelector.registerEndpoints(server.id, server.endpoints)
+        endpointSelector.registerServer(server)
         return endpointSelector.sortedEndpoints(
             serverId = server.id,
             endpoints = server.endpoints.sortedWith(

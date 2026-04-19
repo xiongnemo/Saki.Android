@@ -6,7 +6,9 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.util.Log
+import com.anzupop.saki.android.data.remote.subsonic.SubsonicAuth
 import com.anzupop.saki.android.di.IoDispatcher
+import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.ServerEndpoint
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.ConcurrentHashMap
@@ -36,6 +38,9 @@ class EndpointSelector @Inject constructor(
     // serverId -> last probe results
     private val lastProbeResults = ConcurrentHashMap<Long, List<EndpointProbeResult>>()
 
+    // serverId -> server config (for auth + re-probing on network change)
+    private val serverConfigs = ConcurrentHashMap<Long, ServerConfig>()
+
     data class EndpointProbeResult(
         val endpoint: ServerEndpoint,
         val latencyMs: Long?,
@@ -62,29 +67,32 @@ class EndpointSelector @Inject constructor(
         networkCallbackRegistered = true
     }
 
-    private var pendingProbes = ConcurrentHashMap<Long, List<ServerEndpoint>>()
-
-    fun registerEndpoints(serverId: Long, endpoints: List<ServerEndpoint>) {
-        pendingProbes[serverId] = endpoints
+    fun registerServer(server: ServerConfig) {
+        serverConfigs[server.id] = server
     }
 
     private fun onNetworkChanged() {
-        pendingProbes.forEach { (serverId, endpoints) ->
-            scope.launch { probe(serverId, endpoints) }
+        serverConfigs.forEach { (serverId, server) ->
+            scope.launch { probe(serverId, server) }
         }
     }
 
-    suspend fun probe(serverId: Long, endpoints: List<ServerEndpoint>): ServerEndpoint? {
+    suspend fun probe(serverId: Long, server: ServerConfig): ServerEndpoint? {
+        val endpoints = server.endpoints
         if (endpoints.isEmpty()) return null
         if (endpoints.size == 1) {
-            bestEndpoints[serverId] = endpoints.first().id
-            return endpoints.first()
+            val ep = endpoints.first()
+            val latency = pingEndpoint(ep, server)
+            lastProbeResults[serverId] = listOf(EndpointProbeResult(ep, latency, latency != null))
+            if (latency != null) bestEndpoints[serverId] = ep.id
+            return if (latency != null) ep else null
         }
 
+        val authQuery = SubsonicAuth.baseQuery(server)
         val results = kotlinx.coroutines.coroutineScope {
             endpoints.map { endpoint ->
                 async {
-                    val latency = pingEndpoint(endpoint)
+                    val latency = pingEndpoint(endpoint, server)
                     endpoint to latency
                 }
             }.map { it.await() }
@@ -125,12 +133,14 @@ class EndpointSelector @Inject constructor(
     fun getLastProbeResults(serverId: Long): List<EndpointProbeResult> =
         lastProbeResults[serverId] ?: emptyList()
 
-    private suspend fun pingEndpoint(endpoint: ServerEndpoint): Long? {
-        val url = endpoint.baseUrl.trimEnd('/').toHttpUrlOrNull()
+    private suspend fun pingEndpoint(endpoint: ServerEndpoint, server: ServerConfig): Long? {
+        val authQuery = SubsonicAuth.baseQuery(server)
+        val urlBuilder = endpoint.baseUrl.trimEnd('/').toHttpUrlOrNull()
             ?.newBuilder()
             ?.addPathSegments("rest/ping.view")
-            ?.addQueryParameter("f", "json")
-            ?.build() ?: return null
+            ?.addQueryParameter("f", "json") ?: return null
+        authQuery.forEach { (k, v) -> urlBuilder.addQueryParameter(k, v) }
+        val url = urlBuilder.build()
 
         val request = Request.Builder().url(url).get().build()
         return withTimeoutOrNull(3_000) {

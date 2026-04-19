@@ -1039,7 +1039,7 @@ class SakiAppViewModel @Inject constructor(
         val server = uiState.value.servers.find { it.id == serverId } ?: return
         mutableEndpointStatus.update { it.copy(isProbing = true) }
         viewModelScope.launch {
-            endpointSelector.probe(serverId, server.endpoints)
+            endpointSelector.probe(serverId, server)
             refreshEndpointStatus()
         }
     }
