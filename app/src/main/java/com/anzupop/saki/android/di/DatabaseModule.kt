@@ -238,6 +238,12 @@ object DatabaseModule {
                 )
                 """.trimIndent(),
             )
+            db.execSQL(
+                """
+                CREATE INDEX IF NOT EXISTS `index_cached_library_songs_serverId_title`
+                ON `cached_library_songs` (`serverId`, `title` COLLATE NOCASE)
+                """.trimIndent(),
+            )
         }
     }
 

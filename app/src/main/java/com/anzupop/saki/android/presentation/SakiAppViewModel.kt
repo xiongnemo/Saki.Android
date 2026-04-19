@@ -35,6 +35,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -876,7 +878,9 @@ class SakiAppViewModel @Inject constructor(
                 }
             }
 
-            mutableUiState.update { it.copy(isSongsLoading = true, songsError = null) }
+            if (uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(isSongsLoading = true, songsError = null) }
+            }
 
             runCatching {
                 fetchAllSongs(serverId)
@@ -887,12 +891,14 @@ class SakiAppViewModel @Inject constructor(
                 runCatching { libraryCacheRepository.saveSongs(serverId, songs) }
                     .onFailure { Log.w("SakiApp", "Failed to cache songs", it) }
             }.onFailure { throwable ->
-                mutableUiState.update { it.copy(isSongsLoading = false, songsError = throwable.message ?: "Unable to load songs.") }
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(isSongsLoading = false, songsError = throwable.message ?: "Unable to load songs.") }
+                }
             }
         }
     }
 
-    private suspend fun fetchAllSongs(serverId: Long): List<Song> {
+    private suspend fun fetchAllSongs(serverId: Long): List<Song> = withContext(Dispatchers.IO) {
         val pageSize = 500
         val allSongs = mutableListOf<Song>()
         var offset = 0
@@ -909,7 +915,8 @@ class SakiAppViewModel @Inject constructor(
             if (results.songs.size < pageSize) break
             offset += pageSize
         }
-        return allSongs
+        allSongs.sortBy { it.title.lowercase() }
+        allSongs
     }
 
     private suspend fun buildArtistTopSongs(
