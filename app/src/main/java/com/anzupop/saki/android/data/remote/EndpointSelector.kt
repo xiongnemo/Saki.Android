@@ -145,7 +145,7 @@ class EndpointSelector @Inject constructor(
 
         val request = Request.Builder().url(url).get().build()
         return withContext(ioDispatcher) {
-            withTimeoutOrNull(3_000) {
+            withTimeoutOrNull(1_500) {
                 val start = System.nanoTime()
                 try {
                     okHttpClient.newCall(request).execute().use { response ->
