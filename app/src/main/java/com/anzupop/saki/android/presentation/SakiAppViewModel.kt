@@ -1,5 +1,6 @@
 package com.anzupop.saki.android.presentation
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anzupop.saki.android.domain.model.Album
@@ -21,6 +22,7 @@ import com.anzupop.saki.android.domain.model.StreamQuality
 import com.anzupop.saki.android.domain.model.TextScale
 import com.anzupop.saki.android.domain.repository.AppPreferencesRepository
 import com.anzupop.saki.android.domain.repository.CachedSongRepository
+import com.anzupop.saki.android.domain.repository.LibraryCacheRepository
 import com.anzupop.saki.android.domain.repository.PlaybackManager
 import com.anzupop.saki.android.domain.repository.PlaybackPreferencesRepository
 import com.anzupop.saki.android.domain.repository.ServerConfigRepository
@@ -52,6 +54,7 @@ class SakiAppViewModel @Inject constructor(
     private val cachedSongRepository: CachedSongRepository,
     private val streamCacheRepository: StreamCacheRepository,
     private val playbackPreferencesRepository: PlaybackPreferencesRepository,
+    private val libraryCacheRepository: LibraryCacheRepository,
     private val playbackManager: PlaybackManager,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SakiAppUiState())
@@ -733,33 +736,26 @@ class SakiAppViewModel @Inject constructor(
     ) {
         if (!forceRefresh && uiState.value.libraryIndexes != null) return
 
-        mutableUiState.update { state ->
-            state.copy(
-                isArtistsLoading = true,
-                artistsError = null,
-            )
-        }
-
         viewModelScope.launch {
+            if (!forceRefresh) {
+                val cached = runCatching { libraryCacheRepository.getArtists(serverId) }.getOrNull()
+                if (cached != null && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(libraryIndexes = cached) }
+                }
+            }
+
+            mutableUiState.update { it.copy(isArtistsLoading = true, artistsError = null) }
+
             runCatching {
                 subsonicRepository.getIndexes(serverId).data
             }.onSuccess { indexes ->
                 if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { state ->
-                        state.copy(
-                            libraryIndexes = indexes,
-                            isArtistsLoading = false,
-                            artistsError = null,
-                        )
-                    }
+                    mutableUiState.update { it.copy(libraryIndexes = indexes, isArtistsLoading = false, artistsError = null) }
                 }
+                runCatching { libraryCacheRepository.saveArtists(serverId, indexes) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache artists", it) }
             }.onFailure { throwable ->
-                mutableUiState.update { state ->
-                    state.copy(
-                        isArtistsLoading = false,
-                        artistsError = throwable.message ?: "Unable to load artists.",
-                    )
-                }
+                mutableUiState.update { it.copy(isArtistsLoading = false, artistsError = throwable.message ?: "Unable to load artists.") }
             }
         }
     }
@@ -773,37 +769,26 @@ class SakiAppViewModel @Inject constructor(
             return
         }
 
-        mutableUiState.update { state ->
-            state.copy(
-                isAlbumsLoading = true,
-                albumsError = null,
-            )
-        }
-
         viewModelScope.launch {
+            if (!forceRefresh) {
+                val cached = runCatching { libraryCacheRepository.getAlbums(serverId, type) }.getOrNull()
+                if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(albums = cached) }
+                }
+            }
+
+            mutableUiState.update { it.copy(isAlbumsLoading = true, albumsError = null) }
+
             runCatching {
-                subsonicRepository.getAlbumList(
-                    serverId = serverId,
-                    type = type,
-                    size = 36,
-                ).data
+                subsonicRepository.getAlbumList(serverId = serverId, type = type, size = 36).data
             }.onSuccess { albums ->
                 if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { state ->
-                        state.copy(
-                            albums = albums,
-                            isAlbumsLoading = false,
-                            albumsError = null,
-                        )
-                    }
+                    mutableUiState.update { it.copy(albums = albums, isAlbumsLoading = false, albumsError = null) }
                 }
+                runCatching { libraryCacheRepository.saveAlbums(serverId, type, albums) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache albums", it) }
             }.onFailure { throwable ->
-                mutableUiState.update { state ->
-                    state.copy(
-                        isAlbumsLoading = false,
-                        albumsError = throwable.message ?: "Unable to load albums.",
-                    )
-                }
+                mutableUiState.update { it.copy(isAlbumsLoading = false, albumsError = throwable.message ?: "Unable to load albums.") }
             }
         }
     }
@@ -814,33 +799,26 @@ class SakiAppViewModel @Inject constructor(
     ) {
         if (!forceRefresh && uiState.value.playlists.isNotEmpty()) return
 
-        mutableUiState.update { state ->
-            state.copy(
-                isPlaylistsLoading = true,
-                playlistsError = null,
-            )
-        }
-
         viewModelScope.launch {
+            if (!forceRefresh) {
+                val cached = runCatching { libraryCacheRepository.getPlaylists(serverId) }.getOrNull()
+                if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(playlists = cached) }
+                }
+            }
+
+            mutableUiState.update { it.copy(isPlaylistsLoading = true, playlistsError = null) }
+
             runCatching {
                 subsonicRepository.getPlaylists(serverId).data
             }.onSuccess { playlists ->
                 if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { state ->
-                        state.copy(
-                            playlists = playlists,
-                            isPlaylistsLoading = false,
-                            playlistsError = null,
-                        )
-                    }
+                    mutableUiState.update { it.copy(playlists = playlists, isPlaylistsLoading = false, playlistsError = null) }
                 }
+                runCatching { libraryCacheRepository.savePlaylists(serverId, playlists) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache playlists", it) }
             }.onFailure { throwable ->
-                mutableUiState.update { state ->
-                    state.copy(
-                        isPlaylistsLoading = false,
-                        playlistsError = throwable.message ?: "Unable to load playlists.",
-                    )
-                }
+                mutableUiState.update { it.copy(isPlaylistsLoading = false, playlistsError = throwable.message ?: "Unable to load playlists.") }
             }
         }
     }
