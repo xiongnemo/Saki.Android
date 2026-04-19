@@ -349,7 +349,9 @@ class DefaultPlaybackManager @Inject constructor(
                 currentIndex = currentIndex,
                 queue = queue,
                 positionMs = player.currentPosition.coerceKnownTime(),
-                durationMs = player.duration.coerceKnownTime(),
+                durationMs = player.duration.coerceKnownTime().takeIf { it > 0 }
+                    ?: player.currentMediaItem?.metadataDurationMs()
+                    ?: 0L,
                 bufferedPositionMs = player.bufferedPosition.coerceKnownTime(),
                 repeatMode = player.repeatMode.toRepeatModeSetting(),
                 shuffleEnabled = player.shuffleModeEnabled,

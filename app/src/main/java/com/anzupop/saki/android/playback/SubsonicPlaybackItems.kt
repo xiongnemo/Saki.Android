@@ -138,6 +138,11 @@ internal fun CachedSong.toCachedMediaItem(): MediaItem {
         .build()
 }
 
+internal fun MediaItem.metadataDurationMs(): Long? {
+    val extras = requestMetadata.extras ?: return null
+    return extras.getLong(EXTRA_DURATION_MS).takeIf { extras.containsKey(EXTRA_DURATION_MS) }
+}
+
 internal fun MediaItem.toPlaybackRequestOrNull(): PlaybackRequest? {
     val extras = requestMetadata.extras ?: return null
     val songId = extras.getString(EXTRA_SONG_ID).orEmpty().ifBlank { mediaId }
