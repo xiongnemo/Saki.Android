@@ -1,6 +1,7 @@
 package com.anzupop.saki.android.di
 
 import com.anzupop.saki.android.BuildConfig
+import com.anzupop.saki.android.data.remote.HTTP_USER_AGENT
 import com.anzupop.saki.android.data.remote.subsonic.SubsonicApiService
 import com.squareup.moshi.Moshi
 import dagger.Module
@@ -9,6 +10,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -31,13 +33,28 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideUserAgentInterceptor(): Interceptor {
+        return Interceptor { chain ->
+            val request = chain.request()
+            chain.proceed(
+                request.newBuilder()
+                    .header("User-Agent", HTTP_USER_AGENT)
+                    .build(),
+            )
+        }
+    }
+
+    @Provides
+    @Singleton
     fun provideOkHttpClient(
         loggingInterceptor: HttpLoggingInterceptor,
+        userAgentInterceptor: Interceptor,
     ): OkHttpClient {
         return OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(userAgentInterceptor)
             .addInterceptor(loggingInterceptor)
             .build()
     }
