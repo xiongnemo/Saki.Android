@@ -50,6 +50,7 @@ import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -93,6 +94,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
+import com.anzupop.saki.android.data.remote.EndpointSelector
 import com.anzupop.saki.android.domain.model.PlaybackQueueItem
 import com.anzupop.saki.android.domain.model.PlaybackSessionState
 import com.anzupop.saki.android.domain.model.RepeatModeSetting
@@ -211,6 +213,10 @@ fun NowPlayingOverlay(
     onSkipToQueueItem: (Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
     currentServer: ServerConfig?,
+    activeEndpointLabel: String? = null,
+    endpointProbeResults: List<EndpointSelector.EndpointProbeResult> = emptyList(),
+    isProbing: Boolean = false,
+    onReprobeEndpoints: () -> Unit = {},
     lyrics: SongLyrics? = null,
 ) {
     val artwork = rememberArtworkPresentation(
@@ -219,6 +225,7 @@ fun NowPlayingOverlay(
     var showDetails by remember(track.songId) { mutableStateOf(false) }
     var showMenu by remember(track.songId) { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
+    var showEndpointStatus by remember { mutableStateOf(false) }
 
     // Preload adjacent cover art into Coil cache
     val context = LocalContext.current
@@ -595,8 +602,11 @@ fun NowPlayingOverlay(
                                         },
                                     )
                                     DropdownMenuItem(
-                                        text = { Text(currentServer?.name ?: "Current server") },
-                                        onClick = { showMenu = false },
+                                        text = { Text(activeEndpointLabel ?: "No endpoint") },
+                                        onClick = {
+                                            showMenu = false
+                                            showEndpointStatus = true
+                                        },
                                     )
                                 }
                             }
@@ -662,6 +672,73 @@ fun NowPlayingOverlay(
                     item { DetailLine("Language", playbackState.runtimeInfo?.language) }
                     item { DetailLine("Cover art ID", track.coverArtId) }
                     item { DetailLine("Local file", track.localPath) }
+                }
+            },
+        )
+    }
+
+    if (showEndpointStatus) {
+        AlertDialog(
+            onDismissRequest = { showEndpointStatus = false },
+            confirmButton = {
+                TextButton(onClick = { showEndpointStatus = false }) {
+                    Text("Close")
+                }
+            },
+            title = { Text("Endpoint Status") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (endpointProbeResults.isEmpty()) {
+                        Text("No probe results yet.", style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        endpointProbeResults.forEach { result ->
+                            val isActive = result.endpoint.label == activeEndpointLabel
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                color = if (isActive) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = result.endpoint.label + if (isActive) " ✓" else "",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                        )
+                                        Text(
+                                            text = result.endpoint.baseUrl,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Text(
+                                        text = if (result.reachable) "${result.latencyMs} ms" else "Unreachable",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (result.reachable) {
+                                            MaterialTheme.colorScheme.onSurface
+                                        } else {
+                                            MaterialTheme.colorScheme.error
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = onReprobeEndpoints,
+                        enabled = !isProbing,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (isProbing) "Probing…" else "Re-test endpoints")
+                    }
                 }
             },
         )

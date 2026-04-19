@@ -33,6 +33,15 @@ class EndpointSelector @Inject constructor(
     // serverId -> best endpoint id
     private val bestEndpoints = ConcurrentHashMap<Long, Long>()
 
+    // serverId -> last probe results
+    private val lastProbeResults = ConcurrentHashMap<Long, List<EndpointProbeResult>>()
+
+    data class EndpointProbeResult(
+        val endpoint: ServerEndpoint,
+        val latencyMs: Long?,
+        val reachable: Boolean,
+    )
+
     private var networkCallbackRegistered = false
 
     fun start() {
@@ -81,6 +90,10 @@ class EndpointSelector @Inject constructor(
             }.map { it.await() }
         }
 
+        lastProbeResults[serverId] = results.map { (ep, lat) ->
+            EndpointProbeResult(ep, lat, lat != null)
+        }
+
         val best = results
             .filter { it.second != null }
             .minByOrNull { it.second!! }
@@ -106,6 +119,11 @@ class EndpointSelector @Inject constructor(
             bestEndpoints.remove(serverId)
         }
     }
+
+    fun getActiveEndpointId(serverId: Long): Long? = bestEndpoints[serverId]
+
+    fun getLastProbeResults(serverId: Long): List<EndpointProbeResult> =
+        lastProbeResults[serverId] ?: emptyList()
 
     private suspend fun pingEndpoint(endpoint: ServerEndpoint): Long? {
         val url = endpoint.baseUrl.trimEnd('/').toHttpUrlOrNull()

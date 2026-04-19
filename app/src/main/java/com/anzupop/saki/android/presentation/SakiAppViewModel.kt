@@ -3,6 +3,7 @@ package com.anzupop.saki.android.presentation
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.anzupop.saki.android.data.remote.EndpointSelector
 import com.anzupop.saki.android.domain.model.Album
 import com.anzupop.saki.android.domain.model.AlbumListType
 import com.anzupop.saki.android.domain.model.AlbumSummary
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -60,12 +62,16 @@ class SakiAppViewModel @Inject constructor(
     private val libraryCacheRepository: LibraryCacheRepository,
     private val playbackManager: PlaybackManager,
     private val lyricsHolder: LyricsHolder,
+    private val endpointSelector: EndpointSelector,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SakiAppUiState())
     private val snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
     private val openNowPlayingRequestsFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val searchQueryFlow = MutableStateFlow("")
     private var lastLoadedServerId: Long? = null
+
+    private val mutableEndpointStatus = MutableStateFlow(EndpointStatus())
+    val endpointStatus: StateFlow<EndpointStatus> = mutableEndpointStatus.asStateFlow()
 
     val uiState = mutableUiState.asStateFlow()
     val messages = snackbarMessages.asSharedFlow()
@@ -1016,7 +1022,34 @@ class SakiAppViewModel @Inject constructor(
             )
         }
     }
+
+    fun refreshEndpointStatus() {
+        val serverId = uiState.value.selectedServerId ?: return
+        val results = endpointSelector.getLastProbeResults(serverId)
+        val activeId = endpointSelector.getActiveEndpointId(serverId)
+        mutableEndpointStatus.value = EndpointStatus(
+            activeEndpointLabel = results.find { it.endpoint.id == activeId }?.endpoint?.label,
+            probeResults = results,
+            isProbing = false,
+        )
+    }
+
+    fun reprobeEndpoints() {
+        val serverId = uiState.value.selectedServerId ?: return
+        val server = uiState.value.servers.find { it.id == serverId } ?: return
+        mutableEndpointStatus.update { it.copy(isProbing = true) }
+        viewModelScope.launch {
+            endpointSelector.probe(serverId, server.endpoints)
+            refreshEndpointStatus()
+        }
+    }
 }
+
+data class EndpointStatus(
+    val activeEndpointLabel: String? = null,
+    val probeResults: List<EndpointSelector.EndpointProbeResult> = emptyList(),
+    val isProbing: Boolean = false,
+)
 
 enum class BrowseSection {
     ARTISTS,
