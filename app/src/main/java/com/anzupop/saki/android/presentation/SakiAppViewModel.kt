@@ -716,6 +716,12 @@ class SakiAppViewModel @Inject constructor(
 
         if (selectedServerId != null && (serverChanged || lastLoadedServerId != selectedServerId)) {
             loadServerContent(selectedServerId)
+            servers.find { it.id == selectedServerId }?.let { server ->
+                viewModelScope.launch {
+                    endpointSelector.probe(selectedServerId, server)
+                    refreshEndpointStatus()
+                }
+            }
             if (uiState.value.playbackState.currentItem == null) {
                 restorePlayQueue(selectedServerId)
             }
