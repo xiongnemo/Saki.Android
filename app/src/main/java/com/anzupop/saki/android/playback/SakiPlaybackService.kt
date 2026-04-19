@@ -64,6 +64,12 @@ class SakiPlaybackService : MediaSessionService() {
     @Inject
     lateinit var lyricsHolder: LyricsHolder
 
+    @Inject
+    lateinit var networkTypeProvider: com.anzupop.saki.android.data.remote.NetworkTypeProvider
+
+    @Inject
+    lateinit var streamCacheRepository: com.anzupop.saki.android.domain.repository.StreamCacheRepository
+
     private val serviceScope = CoroutineScope(SupervisorJob())
     private val playerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -286,14 +292,42 @@ class SakiPlaybackService : MediaSessionService() {
             val request = requireNotNull(mediaItem.toPlaybackRequestOrNull()) {
                 "Missing Subsonic playback request metadata for ${mediaItem.mediaId}"
             }
+
+            // Resolve effective quality at play time for adaptive quality
+            val prefs = playbackPreferencesRepository.getPreferences()
+            val effectiveQuality = if (prefs.adaptiveQualityEnabled) {
+                val preferred = when (networkTypeProvider.networkType.value) {
+                    com.anzupop.saki.android.data.remote.NetworkType.WIFI -> prefs.wifiStreamQuality
+                    com.anzupop.saki.android.data.remote.NetworkType.MOBILE -> prefs.mobileStreamQuality
+                }
+                val cachedKey = streamCacheRepository.findCachedQualityKey(request.serverId, request.songId, preferred)
+                if (cachedKey != null) com.anzupop.saki.android.domain.model.StreamQuality.fromStorageKey(cachedKey) else preferred
+            } else {
+                null
+            }
+
+            val maxBitRate = effectiveQuality?.maxBitRate ?: request.maxBitRate
+            val format = effectiveQuality?.format ?: request.format
+
             val streamRequest = subsonicRepository.buildStreamRequest(
                 serverId = request.serverId,
                 songId = request.songId,
-                maxBitRate = request.maxBitRate,
-                format = request.format,
+                maxBitRate = maxBitRate,
+                format = format,
             )
 
-            return request.toPlayableMediaItem(streamRequest)
+            val finalRequest = if (effectiveQuality != null && effectiveQuality.maxBitRate != request.maxBitRate) {
+                request.copy(
+                    qualityLabel = effectiveQuality.label,
+                    maxBitRate = effectiveQuality.maxBitRate,
+                    format = effectiveQuality.format,
+                    streamCacheKey = streamCacheRepository.buildCacheKey(request.serverId, request.songId, effectiveQuality),
+                )
+            } else {
+                request
+            }
+
+            return finalRequest.toPlayableMediaItem(streamRequest)
         }
     }
 
