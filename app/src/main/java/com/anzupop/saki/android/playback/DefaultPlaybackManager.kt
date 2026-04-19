@@ -84,11 +84,50 @@ class DefaultPlaybackManager @Inject constructor(
         return if (cachedKey != null) StreamQuality.fromStorageKey(cachedKey) else preferred
     }
 
+    private suspend fun rebuildUpcomingItems() {
+        withController { activeController ->
+            val current = activeController.currentMediaItemIndex
+            if (current == C.INDEX_UNSET) return@withController
+            val end = (current + 11).coerceAtMost(activeController.mediaItemCount)
+            for (i in (current + 1) until end) {
+                val item = activeController.getMediaItemAt(i)
+                val request = item.toPlaybackRequestOrNull() ?: continue
+                if (request.isCached) continue
+                val quality = resolveQualityForSong(request.serverId, request.songId)
+                if (quality.maxBitRate == request.maxBitRate) continue
+                val rebuilt = request.copy(
+                    qualityLabel = quality.label,
+                    streamCacheKey = streamCacheRepository.buildCacheKey(request.serverId, request.songId, quality),
+                    maxBitRate = quality.maxBitRate,
+                    format = quality.format,
+                ).let { updated ->
+                    MediaItem.Builder()
+                        .setMediaId(updated.songId)
+                        .setMediaMetadata(updated.toMediaMetadata())
+                        .setRequestMetadata(
+                            MediaItem.RequestMetadata.Builder()
+                                .setExtras(updated.toBundle())
+                                .build(),
+                        )
+                        .build()
+                }
+                activeController.replaceMediaItem(i, rebuilt)
+            }
+        }
+    }
+
     init {
         scope.launch {
             playbackPreferencesRepository.observePreferences().collect { preferences ->
                 mutablePlaybackState.update { state ->
                     state.copy(preferences = preferences)
+                }
+            }
+        }
+        scope.launch {
+            networkTypeProvider.networkType.collect { _ ->
+                if (playbackState.value.preferences.adaptiveQualityEnabled) {
+                    rebuildUpcomingItems()
                 }
             }
         }

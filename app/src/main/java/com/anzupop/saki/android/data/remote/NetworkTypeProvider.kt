@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,19 +23,15 @@ class NetworkTypeProvider @Inject constructor(
     init {
         val cm = context.getSystemService(ConnectivityManager::class.java)
         if (cm != null) {
-            // Set initial value
             _networkType.value = cm.resolveNetworkType()
 
-            val request = NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .build()
-            cm.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
+            cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
                     _networkType.value = caps.resolveType()
                 }
 
                 override fun onLost(network: Network) {
-                    _networkType.value = cm.resolveNetworkType()
+                    _networkType.value = NetworkType.MOBILE
                 }
             })
         }
@@ -51,6 +46,5 @@ private fun ConnectivityManager.resolveNetworkType(): NetworkType {
 private fun NetworkCapabilities.resolveType(): NetworkType = when {
     hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> NetworkType.WIFI
     hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> NetworkType.WIFI
-    // VPN, cellular, and everything else → mobile
     else -> NetworkType.MOBILE
 }
