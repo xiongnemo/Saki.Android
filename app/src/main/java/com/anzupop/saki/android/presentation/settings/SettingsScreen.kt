@@ -51,11 +51,10 @@ import com.anzupop.saki.android.domain.model.SoundBalancingMode
 import com.anzupop.saki.android.domain.model.STREAM_CACHE_SIZE_STEP_MB
 import com.anzupop.saki.android.domain.model.StreamQuality
 import com.anzupop.saki.android.domain.model.TextScale
-import com.anzupop.saki.android.presentation.AppTab
 import com.anzupop.saki.android.presentation.SakiAppUiState
 import com.anzupop.saki.android.presentation.library.ArtworkCard
 import com.anzupop.saki.android.presentation.library.resolveArtworkModel
-import com.anzupop.saki.android.presentation.rememberAppTabBackgroundBrush
+import com.anzupop.saki.android.presentation.rememberBrowseBackgroundBrush
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -75,7 +74,7 @@ fun SettingsScreen(
     onDeleteCachedSong: (String) -> Unit,
     onClearCachedSongs: () -> Unit,
 ) {
-    val background = rememberAppTabBackgroundBrush(AppTab.SETTINGS)
+    val background = rememberBrowseBackgroundBrush()
     val selectedServer = uiState.servers.firstOrNull { it.id == uiState.selectedServerId }
     val visibleCachedSongs = uiState.cachedSongs.filter { song ->
         uiState.selectedServerId == null || song.serverId == uiState.selectedServerId

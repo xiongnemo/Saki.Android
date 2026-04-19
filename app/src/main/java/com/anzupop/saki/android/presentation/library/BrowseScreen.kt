@@ -33,7 +33,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -42,6 +42,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -51,6 +53,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,10 +65,9 @@ import com.anzupop.saki.android.domain.model.CachedSong
 import com.anzupop.saki.android.domain.model.SearchResults
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.Song
-import com.anzupop.saki.android.presentation.AppTab
 import com.anzupop.saki.android.presentation.BrowseSection
+import com.anzupop.saki.android.presentation.rememberBrowseBackgroundBrush
 import com.anzupop.saki.android.presentation.SakiAppUiState
-import com.anzupop.saki.android.presentation.rememberAppTabBackgroundBrush
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
@@ -90,8 +93,9 @@ fun BrowseScreen(
     onQueueSong: (Song) -> Unit,
     onPlaySongNext: (Song) -> Unit,
     onToggleSongDownload: (Song) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
-    val background = rememberAppTabBackgroundBrush(AppTab.BROWSE)
+    val background = rememberBrowseBackgroundBrush()
     val currentServer = uiState.servers.firstOrNull { it.id == uiState.selectedServerId }
     val cachedSongsBySongId = remember(uiState.cachedSongs, uiState.selectedServerId) {
         uiState.cachedSongs
@@ -206,6 +210,7 @@ fun BrowseScreen(
                         onOpenPlaylist = onOpenPlaylist,
                         onPlaySongs = onPlaySongs,
                         onShowSongActions = { actionSong = it },
+                        onOpenSettings = onOpenSettings,
                     )
                 }
             }
@@ -265,6 +270,7 @@ private fun BrowsePager(
     onOpenPlaylist: (String) -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowSongActions: (Song) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val sections = BrowseSection.entries
     val selectedSectionState = rememberUpdatedState(uiState.selectedBrowseSection)
@@ -299,7 +305,7 @@ private fun BrowsePager(
             searchQuery = uiState.searchQuery,
             onSearchActiveChange = onSetSearchActive,
             onSearchQueryChange = onUpdateSearchQuery,
-            onRefresh = onRefreshCurrentTab,
+            onOpenSettings = onOpenSettings,
         )
         if (uiState.isSearchActive) {
             SearchResultsPage(
@@ -318,69 +324,88 @@ private fun BrowsePager(
                 onShowSongActions = onShowSongActions,
             )
         } else {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(sections) { section ->
-                    FilterChip(
-                        selected = uiState.selectedBrowseSection == section,
-                        onClick = { onSelectBrowseSection(section) },
-                        label = {
-                            Text(
-                                text = section.label,
-                                style = MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
-                            )
-                        },
-                    )
+            val isRefreshing = uiState.isArtistsLoading || uiState.isAlbumsLoading ||
+                uiState.isPlaylistsLoading || uiState.isSongsLoading
+            val pullState = rememberPullToRefreshState()
+            val haptic = LocalHapticFeedback.current
+            val isOverThreshold = !isRefreshing && pullState.distanceFraction >= 1f
+            LaunchedEffect(isOverThreshold) {
+                if (isOverThreshold) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 }
             }
-            HorizontalPager(
-                state = pagerState,
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = onRefreshCurrentTab,
                 modifier = Modifier.weight(1f),
-                flingBehavior = pagerFlingBehavior,
-            ) { page ->
-                when (sections[page]) {
-                    BrowseSection.ARTISTS -> ArtistsPage(
-                        indexes = uiState.libraryIndexes,
-                        server = currentServer,
-                        isLoading = uiState.isArtistsLoading,
-                        error = uiState.artistsError,
-                        onOpenArtist = onOpenArtist,
-                    )
+                state = pullState,
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(sections) { section ->
+                            FilterChip(
+                                selected = uiState.selectedBrowseSection == section,
+                                onClick = { onSelectBrowseSection(section) },
+                                label = {
+                                    Text(
+                                        text = section.label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        maxLines = 1,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.weight(1f),
+                        flingBehavior = pagerFlingBehavior,
+                    ) { page ->
+                        when (sections[page]) {
+                            BrowseSection.ARTISTS -> ArtistsPage(
+                                indexes = uiState.libraryIndexes,
+                                server = currentServer,
+                                isLoading = uiState.isArtistsLoading,
+                                error = uiState.artistsError,
+                                onOpenArtist = onOpenArtist,
+                            )
 
-                    BrowseSection.ALBUMS -> AlbumsPage(
-                        albums = uiState.albums,
-                        server = currentServer,
-                        selectedFeed = uiState.selectedAlbumFeed,
-                        isLoading = uiState.isAlbumsLoading,
-                        error = uiState.albumsError,
-                        onSelectFeed = onSelectAlbumFeed,
-                        onOpenAlbum = onOpenAlbum,
-                    )
+                            BrowseSection.ALBUMS -> AlbumsPage(
+                                albums = uiState.albums,
+                                server = currentServer,
+                                selectedFeed = uiState.selectedAlbumFeed,
+                                isLoading = uiState.isAlbumsLoading,
+                                error = uiState.albumsError,
+                                onSelectFeed = onSelectAlbumFeed,
+                                onOpenAlbum = onOpenAlbum,
+                            )
 
-                    BrowseSection.PLAYLISTS -> PlaylistsPage(
-                        playlists = uiState.playlists,
-                        server = currentServer,
-                        isLoading = uiState.isPlaylistsLoading,
-                        error = uiState.playlistsError,
-                        onOpenPlaylist = onOpenPlaylist,
-                    )
+                            BrowseSection.PLAYLISTS -> PlaylistsPage(
+                                playlists = uiState.playlists,
+                                server = currentServer,
+                                isLoading = uiState.isPlaylistsLoading,
+                                error = uiState.playlistsError,
+                                onOpenPlaylist = onOpenPlaylist,
+                            )
 
-                    BrowseSection.SONGS -> SongsPage(
-                        songs = uiState.songs,
-                        server = currentServer,
-                        cachedSongsBySongId = cachedSongsBySongId,
-                        streamCachedSongIds = uiState.streamCachedSongIds,
-                        downloadingSongIds = uiState.downloadingSongIds,
-                        isLoading = uiState.isSongsLoading,
-                        error = uiState.songsError,
-                        onPlaySongs = onPlaySongs,
-                        onShowSongActions = onShowSongActions,
-                    )
+                            BrowseSection.SONGS -> SongsPage(
+                                songs = uiState.songs,
+                                server = currentServer,
+                                cachedSongsBySongId = cachedSongsBySongId,
+                                streamCachedSongIds = uiState.streamCachedSongIds,
+                                downloadingSongIds = uiState.downloadingSongIds,
+                                isLoading = uiState.isSongsLoading,
+                                error = uiState.songsError,
+                                onPlaySongs = onPlaySongs,
+                                onShowSongActions = onShowSongActions,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -394,7 +419,7 @@ private fun BrowseHeroCard(
     searchQuery: String,
     onSearchActiveChange: (Boolean) -> Unit,
     onSearchQueryChange: (String) -> Unit,
-    onRefresh: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -438,8 +463,8 @@ private fun BrowseHeroCard(
             IconButton(onClick = { onSearchActiveChange(true) }) {
                 Icon(Icons.Rounded.Search, contentDescription = "Search this server")
             }
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Rounded.Settings, contentDescription = "Settings")
             }
         }
     }

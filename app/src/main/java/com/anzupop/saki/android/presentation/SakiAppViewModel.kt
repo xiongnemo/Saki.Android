@@ -152,12 +152,6 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
-    fun selectRootTab(tab: AppTab) {
-        mutableUiState.update { state ->
-            state.copy(selectedAppTab = tab)
-        }
-    }
-
     fun selectBrowseSection(section: BrowseSection) {
         mutableUiState.update { state ->
             state.copy(selectedBrowseSection = section)
@@ -174,11 +168,6 @@ class SakiAppViewModel @Inject constructor(
     fun completeOnboarding() {
         viewModelScope.launch {
             appPreferencesRepository.setOnboardingCompleted(true)
-            if (uiState.value.servers.isEmpty()) {
-                mutableUiState.update { state ->
-                    state.copy(selectedAppTab = AppTab.SETTINGS)
-                }
-            }
         }
     }
 
@@ -236,9 +225,6 @@ class SakiAppViewModel @Inject constructor(
     ) {
         if (serverId == null || artistId.isNullOrBlank()) return
 
-        mutableUiState.update { state ->
-            state.copy(selectedAppTab = AppTab.BROWSE)
-        }
         if (uiState.value.selectedServerId != serverId) {
             selectServer(serverId)
         }
@@ -251,9 +237,6 @@ class SakiAppViewModel @Inject constructor(
     ) {
         if (serverId == null || albumId.isNullOrBlank()) return
 
-        mutableUiState.update { state ->
-            state.copy(selectedAppTab = AppTab.BROWSE)
-        }
         if (uiState.value.selectedServerId != serverId) {
             selectServer(serverId)
         }
@@ -694,10 +677,6 @@ class SakiAppViewModel @Inject constructor(
             state.copy(
                 servers = servers,
                 selectedServerId = selectedServerId,
-                selectedAppTab = when {
-                    servers.isEmpty() -> AppTab.SETTINGS
-                    else -> state.selectedAppTab
-                },
                 selectedArtist = if (serverChanged) null else state.selectedArtist,
                 selectedArtistTopSongs = if (serverChanged) emptyList() else state.selectedArtistTopSongs,
                 selectedAlbum = if (serverChanged) null else state.selectedAlbum,
@@ -1018,11 +997,6 @@ class SakiAppViewModel @Inject constructor(
     }
 }
 
-enum class AppTab {
-    BROWSE,
-    SETTINGS,
-}
-
 enum class BrowseSection {
     ARTISTS,
     ALBUMS,
@@ -1034,7 +1008,6 @@ data class SakiAppUiState(
     val isAppReady: Boolean = false,
     val hasCompletedOnboarding: Boolean = false,
     val textScale: TextScale = TextScale.DEFAULT,
-    val selectedAppTab: AppTab = AppTab.BROWSE,
     val selectedBrowseSection: BrowseSection = BrowseSection.ARTISTS,
     val servers: List<ServerConfig> = emptyList(),
     val selectedServerId: Long? = null,
