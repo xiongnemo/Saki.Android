@@ -34,7 +34,10 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
             .map { it.toPlaybackPreferences() }
 
     override suspend fun getPreferences(): PlaybackPreferences =
-        dataStore.data.first().toPlaybackPreferences()
+        dataStore.data
+            .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+            .first()
+            .toPlaybackPreferences()
 
     override suspend fun updateStreamQuality(quality: StreamQuality) {
         dataStore.edit { it[KEY_STREAM_QUALITY] = quality.storageKey }

@@ -28,7 +28,10 @@ class DataStoreAppPreferencesRepository @Inject constructor(
             .map { it.toAppPreferences() }
 
     override suspend fun getPreferences(): AppPreferences =
-        dataStore.data.first().toAppPreferences()
+        dataStore.data
+            .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+            .first()
+            .toAppPreferences()
 
     override suspend fun setOnboardingCompleted(completed: Boolean) {
         dataStore.edit { it[KEY_ONBOARDING_COMPLETED] = completed }

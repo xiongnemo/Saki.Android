@@ -10,6 +10,10 @@ import com.anzupop.saki.android.data.repository.DataStoreAppPreferencesRepositor
 import com.anzupop.saki.android.data.repository.DataStorePlaybackPreferencesRepository
 import com.anzupop.saki.android.domain.model.SoundBalancingMode
 
+import androidx.datastore.preferences.core.booleanPreferencesKey
+
+private val KEY_ROOM_MIGRATION_DONE = booleanPreferencesKey("room_migration_done")
+
 /**
  * One-time migration from Room preferences tables to DataStore.
  * Runs before the first DataStore read, so no race with ViewModel.
@@ -19,11 +23,17 @@ class RoomToDataStoreMigration(
 ) : DataMigration<Preferences> {
 
     override suspend fun shouldMigrate(currentData: Preferences): Boolean {
-        // Migrate if DataStore has no onboarding key yet (first time)
-        return !currentData.contains(DataStoreAppPreferencesRepository.KEY_ONBOARDING_COMPLETED)
+        return currentData[KEY_ROOM_MIGRATION_DONE] != true
     }
 
     override suspend fun migrate(currentData: Preferences): Preferences {
+        if (!context.getDatabasePath("saki.db").exists()) {
+            // Fresh install, no Room data to migrate
+            return currentData.toMutablePreferences().apply {
+                this[KEY_ROOM_MIGRATION_DONE] = true
+            }.toPreferences()
+        }
+
         val db = Room.databaseBuilder(context, SakiDatabase::class.java, "saki.db")
             .addMigrations(*DatabaseModule.allMigrations())
             .build()
@@ -35,6 +45,7 @@ class RoomToDataStoreMigration(
         } finally {
             db.close()
         }
+        result[KEY_ROOM_MIGRATION_DONE] = true
         return result.toPreferences()
     }
 

@@ -118,7 +118,7 @@ class EndpointSelector @Inject constructor(
             return if (latency != null) ep else null
         }
 
-        val probeResults = ConcurrentHashMap<Long, Long?>()
+        val probeResults = ConcurrentHashMap<Long, Long>()
         kotlinx.coroutines.coroutineScope {
             endpoints.map { endpoint ->
                 async {
