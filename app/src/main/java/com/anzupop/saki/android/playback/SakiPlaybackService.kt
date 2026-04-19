@@ -19,8 +19,8 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSession.ConnectionResult
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.MediaSession.ControllerInfo
-import com.anzupop.saki.android.BuildConfig
 import com.anzupop.saki.android.MainActivity
+import com.anzupop.saki.android.data.remote.HTTP_USER_AGENT
 import com.anzupop.saki.android.domain.model.LyricLine
 import com.anzupop.saki.android.domain.model.SoundBalancingMode
 import com.anzupop.saki.android.domain.repository.PlaybackPreferencesRepository
@@ -85,7 +85,7 @@ class SakiPlaybackService : MediaSessionService() {
         val upstreamDataSourceFactory = DefaultDataSource.Factory(
             this,
             OkHttpDataSource.Factory(okHttpClient)
-                .setUserAgent(BuildConfig.APPLICATION_ID),
+                .setUserAgent(HTTP_USER_AGENT),
         )
         val dataSourceFactory = CacheDataSource.Factory()
             .setCache(streamCache)
