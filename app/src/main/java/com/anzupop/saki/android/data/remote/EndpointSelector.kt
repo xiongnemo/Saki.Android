@@ -18,6 +18,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -41,6 +44,10 @@ class EndpointSelector @Inject constructor(
 
     // serverId -> server config (for auth + re-probing on network change)
     private val serverConfigs = ConcurrentHashMap<Long, ServerConfig>()
+
+    // Incremented after each probe completes, so observers can react
+    private val _probeVersion = MutableStateFlow(0L)
+    val probeVersion: StateFlow<Long> = _probeVersion.asStateFlow()
 
     data class EndpointProbeResult(
         val endpoint: ServerEndpoint,
@@ -86,6 +93,7 @@ class EndpointSelector @Inject constructor(
             val latency = pingEndpoint(ep, server)
             lastProbeResults[serverId] = listOf(EndpointProbeResult(ep, latency, latency != null))
             if (latency != null) bestEndpoints[serverId] = ep.id
+            _probeVersion.value++
             return if (latency != null) ep else null
         }
 
@@ -110,10 +118,11 @@ class EndpointSelector @Inject constructor(
 
         if (best != null) {
             bestEndpoints[serverId] = best.id
-        Log.d("EndpointSelector", "Best endpoint for server $serverId: ${best.label} (${best.baseUrl})")
+            Log.d("EndpointSelector", "Best endpoint for server $serverId: ${best.label} (${best.baseUrl})")
         } else {
             bestEndpoints.remove(serverId)
         }
+        _probeVersion.value++
         return best
     }
 

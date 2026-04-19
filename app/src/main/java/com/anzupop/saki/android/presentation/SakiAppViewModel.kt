@@ -79,6 +79,9 @@ class SakiAppViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            endpointSelector.probeVersion.collectLatest { refreshEndpointStatus() }
+        }
+        viewModelScope.launch {
             appPreferencesRepository.observePreferences().collectLatest { preferences ->
                 mutableUiState.update { state ->
                     state.copy(
