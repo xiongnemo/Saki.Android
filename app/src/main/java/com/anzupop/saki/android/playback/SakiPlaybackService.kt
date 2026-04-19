@@ -21,6 +21,7 @@ import androidx.media3.session.MediaSessionService
 import androidx.media3.session.MediaSession.ControllerInfo
 import com.anzupop.saki.android.BuildConfig
 import com.anzupop.saki.android.MainActivity
+import com.anzupop.saki.android.domain.model.LyricLine
 import com.anzupop.saki.android.domain.model.SoundBalancingMode
 import com.anzupop.saki.android.domain.repository.PlaybackPreferencesRepository
 import com.anzupop.saki.android.domain.repository.SubsonicRepository
@@ -68,6 +69,7 @@ class SakiPlaybackService : MediaSessionService() {
 
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
+    private var originalMediaTitle: CharSequence? = null
     private var soundBalancingMode = SoundBalancingMode.OFF
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var loudnessEnhancerSessionId: Int = C.AUDIO_SESSION_ID_UNSET
@@ -135,32 +137,41 @@ class SakiPlaybackService : MediaSessionService() {
             ) { enabled, lyrics -> if (enabled) lyrics else null }
                 .collectLatest { lyrics ->
                     if (lyrics == null || !lyrics.synced) {
+                        restoreOriginalTitle()
                         return@collectLatest
                     }
                     var lastLyricText: String? = null
-                    while (true) {
-                        val activePlayer = player ?: break
-                        if (!activePlayer.isPlaying) {
+                    try {
+                        while (true) {
+                            val activePlayer = player ?: break
+                            if (!activePlayer.isPlaying) {
+                                delay(500)
+                                continue
+                            }
+                            mediaSession ?: break
+                            val positionMs = activePlayer.currentPosition
+                            val lines = lyrics.lines
+                            val index = lines.binarySearchLastBefore(positionMs)
+                            val text = if (index >= 0) lines[index].text.takeIf { it.isNotBlank() } else null
+                            if (text != null && text != lastLyricText) {
+                                lastLyricText = text
+                                val item = activePlayer.currentMediaItem ?: break
+                                if (originalMediaTitle == null) {
+                                    originalMediaTitle = item.mediaMetadata.title
+                                }
+                                val updated = item.buildUpon()
+                                    .setMediaMetadata(
+                                        item.mediaMetadata.buildUpon()
+                                            .setTitle(text)
+                                            .build(),
+                                    )
+                                    .build()
+                                activePlayer.replaceMediaItem(activePlayer.currentMediaItemIndex, updated)
+                            }
                             delay(500)
-                            continue
                         }
-                        val positionMs = activePlayer.currentPosition
-                        val line = lyrics.lines.lastOrNull { it.startMs <= positionMs }
-                        val text = line?.text?.takeIf { it.isNotBlank() }
-                        if (text != null && text != lastLyricText) {
-                            lastLyricText = text
-                            val session = mediaSession ?: break
-                            val item = activePlayer.currentMediaItem ?: break
-                            val updated = item.buildUpon()
-                                .setMediaMetadata(
-                                    item.mediaMetadata.buildUpon()
-                                        .setTitle(text)
-                                        .build(),
-                                )
-                                .build()
-                            activePlayer.replaceMediaItem(activePlayer.currentMediaItemIndex, updated)
-                        }
-                        delay(500)
+                    } finally {
+                        restoreOriginalTitle()
                     }
                 }
         }
@@ -275,6 +286,36 @@ class SakiPlaybackService : MediaSessionService() {
     }
 
     @Synchronized
+    private fun restoreOriginalTitle() {
+        val activePlayer = player ?: return
+        val title = originalMediaTitle ?: return
+        val item = activePlayer.currentMediaItem ?: return
+        if (item.mediaMetadata.title == title) return
+        val restored = item.buildUpon()
+            .setMediaMetadata(
+                item.mediaMetadata.buildUpon().setTitle(title).build(),
+            )
+            .build()
+        activePlayer.replaceMediaItem(activePlayer.currentMediaItemIndex, restored)
+        originalMediaTitle = null
+    }
+
+    private fun List<LyricLine>.binarySearchLastBefore(positionMs: Long): Int {
+        var low = 0
+        var high = size - 1
+        var result = -1
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            if (this[mid].startMs <= positionMs) {
+                result = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return result
+    }
+
     private fun syncSoundBalancingEffect(audioSessionId: Int) {
         val targetSessionId = audioSessionId.takeIf { it != C.AUDIO_SESSION_ID_UNSET && it != 0 }
         val targetGainMb = soundBalancingMode.targetGainMb

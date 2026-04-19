@@ -195,6 +195,11 @@ object DatabaseModule {
                 )
                 """.trimIndent(),
             )
+        }
+    }
+
+    private val migration7To8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
                 """
                 ALTER TABLE `playback_preferences`
@@ -213,7 +218,7 @@ object DatabaseModule {
             context,
             SakiDatabase::class.java,
             "saki.db",
-        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7)
+        ).addMigrations(migration1To2, migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8)
             .build()
     }
 

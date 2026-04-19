@@ -619,6 +619,8 @@ class SakiAppViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 playbackPreferencesRepository.updateBluetoothLyrics(enabled)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.message ?: "Unable to update Bluetooth lyrics.")
             }
         }
     }

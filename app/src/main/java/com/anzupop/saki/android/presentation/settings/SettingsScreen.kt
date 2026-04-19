@@ -34,6 +34,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -337,8 +339,15 @@ fun SettingsScreen(
                 body = "Features that may not work on all devices.",
                 action = null,
             ) {
+                val checked = uiState.playbackState.preferences.bluetoothLyricsEnabled
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = checked,
+                            role = Role.Switch,
+                            onValueChange = onUpdateBluetoothLyrics,
+                        ),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -351,8 +360,8 @@ fun SettingsScreen(
                         )
                     }
                     Switch(
-                        checked = uiState.playbackState.preferences.bluetoothLyricsEnabled,
-                        onCheckedChange = onUpdateBluetoothLyrics,
+                        checked = checked,
+                        onCheckedChange = null,
                     )
                 }
             }
