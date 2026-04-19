@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anzupop.saki.android.data.remote.EndpointSelector
+import com.anzupop.saki.android.data.repository.ConfigBackupManager
+import com.anzupop.saki.android.data.repository.ImportResult
 import com.anzupop.saki.android.domain.model.Album
 import com.anzupop.saki.android.domain.model.AlbumListType
 import com.anzupop.saki.android.domain.model.AlbumSummary
@@ -63,6 +65,7 @@ class SakiAppViewModel @Inject constructor(
     private val playbackManager: PlaybackManager,
     private val lyricsHolder: LyricsHolder,
     private val endpointSelector: EndpointSelector,
+    private val configBackupManager: ConfigBackupManager,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SakiAppUiState())
     private val snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -1065,6 +1068,30 @@ class SakiAppViewModel @Inject constructor(
                 refreshEndpointStatus()
             } finally {
                 mutableEndpointStatus.update { it.copy(isProbing = false) }
+            }
+        }
+    }
+
+    fun exportConfig(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            runCatching { configBackupManager.exportToJson() }
+                .onSuccess { onResult(it) }
+                .onFailure { snackbarMessages.tryEmit("Export failed: ${it.message}") }
+        }
+    }
+
+    fun importConfig(json: String) {
+        viewModelScope.launch {
+            when (val result = configBackupManager.importFromJson(json)) {
+                is ImportResult.Success -> {
+                    val msg = buildString {
+                        append("Imported ${result.serversImported} server(s)")
+                        if (result.settingsRestored) append(", settings restored")
+                    }
+                    snackbarMessages.tryEmit(msg)
+                }
+                is ImportResult.InvalidFormat -> snackbarMessages.tryEmit("Invalid backup file")
+                is ImportResult.UnsupportedVersion -> snackbarMessages.tryEmit("Unsupported backup version ${result.version}")
             }
         }
     }

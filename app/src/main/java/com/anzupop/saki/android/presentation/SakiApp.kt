@@ -81,6 +81,10 @@ fun SakiApp(
                             viewModel.completeOnboarding()
                             showServerManager = true
                         },
+                        onImportConfig = { json ->
+                            viewModel.importConfig(json)
+                            viewModel.completeOnboarding()
+                        },
                     )
                 }
 
@@ -122,6 +126,8 @@ fun SakiApp(
                         onUpdateTextScale = viewModel::updateTextScale,
                         onReplayOnboarding = viewModel::replayOnboarding,
                         onUpdateBluetoothLyrics = viewModel::updateBluetoothLyrics,
+                        onExportConfig = viewModel::exportConfig,
+                        onImportConfig = viewModel::importConfig,
                         onOpenArtistFromPlayback = viewModel::openArtistFromPlayback,
                         onOpenAlbumFromPlayback = viewModel::openAlbumFromPlayback,
                         onPausePlayback = viewModel::pausePlayback,
@@ -183,6 +189,8 @@ private fun RootShell(
     onUpdateTextScale: (com.anzupop.saki.android.domain.model.TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
+    onExportConfig: ((String) -> Unit) -> Unit,
+    onImportConfig: (String) -> Unit,
     onOpenArtistFromPlayback: (Long?, String?) -> Unit,
     onOpenAlbumFromPlayback: (Long?, String?) -> Unit,
     onPausePlayback: () -> Unit,
@@ -239,6 +247,8 @@ private fun RootShell(
                             onUpdateTextScale = onUpdateTextScale,
                             onReplayOnboarding = onReplayOnboarding,
                             onUpdateBluetoothLyrics = onUpdateBluetoothLyrics,
+                            onExportConfig = onExportConfig,
+                            onImportConfig = onImportConfig,
                             onPlayCachedSong = onPlayCachedSong,
                             onPlayCachedQueue = onPlayCachedQueue,
                             onDeleteCachedSong = onDeleteCachedSong,
