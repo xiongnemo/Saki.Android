@@ -8,6 +8,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import com.anzupop.saki.android.data.remote.EndpointSelector
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import okhttp3.OkHttpClient
@@ -16,6 +17,14 @@ import okhttp3.OkHttpClient
 class SakiApplication : Application(), SingletonImageLoader.Factory {
     @Inject
     lateinit var okHttpClient: OkHttpClient
+
+    @Inject
+    lateinit var endpointSelector: EndpointSelector
+
+    override fun onCreate() {
+        super.onCreate()
+        endpointSelector.start()
+    }
 
     override fun newImageLoader(context: Context): ImageLoader {
         return ImageLoader.Builder(context)

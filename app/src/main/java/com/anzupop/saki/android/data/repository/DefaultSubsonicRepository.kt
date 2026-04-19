@@ -1,6 +1,7 @@
 package com.anzupop.saki.android.data.repository
 
 import com.anzupop.saki.android.data.remote.subsonic.EndpointFailure
+import com.anzupop.saki.android.data.remote.EndpointSelector
 import com.anzupop.saki.android.data.remote.subsonic.EndpointFallbackException
 import com.anzupop.saki.android.data.remote.subsonic.NoEndpointsConfiguredException
 import com.anzupop.saki.android.data.remote.subsonic.NoSuchServerException
@@ -59,6 +60,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 class DefaultSubsonicRepository @Inject constructor(
     private val serverConfigRepository: ServerConfigRepository,
     private val subsonicApiService: SubsonicApiService,
+    private val endpointSelector: EndpointSelector,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : SubsonicRepository {
     override suspend fun ping(serverId: Long): SubsonicCallResult<PingResult> = withContext(ioDispatcher) {
@@ -356,6 +358,7 @@ class DefaultSubsonicRepository @Inject constructor(
                     throw exception
                 }
                 failures += EndpointFailure(endpoint, exception)
+                endpointSelector.invalidate(serverId, endpoint.id)
             } catch (exception: IllegalStateException) {
                 throw SubsonicApiException(
                     endpoint = endpoint,
@@ -434,9 +437,13 @@ class DefaultSubsonicRepository @Inject constructor(
     }
 
     private fun orderedEndpoints(server: ServerConfig): List<ServerEndpoint> {
-        return server.endpoints.sortedWith(
-            compareByDescending<ServerEndpoint> { it.isPrimary }
-                .thenBy(ServerEndpoint::order),
+        endpointSelector.registerEndpoints(server.id, server.endpoints)
+        return endpointSelector.sortedEndpoints(
+            serverId = server.id,
+            endpoints = server.endpoints.sortedWith(
+                compareByDescending<ServerEndpoint> { it.isPrimary }
+                    .thenBy(ServerEndpoint::order),
+            ),
         )
     }
 
