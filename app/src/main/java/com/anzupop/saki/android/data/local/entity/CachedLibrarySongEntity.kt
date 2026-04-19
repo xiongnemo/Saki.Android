@@ -1,12 +1,19 @@
 package com.anzupop.saki.android.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 
-@Entity(tableName = "cached_library_songs", primaryKeys = ["serverId", "songId"])
+@Entity(
+    tableName = "cached_library_songs",
+    primaryKeys = ["serverId", "songId"],
+    indices = [Index(value = ["serverId", "title"])],
+)
 data class CachedLibrarySongEntity(
     val serverId: Long,
     val songId: String,
     val parentId: String?,
+    @ColumnInfo(collate = ColumnInfo.NOCASE)
     val title: String,
     val album: String?,
     val albumId: String?,

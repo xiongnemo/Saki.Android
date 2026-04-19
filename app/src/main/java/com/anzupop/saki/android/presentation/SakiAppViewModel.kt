@@ -31,9 +31,9 @@ import com.anzupop.saki.android.domain.repository.SubsonicRepository
 import com.anzupop.saki.android.domain.repository.StreamCacheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -709,7 +709,7 @@ class SakiAppViewModel @Inject constructor(
         }
 
         if (selectedServerId != null && (serverChanged || lastLoadedServerId != selectedServerId)) {
-            loadServerContent(selectedServerId, forceRefresh = true)
+            loadServerContent(selectedServerId)
             if (uiState.value.playbackState.currentItem == null) {
                 restorePlayQueue(selectedServerId)
             }
@@ -745,6 +745,7 @@ class SakiAppViewModel @Inject constructor(
                 subsonicRepository.getPlayQueue(serverId).data
             }.onSuccess { savedQueue ->
                 if (savedQueue.songs.isEmpty()) return@onSuccess
+                if (uiState.value.playbackState.queue.isNotEmpty()) return@onSuccess
                 val startIndex = if (savedQueue.currentSongId != null) {
                     savedQueue.songs.indexOfFirst { it.id == savedQueue.currentSongId }.coerceAtLeast(0)
                 } else {
@@ -756,7 +757,9 @@ class SakiAppViewModel @Inject constructor(
                     startIndex = startIndex,
                     positionMs = savedQueue.positionMs,
                 )
-            }.onFailure { /* server unreachable, skip restore */ }
+            }.onFailure { e ->
+                if (e is CancellationException) throw e
+            }
         }
     }
 
@@ -900,9 +903,11 @@ class SakiAppViewModel @Inject constructor(
 
     private suspend fun fetchAllSongs(serverId: Long): List<Song> = withContext(Dispatchers.IO) {
         val pageSize = 500
+        val maxPages = 100
         val allSongs = mutableListOf<Song>()
         var offset = 0
-        while (true) {
+        var page = 0
+        while (page < maxPages) {
             val results = subsonicRepository.search(
                 serverId = serverId,
                 query = "",
@@ -912,8 +917,9 @@ class SakiAppViewModel @Inject constructor(
                 songOffset = offset,
             ).data
             allSongs.addAll(results.songs)
-            if (results.songs.size < pageSize) break
+            if (results.songs.isEmpty() || results.songs.size < pageSize) break
             offset += pageSize
+            page++
         }
         allSongs.sortBy { it.title.lowercase() }
         allSongs

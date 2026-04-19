@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 9,
-    "identityHash": "85c1ef47f293e08e576da98fd581a5e2",
+    "identityHash": "3693474c353c5d089ad07c452c05f4e8",
     "entities": [
       {
         "tableName": "app_preferences",
@@ -172,7 +172,7 @@
       },
       {
         "tableName": "cached_library_songs",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `songId` TEXT NOT NULL, `parentId` TEXT, `title` TEXT NOT NULL, `album` TEXT, `albumId` TEXT, `artist` TEXT, `artistId` TEXT, `coverArtId` TEXT, `durationSeconds` INTEGER, `track` INTEGER, `discNumber` INTEGER, `year` INTEGER, `genre` TEXT, `bitRate` INTEGER, `suffix` TEXT, `contentType` TEXT, `sizeBytes` INTEGER, `path` TEXT, `created` TEXT, PRIMARY KEY(`serverId`, `songId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `songId` TEXT NOT NULL, `parentId` TEXT, `title` TEXT NOT NULL COLLATE NOCASE, `album` TEXT, `albumId` TEXT, `artist` TEXT, `artistId` TEXT, `coverArtId` TEXT, `durationSeconds` INTEGER, `track` INTEGER, `discNumber` INTEGER, `year` INTEGER, `genre` TEXT, `bitRate` INTEGER, `suffix` TEXT, `contentType` TEXT, `sizeBytes` INTEGER, `path` TEXT, `created` TEXT, PRIMARY KEY(`serverId`, `songId`))",
         "fields": [
           {
             "fieldPath": "serverId",
@@ -284,7 +284,19 @@
             "serverId",
             "songId"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_cached_library_songs_serverId_title",
+            "unique": false,
+            "columnNames": [
+              "serverId",
+              "title"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_library_songs_serverId_title` ON `${TABLE_NAME}` (`serverId`, `title`)"
+          }
+        ]
       },
       {
         "tableName": "cached_playlists",
@@ -662,7 +674,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '85c1ef47f293e08e576da98fd581a5e2')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3693474c353c5d089ad07c452c05f4e8')"
     ]
   }
 }
