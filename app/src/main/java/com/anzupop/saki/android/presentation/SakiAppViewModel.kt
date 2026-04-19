@@ -1,5 +1,6 @@
 package com.anzupop.saki.android.presentation
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anzupop.saki.android.domain.model.Album
@@ -752,6 +753,7 @@ class SakiAppViewModel @Inject constructor(
                     mutableUiState.update { it.copy(libraryIndexes = indexes, isArtistsLoading = false, artistsError = null) }
                 }
                 runCatching { libraryCacheRepository.saveArtists(serverId, indexes) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache artists", it) }
             }.onFailure { throwable ->
                 mutableUiState.update { it.copy(isArtistsLoading = false, artistsError = throwable.message ?: "Unable to load artists.") }
             }
@@ -784,6 +786,7 @@ class SakiAppViewModel @Inject constructor(
                     mutableUiState.update { it.copy(albums = albums, isAlbumsLoading = false, albumsError = null) }
                 }
                 runCatching { libraryCacheRepository.saveAlbums(serverId, type, albums) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache albums", it) }
             }.onFailure { throwable ->
                 mutableUiState.update { it.copy(isAlbumsLoading = false, albumsError = throwable.message ?: "Unable to load albums.") }
             }
@@ -813,6 +816,7 @@ class SakiAppViewModel @Inject constructor(
                     mutableUiState.update { it.copy(playlists = playlists, isPlaylistsLoading = false, playlistsError = null) }
                 }
                 runCatching { libraryCacheRepository.savePlaylists(serverId, playlists) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache playlists", it) }
             }.onFailure { throwable ->
                 mutableUiState.update { it.copy(isPlaylistsLoading = false, playlistsError = throwable.message ?: "Unable to load playlists.") }
             }

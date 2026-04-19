@@ -4,6 +4,7 @@ import com.anzupop.saki.android.data.local.dao.LibraryCacheDao
 import com.anzupop.saki.android.data.local.entity.CachedAlbumEntity
 import com.anzupop.saki.android.data.local.entity.CachedArtistEntity
 import com.anzupop.saki.android.data.local.entity.CachedPlaylistEntity
+import com.anzupop.saki.android.di.IoDispatcher
 import com.anzupop.saki.android.domain.model.AlbumListType
 import com.anzupop.saki.android.domain.model.AlbumSummary
 import com.anzupop.saki.android.domain.model.ArtistSection
@@ -11,17 +12,20 @@ import com.anzupop.saki.android.domain.model.ArtistSummary
 import com.anzupop.saki.android.domain.model.LibraryIndexes
 import com.anzupop.saki.android.domain.model.PlaylistSummary
 import com.anzupop.saki.android.domain.repository.LibraryCacheRepository
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class DefaultLibraryCacheRepository @Inject constructor(
     private val dao: LibraryCacheDao,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : LibraryCacheRepository {
 
-    override suspend fun getArtists(serverId: Long): LibraryIndexes? {
+    override suspend fun getArtists(serverId: Long): LibraryIndexes? = withContext(ioDispatcher) {
         val entities = dao.getArtists(serverId)
-        if (entities.isEmpty()) return null
+        if (entities.isEmpty()) return@withContext null
         // groupBy on an ordered list preserves insertion order (LinkedHashMap)
         val sections = entities.groupBy(CachedArtistEntity::sectionName).map { (name, artists) ->
             ArtistSection(
@@ -29,7 +33,7 @@ class DefaultLibraryCacheRepository @Inject constructor(
                 artists = artists.map { it.toDomain() },
             )
         }
-        return LibraryIndexes(
+        LibraryIndexes(
             lastModified = null,
             ignoredArticles = null,
             shortcuts = emptyList(),
@@ -37,7 +41,7 @@ class DefaultLibraryCacheRepository @Inject constructor(
         )
     }
 
-    override suspend fun saveArtists(serverId: Long, indexes: LibraryIndexes) {
+    override suspend fun saveArtists(serverId: Long, indexes: LibraryIndexes) = withContext(ioDispatcher) {
         val entities = indexes.sections.flatMap { section ->
             section.artists.map { artist ->
                 CachedArtistEntity(
@@ -54,10 +58,11 @@ class DefaultLibraryCacheRepository @Inject constructor(
         dao.replaceArtists(serverId, entities)
     }
 
-    override suspend fun getAlbums(serverId: Long, type: AlbumListType): List<AlbumSummary> =
+    override suspend fun getAlbums(serverId: Long, type: AlbumListType): List<AlbumSummary> = withContext(ioDispatcher) {
         dao.getAlbums(serverId, type.apiValue).map { it.toDomain() }
+    }
 
-    override suspend fun saveAlbums(serverId: Long, type: AlbumListType, albums: List<AlbumSummary>) {
+    override suspend fun saveAlbums(serverId: Long, type: AlbumListType, albums: List<AlbumSummary>) = withContext(ioDispatcher) {
         val entities = albums.mapIndexed { index, album ->
             CachedAlbumEntity(
                 serverId = serverId,
@@ -78,10 +83,11 @@ class DefaultLibraryCacheRepository @Inject constructor(
         dao.replaceAlbums(serverId, type.apiValue, entities)
     }
 
-    override suspend fun getPlaylists(serverId: Long): List<PlaylistSummary> =
+    override suspend fun getPlaylists(serverId: Long): List<PlaylistSummary> = withContext(ioDispatcher) {
         dao.getPlaylists(serverId).map { it.toDomain() }
+    }
 
-    override suspend fun savePlaylists(serverId: Long, playlists: List<PlaylistSummary>) {
+    override suspend fun savePlaylists(serverId: Long, playlists: List<PlaylistSummary>) = withContext(ioDispatcher) {
         val entities = playlists.map { playlist ->
             CachedPlaylistEntity(
                 serverId = serverId,
