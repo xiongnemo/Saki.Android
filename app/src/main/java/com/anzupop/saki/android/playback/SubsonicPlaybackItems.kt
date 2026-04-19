@@ -258,7 +258,7 @@ internal fun MediaItem.nextStreamCandidateOrNull(): MediaItem? {
         .build()
 }
 
-private fun PlaybackRequest.toBundle(): Bundle {
+internal fun PlaybackRequest.toBundle(): Bundle {
     return Bundle().apply {
         putLong(EXTRA_SERVER_ID, serverId)
         putString(EXTRA_SONG_ID, songId)
@@ -294,7 +294,7 @@ private fun MediaItem.Builder.applyCustomCacheKey(
     }
 }
 
-private fun PlaybackRequest.toMediaMetadata(): MediaMetadata {
+internal fun PlaybackRequest.toMediaMetadata(): MediaMetadata {
     return MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)

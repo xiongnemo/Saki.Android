@@ -110,6 +110,9 @@ enum class SoundBalancingMode(
 
 data class PlaybackPreferences(
     val streamQuality: StreamQuality = StreamQuality.ORIGINAL,
+    val adaptiveQualityEnabled: Boolean = false,
+    val wifiStreamQuality: StreamQuality = StreamQuality.ORIGINAL,
+    val mobileStreamQuality: StreamQuality = StreamQuality.KBPS_320,
     val soundBalancingMode: SoundBalancingMode = SoundBalancingMode.OFF,
     val streamCacheSizeMb: Int = DEFAULT_STREAM_CACHE_SIZE_MB,
     val bluetoothLyricsEnabled: Boolean = false,

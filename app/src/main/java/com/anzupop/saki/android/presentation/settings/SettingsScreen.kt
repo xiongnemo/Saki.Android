@@ -3,7 +3,6 @@ package com.anzupop.saki.android.presentation.settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -73,13 +72,16 @@ fun SettingsScreen(
     onManageServers: () -> Unit,
     onSelectServer: (Long) -> Unit,
     onUpdateStreamQuality: (StreamQuality) -> Unit,
+    onUpdateAdaptiveQuality: (Boolean) -> Unit,
+    onUpdateWifiStreamQuality: (StreamQuality) -> Unit,
+    onUpdateMobileStreamQuality: (StreamQuality) -> Unit,
     onUpdateSoundBalancing: (SoundBalancingMode) -> Unit,
     onUpdateStreamCacheSizeMb: (Int) -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
-    onExportConfig: ((String) -> Unit) -> Unit,
-    onImportConfig: (String) -> Unit,
+    onExportConfig: (android.net.Uri) -> Unit,
+    onImportConfig: (android.net.Uri) -> Unit,
     onPlayCachedSong: (CachedSong) -> Unit,
     onPlayCachedQueue: (List<CachedSong>, Int) -> Unit,
     onDeleteCachedSong: (String) -> Unit,
@@ -160,21 +162,63 @@ fun SettingsScreen(
         }
 
         item {
+            val prefs = uiState.playbackState.preferences
             SettingsSectionCard(
                 title = "Stream quality",
                 body = "Limit streaming bitrate or keep the original source file when possible.",
                 action = null,
             ) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                if (!prefs.adaptiveQualityEnabled) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StreamQuality.entries.forEach { quality ->
+                            FilterChip(
+                                selected = prefs.streamQuality == quality,
+                                onClick = { onUpdateStreamQuality(quality) },
+                                label = { Text(quality.label) },
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                 ) {
-                    StreamQuality.entries.forEach { quality ->
-                        FilterChip(
-                            selected = uiState.playbackState.preferences.streamQuality == quality,
-                            onClick = { onUpdateStreamQuality(quality) },
-                            label = { Text(quality.label) },
-                        )
+                    Text("Adaptive quality", style = MaterialTheme.typography.bodyLarge)
+                    Switch(
+                        checked = prefs.adaptiveQualityEnabled,
+                        onCheckedChange = onUpdateAdaptiveQuality,
+                    )
+                }
+                if (prefs.adaptiveQualityEnabled) {
+                    Text("WiFi", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StreamQuality.entries.forEach { quality ->
+                            FilterChip(
+                                selected = prefs.wifiStreamQuality == quality,
+                                onClick = { onUpdateWifiStreamQuality(quality) },
+                                label = { Text(quality.label) },
+                            )
+                        }
+                    }
+                    Text("Mobile", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StreamQuality.entries.forEach { quality ->
+                            FilterChip(
+                                selected = prefs.mobileStreamQuality == quality,
+                                onClick = { onUpdateMobileStreamQuality(quality) },
+                                label = { Text(quality.label) },
+                            )
+                        }
                     }
                 }
             }
@@ -375,31 +419,15 @@ fun SettingsScreen(
         }
 
         item {
-            val context = LocalContext.current
             val exportLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.CreateDocument("application/json"),
-            ) { uri ->
-                if (uri != null) {
-                    onExportConfig { json ->
-                        runCatching {
-                            context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
-                        }
-                    }
-                }
-            }
+            ) { uri -> if (uri != null) onExportConfig(uri) }
             val importLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.OpenDocument(),
-            ) { uri ->
-                if (uri != null) {
-                    val json = runCatching {
-                        context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
-                    }.getOrNull()
-                    if (json != null) onImportConfig(json)
-                }
-            }
+            ) { uri -> if (uri != null) onImportConfig(uri) }
             SettingsSectionCard(
                 title = "Backup & Restore",
-                body = "Export or import server configuration and settings as a JSON file.",
+                body = "Export or import server configuration and settings. Warning: exported files contain server passwords in plaintext.",
                 action = null,
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

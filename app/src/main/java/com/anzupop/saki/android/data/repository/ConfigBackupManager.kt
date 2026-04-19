@@ -114,26 +114,44 @@ class ConfigBackupManager @Inject constructor(
             serversImported++
         }
 
+        var settingsApplied = false
         if (backup.settings.isNotEmpty()) {
             dataStore.edit { ds ->
                 backup.settings.forEach { (key, value) ->
                     when (key) {
-                        DataStorePlaybackPreferencesRepository.KEY_STREAM_CACHE_SIZE_MB.name ->
+                        DataStorePlaybackPreferencesRepository.KEY_STREAM_CACHE_SIZE_MB.name -> {
                             ds[DataStorePlaybackPreferencesRepository.KEY_STREAM_CACHE_SIZE_MB] = value.toIntOrNull() ?: return@forEach
-                        DataStorePlaybackPreferencesRepository.KEY_BLUETOOTH_LYRICS.name ->
+                            settingsApplied = true
+                        }
+                        DataStorePlaybackPreferencesRepository.KEY_BLUETOOTH_LYRICS.name -> {
                             ds[DataStorePlaybackPreferencesRepository.KEY_BLUETOOTH_LYRICS] = value.toBooleanStrictOrNull() ?: return@forEach
-                        DataStoreAppPreferencesRepository.KEY_TEXT_SCALE.name ->
-                            ds[DataStoreAppPreferencesRepository.KEY_TEXT_SCALE] = value
-                        DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY.name ->
-                            ds[DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY] = value
-                        DataStorePlaybackPreferencesRepository.KEY_SOUND_BALANCING_MODE.name ->
-                            ds[DataStorePlaybackPreferencesRepository.KEY_SOUND_BALANCING_MODE] = value
+                            settingsApplied = true
+                        }
+                        DataStorePlaybackPreferencesRepository.KEY_ADAPTIVE_QUALITY.name -> {
+                            ds[DataStorePlaybackPreferencesRepository.KEY_ADAPTIVE_QUALITY] = value.toBooleanStrictOrNull() ?: return@forEach
+                            settingsApplied = true
+                        }
+                        DataStoreAppPreferencesRepository.KEY_TEXT_SCALE.name -> {
+                            ds[DataStoreAppPreferencesRepository.KEY_TEXT_SCALE] = value; settingsApplied = true
+                        }
+                        DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY.name -> {
+                            ds[DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY] = value; settingsApplied = true
+                        }
+                        DataStorePlaybackPreferencesRepository.KEY_SOUND_BALANCING_MODE.name -> {
+                            ds[DataStorePlaybackPreferencesRepository.KEY_SOUND_BALANCING_MODE] = value; settingsApplied = true
+                        }
+                        DataStorePlaybackPreferencesRepository.KEY_WIFI_STREAM_QUALITY.name -> {
+                            ds[DataStorePlaybackPreferencesRepository.KEY_WIFI_STREAM_QUALITY] = value; settingsApplied = true
+                        }
+                        DataStorePlaybackPreferencesRepository.KEY_MOBILE_STREAM_QUALITY.name -> {
+                            ds[DataStorePlaybackPreferencesRepository.KEY_MOBILE_STREAM_QUALITY] = value; settingsApplied = true
+                        }
                     }
                 }
             }
         }
 
-        ImportResult.Success(serversImported = serversImported, settingsRestored = backup.settings.isNotEmpty())
+        ImportResult.Success(serversImported = serversImported, settingsRestored = settingsApplied)
     }
 }
 

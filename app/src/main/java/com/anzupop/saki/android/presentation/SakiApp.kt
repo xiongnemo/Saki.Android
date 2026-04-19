@@ -81,8 +81,8 @@ fun SakiApp(
                             viewModel.completeOnboarding()
                             showServerManager = true
                         },
-                        onImportConfig = { json ->
-                            viewModel.importConfig(json) { viewModel.completeOnboarding() }
+                        onImportConfig = { uri ->
+                            viewModel.importConfig(uri) { viewModel.completeOnboarding() }
                         },
                     )
                 }
@@ -120,13 +120,16 @@ fun SakiApp(
                         onDeleteCachedSong = viewModel::deleteCachedSong,
                         onClearCachedSongs = viewModel::clearCachedSongs,
                         onUpdateStreamQuality = viewModel::updateStreamQuality,
+                        onUpdateAdaptiveQuality = viewModel::updateAdaptiveQuality,
+                        onUpdateWifiStreamQuality = viewModel::updateWifiStreamQuality,
+                        onUpdateMobileStreamQuality = viewModel::updateMobileStreamQuality,
                         onUpdateSoundBalancing = viewModel::updateSoundBalancing,
                         onUpdateStreamCacheSizeMb = viewModel::updateStreamCacheSizeMb,
                         onUpdateTextScale = viewModel::updateTextScale,
                         onReplayOnboarding = viewModel::replayOnboarding,
                         onUpdateBluetoothLyrics = viewModel::updateBluetoothLyrics,
                         onExportConfig = viewModel::exportConfig,
-                        onImportConfig = { json -> viewModel.importConfig(json) },
+                        onImportConfig = { uri -> viewModel.importConfig(uri) },
                         onOpenArtistFromPlayback = viewModel::openArtistFromPlayback,
                         onOpenAlbumFromPlayback = viewModel::openAlbumFromPlayback,
                         onPausePlayback = viewModel::pausePlayback,
@@ -183,13 +186,16 @@ private fun RootShell(
     onDeleteCachedSong: (String) -> Unit,
     onClearCachedSongs: () -> Unit,
     onUpdateStreamQuality: (com.anzupop.saki.android.domain.model.StreamQuality) -> Unit,
+    onUpdateAdaptiveQuality: (Boolean) -> Unit,
+    onUpdateWifiStreamQuality: (com.anzupop.saki.android.domain.model.StreamQuality) -> Unit,
+    onUpdateMobileStreamQuality: (com.anzupop.saki.android.domain.model.StreamQuality) -> Unit,
     onUpdateSoundBalancing: (com.anzupop.saki.android.domain.model.SoundBalancingMode) -> Unit,
     onUpdateStreamCacheSizeMb: (Int) -> Unit,
     onUpdateTextScale: (com.anzupop.saki.android.domain.model.TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
-    onExportConfig: ((String) -> Unit) -> Unit,
-    onImportConfig: (String) -> Unit,
+    onExportConfig: (android.net.Uri) -> Unit,
+    onImportConfig: (android.net.Uri) -> Unit,
     onOpenArtistFromPlayback: (Long?, String?) -> Unit,
     onOpenAlbumFromPlayback: (Long?, String?) -> Unit,
     onPausePlayback: () -> Unit,
@@ -241,6 +247,9 @@ private fun RootShell(
                             onManageServers = onManageServers,
                             onSelectServer = onSelectServer,
                             onUpdateStreamQuality = onUpdateStreamQuality,
+                            onUpdateAdaptiveQuality = onUpdateAdaptiveQuality,
+                            onUpdateWifiStreamQuality = onUpdateWifiStreamQuality,
+                            onUpdateMobileStreamQuality = onUpdateMobileStreamQuality,
                             onUpdateSoundBalancing = onUpdateSoundBalancing,
                             onUpdateStreamCacheSizeMb = onUpdateStreamCacheSizeMb,
                             onUpdateTextScale = onUpdateTextScale,
