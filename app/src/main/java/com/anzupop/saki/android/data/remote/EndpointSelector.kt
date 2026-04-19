@@ -123,8 +123,8 @@ class EndpointSelector @Inject constructor(
             endpoints.map { endpoint ->
                 async {
                     val latency = pingEndpoint(endpoint, server)
-                    probeResults[endpoint.id] = latency
                     if (latency != null) {
+                        probeResults[endpoint.id] = latency
                         val currentBestId = bestEndpoints[serverId]
                         val currentBestLatency = currentBestId?.let { probeResults[it] }
                         if (currentBestLatency == null || latency < currentBestLatency) {
@@ -140,7 +140,7 @@ class EndpointSelector @Inject constructor(
             val lat = probeResults[ep.id]
             EndpointProbeResult(ep, lat, lat != null)
         }
-        if (probeResults.values.all { it == null }) {
+        if (probeResults.isEmpty()) {
             bestEndpoints.remove(serverId)
         }
         _probeVersion.update { it + 1 }
