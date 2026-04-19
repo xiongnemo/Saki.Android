@@ -2,10 +2,10 @@ package com.anzupop.saki.android.di
 
 import androidx.media3.common.util.UnstableApi
 import com.anzupop.saki.android.data.remote.SubsonicConnectionTester
-import com.anzupop.saki.android.data.repository.DefaultAppPreferencesRepository
+import com.anzupop.saki.android.data.repository.DataStoreAppPreferencesRepository
+import com.anzupop.saki.android.data.repository.DataStorePlaybackPreferencesRepository
 import com.anzupop.saki.android.data.repository.DefaultCachedSongRepository
 import com.anzupop.saki.android.data.repository.DefaultLibraryCacheRepository
-import com.anzupop.saki.android.data.repository.DefaultPlaybackPreferencesRepository
 import com.anzupop.saki.android.data.repository.DefaultServerConfigRepository
 import com.anzupop.saki.android.data.repository.DefaultStreamCacheRepository
 import com.anzupop.saki.android.data.repository.DefaultSubsonicRepository
@@ -29,7 +29,7 @@ import dagger.hilt.components.SingletonComponent
 abstract class RepositoryModule {
     @Binds
     abstract fun bindAppPreferencesRepository(
-        repository: DefaultAppPreferencesRepository,
+        repository: DataStoreAppPreferencesRepository,
     ): AppPreferencesRepository
 
     @Binds
@@ -49,7 +49,7 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindPlaybackPreferencesRepository(
-        repository: DefaultPlaybackPreferencesRepository,
+        repository: DataStorePlaybackPreferencesRepository,
     ): PlaybackPreferencesRepository
 
     @Binds
