@@ -168,9 +168,6 @@ class SakiAppViewModel @Inject constructor(
     fun completeOnboarding() {
         viewModelScope.launch {
             appPreferencesRepository.setOnboardingCompleted(true)
-            if (uiState.value.servers.isEmpty()) {
-                // Settings will be shown automatically when no servers configured
-            }
         }
     }
 

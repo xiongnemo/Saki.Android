@@ -361,51 +361,51 @@ private fun BrowsePager(
                             )
                         }
                     }
-                            HorizontalPager(
+                    HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.weight(1f),
                         flingBehavior = pagerFlingBehavior,
-            ) { page ->
-                when (sections[page]) {
-                    BrowseSection.ARTISTS -> ArtistsPage(
-                        indexes = uiState.libraryIndexes,
-                        server = currentServer,
-                        isLoading = uiState.isArtistsLoading,
-                        error = uiState.artistsError,
-                        onOpenArtist = onOpenArtist,
-                    )
+                    ) { page ->
+                        when (sections[page]) {
+                            BrowseSection.ARTISTS -> ArtistsPage(
+                                indexes = uiState.libraryIndexes,
+                                server = currentServer,
+                                isLoading = uiState.isArtistsLoading,
+                                error = uiState.artistsError,
+                                onOpenArtist = onOpenArtist,
+                            )
 
-                    BrowseSection.ALBUMS -> AlbumsPage(
-                        albums = uiState.albums,
-                        server = currentServer,
-                        selectedFeed = uiState.selectedAlbumFeed,
-                        isLoading = uiState.isAlbumsLoading,
-                        error = uiState.albumsError,
-                        onSelectFeed = onSelectAlbumFeed,
-                        onOpenAlbum = onOpenAlbum,
-                    )
+                            BrowseSection.ALBUMS -> AlbumsPage(
+                                albums = uiState.albums,
+                                server = currentServer,
+                                selectedFeed = uiState.selectedAlbumFeed,
+                                isLoading = uiState.isAlbumsLoading,
+                                error = uiState.albumsError,
+                                onSelectFeed = onSelectAlbumFeed,
+                                onOpenAlbum = onOpenAlbum,
+                            )
 
-                    BrowseSection.PLAYLISTS -> PlaylistsPage(
-                        playlists = uiState.playlists,
-                        server = currentServer,
-                        isLoading = uiState.isPlaylistsLoading,
-                        error = uiState.playlistsError,
-                        onOpenPlaylist = onOpenPlaylist,
-                    )
+                            BrowseSection.PLAYLISTS -> PlaylistsPage(
+                                playlists = uiState.playlists,
+                                server = currentServer,
+                                isLoading = uiState.isPlaylistsLoading,
+                                error = uiState.playlistsError,
+                                onOpenPlaylist = onOpenPlaylist,
+                            )
 
-                    BrowseSection.SONGS -> SongsPage(
-                        songs = uiState.songs,
-                        server = currentServer,
-                        cachedSongsBySongId = cachedSongsBySongId,
-                        streamCachedSongIds = uiState.streamCachedSongIds,
-                        downloadingSongIds = uiState.downloadingSongIds,
-                        isLoading = uiState.isSongsLoading,
-                        error = uiState.songsError,
-                        onPlaySongs = onPlaySongs,
-                        onShowSongActions = onShowSongActions,
-                    )
-                }
-            }
+                            BrowseSection.SONGS -> SongsPage(
+                                songs = uiState.songs,
+                                server = currentServer,
+                                cachedSongsBySongId = cachedSongsBySongId,
+                                streamCachedSongIds = uiState.streamCachedSongIds,
+                                downloadingSongIds = uiState.downloadingSongIds,
+                                isLoading = uiState.isSongsLoading,
+                                error = uiState.songsError,
+                                onPlaySongs = onPlaySongs,
+                                onShowSongActions = onShowSongActions,
+                            )
+                        }
+                    }
                 }
             }
         }
