@@ -94,7 +94,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
-import com.anzupop.saki.android.data.remote.EndpointSelector
+import com.anzupop.saki.android.presentation.EndpointProbeInfo
 import com.anzupop.saki.android.domain.model.PlaybackQueueItem
 import com.anzupop.saki.android.domain.model.PlaybackSessionState
 import com.anzupop.saki.android.domain.model.RepeatModeSetting
@@ -214,7 +214,8 @@ fun NowPlayingOverlay(
     onRemoveQueueItem: (Int) -> Unit,
     currentServer: ServerConfig?,
     activeEndpointLabel: String? = null,
-    endpointProbeResults: List<EndpointSelector.EndpointProbeResult> = emptyList(),
+    activeEndpointId: Long? = null,
+    endpointProbeResults: List<EndpointProbeInfo> = emptyList(),
     isProbing: Boolean = false,
     onReprobeEndpoints: () -> Unit = {},
     lyrics: SongLyrics? = null,
@@ -692,7 +693,7 @@ fun NowPlayingOverlay(
                         Text("No probe results yet.", style = MaterialTheme.typography.bodyMedium)
                     } else {
                         endpointProbeResults.forEach { result ->
-                            val isActive = result.endpoint.label == activeEndpointLabel
+                            val isActive = result.id == activeEndpointId
                             Surface(
                                 shape = MaterialTheme.shapes.medium,
                                 color = if (isActive) {
@@ -710,11 +711,11 @@ fun NowPlayingOverlay(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = result.endpoint.label + if (isActive) " ✓" else "",
+                                            text = result.label + if (isActive) " ✓" else "",
                                             style = MaterialTheme.typography.bodyLarge,
                                         )
                                         Text(
-                                            text = result.endpoint.baseUrl,
+                                            text = result.baseUrl,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )

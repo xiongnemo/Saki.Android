@@ -718,7 +718,7 @@ class SakiAppViewModel @Inject constructor(
         }
 
         if (selectedServerId != null && (serverChanged || lastLoadedServerId != selectedServerId)) {
-            loadServerContent(selectedServerId)
+            loadServerContent(selectedServerId, forceRefresh = serverChanged)
             servers.find { it.id == selectedServerId }?.let { server ->
                 viewModelScope.launch {
                     endpointSelector.probe(selectedServerId, server)
@@ -916,6 +916,8 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    // Navidrome supports empty query in search3 to return all songs.
+    // This is not standard Subsonic behavior and may not work on other servers.
     private suspend fun fetchAllSongs(serverId: Long): List<Song> = withContext(Dispatchers.IO) {
         val pageSize = 500
         val maxPages = 100
@@ -1036,11 +1038,21 @@ class SakiAppViewModel @Inject constructor(
         val serverId = uiState.value.selectedServerId ?: return
         val results = endpointSelector.getLastProbeResults(serverId)
         val activeId = endpointSelector.getActiveEndpointId(serverId)
-        mutableEndpointStatus.value = EndpointStatus(
-            activeEndpointLabel = results.find { it.endpoint.id == activeId }?.endpoint?.label,
-            probeResults = results,
-            isProbing = false,
-        )
+        mutableEndpointStatus.update { current ->
+            current.copy(
+                activeEndpointLabel = results.find { it.endpoint.id == activeId }?.endpoint?.label,
+                activeEndpointId = activeId,
+                probeResults = results.map { r ->
+                    EndpointProbeInfo(
+                        id = r.endpoint.id,
+                        label = r.endpoint.label,
+                        baseUrl = r.endpoint.baseUrl,
+                        latencyMs = r.latencyMs,
+                        reachable = r.reachable,
+                    )
+                },
+            )
+        }
     }
 
     fun reprobeEndpoints() {
@@ -1056,8 +1068,17 @@ class SakiAppViewModel @Inject constructor(
 
 data class EndpointStatus(
     val activeEndpointLabel: String? = null,
-    val probeResults: List<EndpointSelector.EndpointProbeResult> = emptyList(),
+    val activeEndpointId: Long? = null,
+    val probeResults: List<EndpointProbeInfo> = emptyList(),
     val isProbing: Boolean = false,
+)
+
+data class EndpointProbeInfo(
+    val id: Long,
+    val label: String,
+    val baseUrl: String,
+    val latencyMs: Long?,
+    val reachable: Boolean,
 )
 
 enum class BrowseSection {

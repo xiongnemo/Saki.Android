@@ -5,28 +5,34 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import android.util.Log
 import com.anzupop.saki.android.data.remote.subsonic.SubsonicAuth
 import com.anzupop.saki.android.di.IoDispatcher
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.ServerEndpoint
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
+import kotlin.coroutines.resume
 
 @Singleton
 class EndpointSelector @Inject constructor(
@@ -36,18 +42,20 @@ class EndpointSelector @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
-    // serverId -> best endpoint id
     private val bestEndpoints = ConcurrentHashMap<Long, Long>()
-
-    // serverId -> last probe results
     private val lastProbeResults = ConcurrentHashMap<Long, List<EndpointProbeResult>>()
-
-    // serverId -> server config (for auth + re-probing on network change)
     private val serverConfigs = ConcurrentHashMap<Long, ServerConfig>()
 
-    // Incremented after each probe completes, so observers can react
     private val _probeVersion = MutableStateFlow(0L)
     val probeVersion: StateFlow<Long> = _probeVersion.asStateFlow()
+
+    private val probeClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .callTimeout(1500, TimeUnit.MILLISECONDS)
+            .connectTimeout(1500, TimeUnit.MILLISECONDS)
+            .readTimeout(1500, TimeUnit.MILLISECONDS)
+            .build()
+    }
 
     data class EndpointProbeResult(
         val endpoint: ServerEndpoint,
@@ -64,13 +72,8 @@ class EndpointSelector @Inject constructor(
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
         cm.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                onNetworkChanged()
-            }
-
-            override fun onLost(network: Network) {
-                onNetworkChanged()
-            }
+            override fun onAvailable(network: Network) = onNetworkChanged()
+            override fun onLost(network: Network) = onNetworkChanged()
         })
         networkCallbackRegistered = true
     }
@@ -84,10 +87,9 @@ class EndpointSelector @Inject constructor(
     private fun onNetworkChanged() {
         reprobeJob?.cancel()
         reprobeJob = scope.launch {
-            // Immediate probe, then re-probe with exponential backoff: 3s, 6s, 12s, then stop
             val delays = longArrayOf(0, 3_000, 6_000, 12_000)
-            for (delay in delays) {
-                if (delay > 0) kotlinx.coroutines.delay(delay)
+            for (d in delays) {
+                if (d > 0) delay(d)
                 serverConfigs.forEach { (serverId, server) -> probe(serverId, server) }
             }
         }
@@ -101,39 +103,36 @@ class EndpointSelector @Inject constructor(
             val latency = pingEndpoint(ep, server)
             lastProbeResults[serverId] = listOf(EndpointProbeResult(ep, latency, latency != null))
             if (latency != null) bestEndpoints[serverId] = ep.id
-            _probeVersion.value++
+            _probeVersion.update { it + 1 }
             return if (latency != null) ep else null
         }
 
-        val resultsList = java.util.Collections.synchronizedList(
-            mutableListOf<Pair<ServerEndpoint, Long?>>(),
-        )
+        val probeResults = ConcurrentHashMap<Long, Long?>()
         kotlinx.coroutines.coroutineScope {
             endpoints.map { endpoint ->
                 async {
                     val latency = pingEndpoint(endpoint, server)
-                    resultsList.add(endpoint to latency)
-                    // Update best as soon as each result arrives
+                    probeResults[endpoint.id] = latency
                     if (latency != null) {
                         val currentBestId = bestEndpoints[serverId]
-                        val currentBestLatency = resultsList
-                            .firstOrNull { it.first.id == currentBestId }?.second
+                        val currentBestLatency = currentBestId?.let { probeResults[it] }
                         if (currentBestLatency == null || latency < currentBestLatency) {
                             bestEndpoints[serverId] = endpoint.id
-                            _probeVersion.value++
+                            _probeVersion.update { it + 1 }
                         }
                     }
                 }
             }.forEach { it.await() }
         }
 
-        lastProbeResults[serverId] = resultsList.map { (ep, lat) ->
+        lastProbeResults[serverId] = endpoints.map { ep ->
+            val lat = probeResults[ep.id]
             EndpointProbeResult(ep, lat, lat != null)
         }
-        if (resultsList.none { it.second != null }) {
+        if (probeResults.values.all { it == null }) {
             bestEndpoints.remove(serverId)
         }
-        _probeVersion.value++
+        _probeVersion.update { it + 1 }
         return endpoints.find { it.id == bestEndpoints[serverId] }
     }
 
@@ -161,21 +160,22 @@ class EndpointSelector @Inject constructor(
             ?.addPathSegments("rest/ping.view")
             ?.addQueryParameter("f", "json") ?: return null
         authQuery.forEach { (k, v) -> urlBuilder.addQueryParameter(k, v) }
-        val url = urlBuilder.build()
 
-        val request = Request.Builder().url(url).get().build()
-        return withContext(ioDispatcher) {
-            withTimeoutOrNull(1_500) {
-                val start = System.nanoTime()
-                try {
-                    okHttpClient.newCall(request).execute().use { response ->
-                        val ms = (System.nanoTime() - start) / 1_000_000
-                        if (response.isSuccessful) ms else null
-                    }
-                } catch (_: Exception) {
-                    null
+        val request = Request.Builder().url(urlBuilder.build()).get().build()
+        val start = System.nanoTime()
+        return suspendCancellableCoroutine { cont ->
+            val call = probeClient.newCall(request)
+            cont.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onResponse(call: Call, response: Response) {
+                    response.close()
+                    val ms = (System.nanoTime() - start) / 1_000_000
+                    cont.resume(if (response.isSuccessful) ms else null)
                 }
-            }
+                override fun onFailure(call: Call, e: IOException) {
+                    cont.resume(null)
+                }
+            })
         }
     }
 }

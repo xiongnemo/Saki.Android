@@ -321,6 +321,7 @@ private fun RootShell(
             onRemoveQueueItem = onRemoveQueueItem,
             currentServer = uiState.servers.firstOrNull { it.id == track.serverId },
             activeEndpointLabel = endpointStatus.activeEndpointLabel,
+            activeEndpointId = endpointStatus.activeEndpointId,
             endpointProbeResults = endpointStatus.probeResults,
             isProbing = endpointStatus.isProbing,
             onReprobeEndpoints = onReprobeEndpoints,
