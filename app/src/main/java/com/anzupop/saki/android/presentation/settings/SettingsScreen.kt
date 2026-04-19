@@ -73,6 +73,9 @@ fun SettingsScreen(
     onManageServers: () -> Unit,
     onSelectServer: (Long) -> Unit,
     onUpdateStreamQuality: (StreamQuality) -> Unit,
+    onUpdateAdaptiveQuality: (Boolean) -> Unit,
+    onUpdateWifiStreamQuality: (StreamQuality) -> Unit,
+    onUpdateMobileStreamQuality: (StreamQuality) -> Unit,
     onUpdateSoundBalancing: (SoundBalancingMode) -> Unit,
     onUpdateStreamCacheSizeMb: (Int) -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
@@ -160,21 +163,63 @@ fun SettingsScreen(
         }
 
         item {
+            val prefs = uiState.playbackState.preferences
             SettingsSectionCard(
                 title = "Stream quality",
                 body = "Limit streaming bitrate or keep the original source file when possible.",
                 action = null,
             ) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                if (!prefs.adaptiveQualityEnabled) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StreamQuality.entries.forEach { quality ->
+                            FilterChip(
+                                selected = prefs.streamQuality == quality,
+                                onClick = { onUpdateStreamQuality(quality) },
+                                label = { Text(quality.label) },
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                 ) {
-                    StreamQuality.entries.forEach { quality ->
-                        FilterChip(
-                            selected = uiState.playbackState.preferences.streamQuality == quality,
-                            onClick = { onUpdateStreamQuality(quality) },
-                            label = { Text(quality.label) },
-                        )
+                    Text("Adaptive quality", style = MaterialTheme.typography.bodyLarge)
+                    Switch(
+                        checked = prefs.adaptiveQualityEnabled,
+                        onCheckedChange = onUpdateAdaptiveQuality,
+                    )
+                }
+                if (prefs.adaptiveQualityEnabled) {
+                    Text("WiFi", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StreamQuality.entries.forEach { quality ->
+                            FilterChip(
+                                selected = prefs.wifiStreamQuality == quality,
+                                onClick = { onUpdateWifiStreamQuality(quality) },
+                                label = { Text(quality.label) },
+                            )
+                        }
+                    }
+                    Text("Mobile", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StreamQuality.entries.forEach { quality ->
+                            FilterChip(
+                                selected = prefs.mobileStreamQuality == quality,
+                                onClick = { onUpdateMobileStreamQuality(quality) },
+                                label = { Text(quality.label) },
+                            )
+                        }
                     }
                 }
             }

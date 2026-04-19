@@ -18,5 +18,11 @@ interface StreamCacheRepository {
         quality: StreamQuality? = null,
     ): StreamCacheSummary
 
+    /**
+     * Find the best cached quality for a song. Returns the requested quality if cached,
+     * or a higher quality if available, or null if not cached at all.
+     */
+    fun findCachedQualityKey(serverId: Long, songId: String, preferredQuality: StreamQuality): String?
+
     suspend fun clearStreamCache(serverId: Long? = null): Int
 }

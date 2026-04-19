@@ -12,6 +12,12 @@ interface PlaybackPreferencesRepository {
 
     suspend fun updateStreamQuality(quality: StreamQuality)
 
+    suspend fun updateAdaptiveQuality(enabled: Boolean)
+
+    suspend fun updateWifiStreamQuality(quality: StreamQuality)
+
+    suspend fun updateMobileStreamQuality(quality: StreamQuality)
+
     suspend fun updateSoundBalancing(mode: SoundBalancingMode)
 
     suspend fun updateStreamCacheSizeMb(sizeMb: Int)

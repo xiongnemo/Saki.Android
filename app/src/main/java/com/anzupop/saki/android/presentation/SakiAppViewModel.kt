@@ -605,6 +605,24 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    fun updateAdaptiveQuality(enabled: Boolean) {
+        viewModelScope.launch {
+            playbackPreferencesRepository.updateAdaptiveQuality(enabled)
+        }
+    }
+
+    fun updateWifiStreamQuality(quality: StreamQuality) {
+        viewModelScope.launch {
+            playbackPreferencesRepository.updateWifiStreamQuality(quality)
+        }
+    }
+
+    fun updateMobileStreamQuality(quality: StreamQuality) {
+        viewModelScope.launch {
+            playbackPreferencesRepository.updateMobileStreamQuality(quality)
+        }
+    }
+
     fun updateSoundBalancing(mode: SoundBalancingMode) {
         viewModelScope.launch {
             runCatching {

@@ -11,12 +11,15 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.anzupop.saki.android.data.remote.NetworkType
+import com.anzupop.saki.android.data.remote.NetworkTypeProvider
 import com.anzupop.saki.android.di.MainDispatcher
 import com.anzupop.saki.android.domain.model.CachedSong
 import com.anzupop.saki.android.domain.model.PlaybackRuntimeInfo
 import com.anzupop.saki.android.domain.model.PlaybackSessionState
 import com.anzupop.saki.android.domain.model.RepeatModeSetting
 import com.anzupop.saki.android.domain.model.Song
+import com.anzupop.saki.android.domain.model.StreamQuality
 import com.anzupop.saki.android.domain.repository.PlaybackManager
 import com.anzupop.saki.android.domain.repository.PlaybackPreferencesRepository
 import com.anzupop.saki.android.domain.repository.StreamCacheRepository
@@ -51,6 +54,7 @@ class DefaultPlaybackManager @Inject constructor(
     private val playbackPreferencesRepository: PlaybackPreferencesRepository,
     private val streamCacheRepository: StreamCacheRepository,
     private val subsonicRepository: SubsonicRepository,
+    private val networkTypeProvider: NetworkTypeProvider,
 ) : PlaybackManager {
     private val scope = CoroutineScope(SupervisorJob() + mainDispatcher)
     private val controllerMutex = Mutex()
@@ -64,6 +68,21 @@ class DefaultPlaybackManager @Inject constructor(
     private val mutablePlaybackState = MutableStateFlow(PlaybackSessionState())
 
     override val playbackState: StateFlow<PlaybackSessionState> = mutablePlaybackState.asStateFlow()
+
+    private fun effectiveQuality(): StreamQuality {
+        val prefs = playbackState.value.preferences
+        if (!prefs.adaptiveQualityEnabled) return prefs.streamQuality
+        return when (networkTypeProvider.networkType.value) {
+            NetworkType.WIFI -> prefs.wifiStreamQuality
+            NetworkType.MOBILE -> prefs.mobileStreamQuality
+        }
+    }
+
+    private fun resolveQualityForSong(serverId: Long, songId: String): StreamQuality {
+        val preferred = effectiveQuality()
+        val cachedKey = streamCacheRepository.findCachedQualityKey(serverId, songId, preferred)
+        return if (cachedKey != null) StreamQuality.fromStorageKey(cachedKey) else preferred
+    }
 
     init {
         scope.launch {
@@ -106,8 +125,8 @@ class DefaultPlaybackManager @Inject constructor(
         startIndex: Int,
     ) {
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
-        val quality = playbackState.value.preferences.streamQuality
         val mediaItems = songs.map { song ->
+            val quality = resolveQualityForSong(serverId, song.id)
             song.toPlaybackRequestMediaItem(
                 serverId = serverId,
                 qualityLabel = quality.label,
@@ -134,8 +153,8 @@ class DefaultPlaybackManager @Inject constructor(
         positionMs: Long,
     ) {
         if (songs.isEmpty()) return
-        val quality = playbackState.value.preferences.streamQuality
         val mediaItems = songs.map { song ->
+            val quality = resolveQualityForSong(serverId, song.id)
             song.toPlaybackRequestMediaItem(
                 serverId = serverId,
                 qualityLabel = quality.label,
@@ -175,8 +194,8 @@ class DefaultPlaybackManager @Inject constructor(
         songs: List<Song>,
     ) {
         if (songs.isEmpty()) return
-        val quality = playbackState.value.preferences.streamQuality
         val mediaItems = songs.map { song ->
+            val quality = resolveQualityForSong(serverId, song.id)
             song.toPlaybackRequestMediaItem(
                 serverId = serverId,
                 qualityLabel = quality.label,
@@ -197,7 +216,7 @@ class DefaultPlaybackManager @Inject constructor(
         serverId: Long,
         song: Song,
     ) {
-        val quality = playbackState.value.preferences.streamQuality
+        val quality = resolveQualityForSong(serverId, song.id)
         val mediaItem = song.toPlaybackRequestMediaItem(
             serverId = serverId,
             qualityLabel = quality.label,
