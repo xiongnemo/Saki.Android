@@ -10,6 +10,7 @@ import com.anzupop.saki.android.di.IoDispatcher
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.ServerEndpoint
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -25,14 +26,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import java.io.IOException
-import kotlin.coroutines.resume
 
 @Singleton
 class EndpointSelector @Inject constructor(
@@ -82,6 +82,12 @@ class EndpointSelector @Inject constructor(
         serverConfigs[server.id] = server
     }
 
+    fun unregisterServer(serverId: Long) {
+        serverConfigs.remove(serverId)
+        bestEndpoints.remove(serverId)
+        lastProbeResults.remove(serverId)
+    }
+
     private var reprobeJob: kotlinx.coroutines.Job? = null
 
     private fun onNetworkChanged() {
@@ -96,13 +102,18 @@ class EndpointSelector @Inject constructor(
     }
 
     suspend fun probe(serverId: Long, server: ServerConfig): ServerEndpoint? {
+        serverConfigs[serverId] = server
         val endpoints = server.endpoints
         if (endpoints.isEmpty()) return null
         if (endpoints.size == 1) {
             val ep = endpoints.first()
             val latency = pingEndpoint(ep, server)
             lastProbeResults[serverId] = listOf(EndpointProbeResult(ep, latency, latency != null))
-            if (latency != null) bestEndpoints[serverId] = ep.id
+            if (latency != null) {
+                bestEndpoints[serverId] = ep.id
+            } else {
+                bestEndpoints.remove(serverId)
+            }
             _probeVersion.update { it + 1 }
             return if (latency != null) ep else null
         }
@@ -143,8 +154,8 @@ class EndpointSelector @Inject constructor(
     }
 
     fun invalidate(serverId: Long, failedEndpointId: Long) {
-        if (bestEndpoints[serverId] == failedEndpointId) {
-            bestEndpoints.remove(serverId)
+        if (bestEndpoints.remove(serverId, failedEndpointId)) {
+            _probeVersion.update { it + 1 }
         }
     }
 
@@ -170,10 +181,10 @@ class EndpointSelector @Inject constructor(
                 override fun onResponse(call: Call, response: Response) {
                     response.close()
                     val ms = (System.nanoTime() - start) / 1_000_000
-                    cont.resume(if (response.isSuccessful) ms else null)
+                    if (cont.isActive) cont.resume(if (response.isSuccessful) ms else null)
                 }
                 override fun onFailure(call: Call, e: IOException) {
-                    cont.resume(null)
+                    if (cont.isActive) cont.resume(null)
                 }
             })
         }

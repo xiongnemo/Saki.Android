@@ -183,7 +183,7 @@ class SakiPlaybackService : MediaSessionService() {
     ): MediaSession? = mediaSession
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        savePlayQueue()
+        savePlayQueue(immediate = true)
         val activePlayer = player ?: return super.onTaskRemoved(rootIntent)
         if (!activePlayer.playWhenReady || activePlayer.mediaItemCount == 0) {
             stopSelf()
@@ -192,7 +192,7 @@ class SakiPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        savePlayQueue()
+        savePlayQueue(immediate = true)
         releaseSoundBalancingEffect()
 
         mediaSession?.release()
@@ -208,7 +208,7 @@ class SakiPlaybackService : MediaSessionService() {
 
     private var savePlayQueueJob: kotlinx.coroutines.Job? = null
 
-    private fun savePlayQueue() {
+    private fun savePlayQueue(immediate: Boolean = false) {
         val activePlayer = player ?: return
         val itemCount = activePlayer.mediaItemCount
         if (itemCount == 0) return
@@ -222,7 +222,7 @@ class SakiPlaybackService : MediaSessionService() {
         val currentSongId = request.songId
         savePlayQueueJob?.cancel()
         savePlayQueueJob = serviceScope.launch {
-            kotlinx.coroutines.delay(500)
+            if (!immediate) kotlinx.coroutines.delay(500)
             runCatching {
                 subsonicRepository.savePlayQueue(
                     serverId = serverId,
