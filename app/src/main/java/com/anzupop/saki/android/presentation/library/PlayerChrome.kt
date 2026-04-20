@@ -87,6 +87,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
@@ -537,6 +539,7 @@ fun NowPlayingOverlay(
                         }
                         val bufferColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                         val trackBgColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
                         Slider(
                             value = sliderValue.coerceIn(0f, duration),
                             onValueChange = { sliderValue = it },
@@ -549,20 +552,25 @@ fun NowPlayingOverlay(
                                     val y = size.height / 2
                                     val padding = 6.dp.toPx()
                                     val trackWidth = size.width - padding * 2
-                                    // Background track
+                                    val start = if (isRtl) size.width - padding else padding
+                                    val end = if (isRtl) padding else size.width - padding
                                     drawLine(
                                         color = trackBgColor,
-                                        start = Offset(padding, y),
-                                        end = Offset(padding + trackWidth, y),
+                                        start = Offset(start, y),
+                                        end = Offset(end, y),
                                         strokeWidth = trackHeight,
                                         cap = StrokeCap.Round,
                                     )
-                                    // Buffer progress
                                     if (bufferFraction > 0f) {
+                                        val bufferEnd = if (isRtl) {
+                                            start - trackWidth * bufferFraction
+                                        } else {
+                                            start + trackWidth * bufferFraction
+                                        }
                                         drawLine(
                                             color = bufferColor,
-                                            start = Offset(padding, y),
-                                            end = Offset(padding + trackWidth * bufferFraction, y),
+                                            start = Offset(start, y),
+                                            end = Offset(bufferEnd, y),
                                             strokeWidth = trackHeight,
                                             cap = StrokeCap.Round,
                                         )
