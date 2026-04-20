@@ -57,7 +57,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -82,7 +81,9 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -412,7 +413,11 @@ fun NowPlayingOverlay(
                                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.88f),
                             ) {
                                 Text(
-                                    text = if (track.isCached) "Offline • ${track.qualityLabel}" else "Streaming • ${track.qualityLabel}",
+                                    text = when {
+                                        track.isCached -> "Offline"
+                                        playbackState.isStreamCached -> "Cached"
+                                        else -> "Streaming"
+                                    } + " • ${track.qualityLabel}",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -518,38 +523,53 @@ fun NowPlayingOverlay(
                         val bufferFraction = if (playbackState.durationMs > 0) {
                             (playbackState.bufferedPositionMs.toFloat() / duration).coerceIn(0f, 1f)
                         } else 0f
-                        val sliderColors = if (track.isCached) {
+                        val isCachedTrack = track.isCached || playbackState.isStreamCached
+                        val sliderColors = if (isCachedTrack) {
                             SliderDefaults.colors(
                                 thumbColor = MaterialTheme.colorScheme.tertiary,
                                 activeTrackColor = MaterialTheme.colorScheme.tertiary,
-                                inactiveTrackColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.38f),
+                                inactiveTrackColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
                             )
                         } else {
                             SliderDefaults.colors(
-                                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                                inactiveTrackColor = Color.Transparent,
                             )
                         }
-                        Box {
-                            if (!track.isCached && bufferFraction > 0f) {
-                                LinearProgressIndicator(
-                                    progress = { bufferFraction },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 6.dp)
-                                        .align(Alignment.Center),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                                    trackColor = Color.Transparent,
-                                    strokeCap = StrokeCap.Round,
-                                )
-                            }
-                            Slider(
-                                value = sliderValue.coerceIn(0f, duration),
-                                onValueChange = { sliderValue = it },
-                                onValueChangeFinished = { onSeekTo(sliderValue.roundToLong()) },
-                                valueRange = 0f..duration,
-                                colors = sliderColors,
-                            )
-                        }
+                        val bufferColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        val trackBgColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        Slider(
+                            value = sliderValue.coerceIn(0f, duration),
+                            onValueChange = { sliderValue = it },
+                            onValueChangeFinished = { onSeekTo(sliderValue.roundToLong()) },
+                            valueRange = 0f..duration,
+                            colors = sliderColors,
+                            modifier = if (!isCachedTrack) {
+                                Modifier.drawBehind {
+                                    val trackHeight = 4.dp.toPx()
+                                    val y = size.height / 2
+                                    val padding = 6.dp.toPx()
+                                    val trackWidth = size.width - padding * 2
+                                    // Background track
+                                    drawLine(
+                                        color = trackBgColor,
+                                        start = Offset(padding, y),
+                                        end = Offset(padding + trackWidth, y),
+                                        strokeWidth = trackHeight,
+                                        cap = StrokeCap.Round,
+                                    )
+                                    // Buffer progress
+                                    if (bufferFraction > 0f) {
+                                        drawLine(
+                                            color = bufferColor,
+                                            start = Offset(padding, y),
+                                            end = Offset(padding + trackWidth * bufferFraction, y),
+                                            strokeWidth = trackHeight,
+                                            cap = StrokeCap.Round,
+                                        )
+                                    }
+                                }
+                            } else Modifier,
+                        )
                     }
                     item {
                         Row(
