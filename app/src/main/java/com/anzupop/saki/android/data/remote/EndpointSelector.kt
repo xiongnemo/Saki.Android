@@ -15,10 +15,10 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -101,6 +101,10 @@ class EndpointSelector @Inject constructor(
         }
     }
 
+    /**
+     * Probe endpoints: returns as soon as the first reachable endpoint is found.
+     * Remaining probes continue in background to find the optimal endpoint.
+     */
     suspend fun probe(serverId: Long, server: ServerConfig): ServerEndpoint? {
         serverConfigs[serverId] = server
         val endpoints = server.endpoints
@@ -119,32 +123,45 @@ class EndpointSelector @Inject constructor(
         }
 
         val probeResults = ConcurrentHashMap<Long, Long>()
-        kotlinx.coroutines.coroutineScope {
-            endpoints.map { endpoint ->
-                async {
-                    val latency = pingEndpoint(endpoint, server)
-                    if (latency != null) {
-                        probeResults[endpoint.id] = latency
-                        val currentBestId = bestEndpoints[serverId]
-                        val currentBestLatency = currentBestId?.let { probeResults[it] }
-                        if (currentBestLatency == null || latency < currentBestLatency) {
-                            bestEndpoints[serverId] = endpoint.id
-                            _probeVersion.update { it + 1 }
-                        }
+        val firstReachable = kotlinx.coroutines.CompletableDeferred<ServerEndpoint?>()
+
+        val jobs = endpoints.map { endpoint ->
+            scope.launch {
+                val latency = pingEndpoint(endpoint, server)
+                if (latency != null) {
+                    probeResults[endpoint.id] = latency
+                    val currentBestId = bestEndpoints[serverId]
+                    val currentBestLatency = currentBestId?.let { probeResults[it] }
+                    if (currentBestLatency == null || latency < currentBestLatency) {
+                        bestEndpoints[serverId] = endpoint.id
+                        _probeVersion.update { it + 1 }
                     }
+                    firstReachable.complete(endpoint)
                 }
-            }.forEach { it.await() }
+            }
         }
 
-        lastProbeResults[serverId] = endpoints.map { ep ->
-            val lat = probeResults[ep.id]
-            EndpointProbeResult(ep, lat, lat != null)
+        // Wait for first reachable or all probes to finish
+        scope.launch {
+            jobs.forEach { it.join() }
+            firstReachable.complete(null) // all failed
         }
-        if (probeResults.isEmpty()) {
-            bestEndpoints.remove(serverId)
+        val result = firstReachable.await()
+
+        // Update probe results with what we have so far; background jobs update the rest
+        scope.launch {
+            jobs.forEach { it.join() }
+            lastProbeResults[serverId] = endpoints.map { ep ->
+                val lat = probeResults[ep.id]
+                EndpointProbeResult(ep, lat, lat != null)
+            }
+            if (probeResults.isEmpty()) {
+                bestEndpoints.remove(serverId)
+            }
+            _probeVersion.update { it + 1 }
         }
-        _probeVersion.update { it + 1 }
-        return endpoints.find { it.id == bestEndpoints[serverId] }
+
+        return result
     }
 
     fun sortedEndpoints(serverId: Long, endpoints: List<ServerEndpoint>): List<ServerEndpoint> {

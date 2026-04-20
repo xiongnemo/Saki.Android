@@ -740,15 +740,17 @@ class SakiAppViewModel @Inject constructor(
         }
 
         if (selectedServerId != null && (serverChanged || lastLoadedServerId != selectedServerId)) {
-            loadServerContent(selectedServerId, forceRefresh = serverChanged)
-            servers.find { it.id == selectedServerId }?.let { server ->
-                viewModelScope.launch {
+            // Show cached content immediately, then probe + network refresh
+            loadCachedContent(selectedServerId)
+            viewModelScope.launch {
+                servers.find { it.id == selectedServerId }?.let { server ->
                     endpointSelector.probe(selectedServerId, server)
                     refreshEndpointStatus()
                 }
-            }
-            if (uiState.value.playbackState.currentItem == null) {
-                restorePlayQueue(selectedServerId)
+                if (uiState.value.playbackState.currentItem == null) {
+                    restorePlayQueue(selectedServerId)
+                }
+                refreshServerContent(selectedServerId, forceRefresh = serverChanged)
             }
         }
     }
@@ -798,6 +800,32 @@ class SakiAppViewModel @Inject constructor(
                 if (e is CancellationException) throw e
             }
         }
+    }
+
+    private fun loadCachedContent(serverId: Long) {
+        lastLoadedServerId = serverId
+        viewModelScope.launch {
+            val artists = runCatching { libraryCacheRepository.getArtists(serverId) }.getOrNull()
+            if (artists != null && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(libraryIndexes = artists) }
+            }
+            val albums = runCatching { libraryCacheRepository.getAlbums(serverId, uiState.value.selectedAlbumFeed) }.getOrNull()
+            if (!albums.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(albums = albums) }
+            }
+            val playlists = runCatching { libraryCacheRepository.getPlaylists(serverId) }.getOrNull()
+            if (!playlists.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(playlists = playlists) }
+            }
+            val songs = runCatching { libraryCacheRepository.getSongs(serverId) }.getOrNull()
+            if (!songs.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(songs = songs) }
+            }
+        }
+    }
+
+    private fun refreshServerContent(serverId: Long, forceRefresh: Boolean = false) {
+        loadServerContent(serverId, forceRefresh)
     }
 
     private fun loadServerContent(
