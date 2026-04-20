@@ -17,7 +17,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -91,6 +90,10 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -406,12 +409,13 @@ fun NowPlayingOverlay(
                         .verticalScroll(scrollState)
                         .pointerInput(showQueueAffordance) {
                             if (!showQueueAffordance) return@pointerInput
+                            val thresholdPx = 80.dp.toPx()
                             var totalDrag = 0f
                             detectVerticalDragGestures(
                                 onDragStart = { totalDrag = 0f },
                                 onVerticalDrag = { _, dragAmount ->
                                     totalDrag += dragAmount
-                                    if (totalDrag < -80) {
+                                    if (totalDrag < -thresholdPx && scrollState.value == 0) {
                                         showQueueSheet = true
                                     }
                                 },
@@ -642,7 +646,7 @@ fun NowPlayingOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         val toastContext = LocalContext.current
-                        IconToggleButton(
+                        ToggleIconButton(
                             icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                             active = playbackState.repeatMode != RepeatModeSetting.OFF,
                             contentDescription = "Repeat",
@@ -656,7 +660,7 @@ fun NowPlayingOverlay(
                                 android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
                             },
                         )
-                        IconToggleButton(
+                        ToggleIconButton(
                             icon = Icons.Rounded.Shuffle,
                             active = playbackState.shuffleEnabled,
                             contentDescription = "Shuffle",
@@ -667,7 +671,7 @@ fun NowPlayingOverlay(
                             },
                         )
                         if (showQueueAffordance) {
-                            IconToggleButton(
+                            ToggleIconButton(
                                 icon = Icons.Rounded.KeyboardArrowUp,
                                 active = false,
                                 contentDescription = "Show queue",
@@ -856,7 +860,7 @@ private fun PlayerActionButton(
 }
 
 @Composable
-private fun IconToggleButton(
+private fun ToggleIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     active: Boolean,
     contentDescription: String,
@@ -867,7 +871,13 @@ private fun IconToggleButton(
         color = if (active) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
     ) {
-        IconButton(onClick = onClick) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.semantics {
+                role = Role.Switch
+                stateDescription = if (active) "$contentDescription: On" else "$contentDescription: Off"
+            },
+        ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
@@ -878,40 +888,6 @@ private fun IconToggleButton(
     }
 }
 
-@Composable
-private fun TogglePill(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    active: Boolean,
-    onClick: () -> Unit,
-    compact: Boolean,
-) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = if (active) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f)
-        },
-    ) {
-        Row(
-            modifier = Modifier
-                .clickable(onClick = onClick)
-                .padding(
-                    horizontal = if (compact) 12.dp else 14.dp,
-                    vertical = if (compact) 10.dp else 12.dp,
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(imageVector = icon, contentDescription = null)
-            Text(
-                text = label,
-                modifier = Modifier.padding(start = 8.dp),
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
-    }
-}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
