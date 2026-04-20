@@ -66,8 +66,7 @@ class DefaultPlaybackPreferencesRepository @Inject constructor(
         }
     }
 
-    override suspend fun updateShuffleState(seed: Long, anchorIndex: Int) =
-        error("Room-backed repository does not support shuffle state. Use DataStore implementation.")
+    override suspend fun updateShuffleState(seed: Long, anchorIndex: Int) = Unit
     override suspend fun clearShuffleState() = Unit
     override suspend fun getShuffleState(): Pair<Long, Int>? = null
 

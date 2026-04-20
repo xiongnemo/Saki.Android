@@ -72,8 +72,14 @@ class DefaultPlaybackManager @Inject constructor(
 
             // Media3 auto-advanced in original order. Redirect to shuffled next.
             val nextVirtual = lastVirtualIndex + 1
-            if (nextVirtual < order.size) {
-                val targetPlayer = virtualToPlayer(nextVirtual)
+            val targetVirtual = when {
+                nextVirtual < order.size -> nextVirtual
+                ctrl.repeatMode == Player.REPEAT_MODE_ALL -> 0
+                ctrl.repeatMode == Player.REPEAT_MODE_ONE -> lastVirtualIndex
+                else -> null
+            }
+            if (targetVirtual != null) {
+                val targetPlayer = virtualToPlayer(targetVirtual)
                 if (ctrl.currentMediaItemIndex != targetPlayer) {
                     ctrl.seekToDefaultPosition(targetPlayer)
                 }
@@ -264,6 +270,7 @@ class DefaultPlaybackManager @Inject constructor(
         songs: List<Song>,
     ) {
         if (songs.isEmpty()) return
+        if (shuffleOrder != null) { shuffleOrder = null; persistShuffleState() }
         val mediaItems = songs.map { song ->
             val quality = resolveQualityForSong(serverId, song.id)
             song.toPlaybackRequestMediaItem(
@@ -286,6 +293,7 @@ class DefaultPlaybackManager @Inject constructor(
         serverId: Long,
         song: Song,
     ) {
+        if (shuffleOrder != null) { shuffleOrder = null; persistShuffleState() }
         val quality = resolveQualityForSong(serverId, song.id)
         val mediaItem = song.toPlaybackRequestMediaItem(
             serverId = serverId,
@@ -324,11 +332,17 @@ class DefaultPlaybackManager @Inject constructor(
     override suspend fun skipToNext() {
         withController { activeController ->
             if (shuffleOrder != null) {
+                val count = activeController.mediaItemCount
                 val currentVirtual = playerToVirtual(activeController.currentMediaItemIndex)
                 val nextVirtual = currentVirtual + 1
-                if (nextVirtual < activeController.mediaItemCount) {
-                    val nextPlayer = virtualToPlayer(nextVirtual)
-                    activeController.seekToDefaultPosition(nextPlayer)
+                val targetVirtual = when {
+                    nextVirtual < count -> nextVirtual
+                    activeController.repeatMode == Player.REPEAT_MODE_ALL -> 0
+                    activeController.repeatMode == Player.REPEAT_MODE_ONE -> currentVirtual
+                    else -> null
+                }
+                if (targetVirtual != null) {
+                    activeController.seekToDefaultPosition(virtualToPlayer(targetVirtual))
                     activeController.play()
                 }
             } else {
@@ -368,10 +382,17 @@ class DefaultPlaybackManager @Inject constructor(
     override suspend fun skipToPrevious() {
         withController { activeController ->
             if (shuffleOrder != null) {
+                val count = activeController.mediaItemCount
                 val currentVirtual = playerToVirtual(activeController.currentMediaItemIndex)
                 val prevVirtual = currentVirtual - 1
-                if (prevVirtual >= 0) {
-                    activeController.seekToDefaultPosition(virtualToPlayer(prevVirtual))
+                val targetVirtual = when {
+                    prevVirtual >= 0 -> prevVirtual
+                    activeController.repeatMode == Player.REPEAT_MODE_ALL -> count - 1
+                    activeController.repeatMode == Player.REPEAT_MODE_ONE -> currentVirtual
+                    else -> null
+                }
+                if (targetVirtual != null) {
+                    activeController.seekToDefaultPosition(virtualToPlayer(targetVirtual))
                     activeController.play()
                 }
             } else {
@@ -461,9 +482,9 @@ class DefaultPlaybackManager @Inject constructor(
             val playerIndex = virtualToPlayer(index)
             if (playerIndex !in 0 until activeController.mediaItemCount) return@withController
             activeController.removeMediaItem(playerIndex)
-            // Update shuffle order: remove and adjust indices
-            shuffleOrder = shuffleOrder?.let { order ->
-                order.filter { it != playerIndex }.map { if (it > playerIndex) it - 1 else it }
+            if (shuffleOrder != null) {
+                shuffleOrder = null
+                persistShuffleState()
             }
             syncState(activeController)
         }
@@ -523,6 +544,12 @@ class DefaultPlaybackManager @Inject constructor(
             ?: -1
 
         // Expose queue in shuffled order if shuffle is active
+        val order = shuffleOrder
+        if (order != null && order.size != queue.size) {
+            // Mapping is stale, clear it
+            shuffleOrder = null
+            persistShuffleState()
+        }
         val (displayQueue, displayIndex) = if (shuffleOrder != null && queue.isNotEmpty()) {
             val shuffled = shuffleOrder!!.mapNotNull { queue.getOrNull(it) }
             shuffled to playerToVirtual(playerIndex)
