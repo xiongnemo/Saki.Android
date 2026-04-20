@@ -295,6 +295,9 @@ private fun RootShell(
                 NowPlayingCapsule(
                     track = currentOrQueuedTrack,
                     isPlaying = uiState.playbackState.isPlaying,
+                    currentServer = currentOrQueuedTrack?.serverId?.let { sid ->
+                        uiState.servers.firstOrNull { it.id == sid }
+                    },
                     onExpand = onOpenNowPlaying,
                     onPlayPause = {
                         if (uiState.playbackState.isPlaying) onPausePlayback() else onResumePlayback()

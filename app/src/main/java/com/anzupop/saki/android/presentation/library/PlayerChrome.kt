@@ -129,6 +129,7 @@ import kotlinx.coroutines.withContext
 fun NowPlayingCapsule(
     track: PlaybackQueueItem?,
     isPlaying: Boolean,
+    currentServer: ServerConfig?,
     onExpand: () -> Unit,
     onPlayPause: () -> Unit,
     onSkipToPrevious: () -> Unit,
@@ -163,7 +164,7 @@ fun NowPlayingCapsule(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AnimatedContent(
-                targetState = Pair(track?.queueArtworkModel(), track?.title),
+                targetState = Pair(track?.queueArtworkModel(currentServer), track?.title),
                 transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
                 label = "capsule-artwork",
             ) { (model, title) ->
@@ -236,7 +237,7 @@ fun NowPlayingOverlay(
     lyrics: SongLyrics? = null,
 ) {
     val artwork = rememberArtworkPresentation(
-        fallbackModel = track.queueArtworkModel(),
+        fallbackModel = track.queueArtworkModel(currentServer),
     )
     var showDetails by remember(track.songId) { mutableStateOf(false) }
     var showMenu by remember(track.songId) { mutableStateOf(false) }
@@ -255,7 +256,7 @@ fun NowPlayingOverlay(
             if (currentIdx < queue.lastIndex) currentIdx + 1 else null,
         )
         for (i in adjacentIndices) {
-            val model = queue[i].queueArtworkModel() ?: continue
+            val model = queue[i].queueArtworkModel(currentServer) ?: continue
             val request = ImageRequest.Builder(context)
                 .data(model)
                 .size(coil3.size.Size.ORIGINAL)
@@ -474,7 +475,7 @@ fun NowPlayingOverlay(
                             ) {
                                 val queueItem = stableQueue.getOrNull(page)
                                 ArtworkCard(
-                                    model = queueItem?.queueArtworkModel(),
+                                    model = queueItem?.queueArtworkModel(currentServer),
                                     contentDescription = queueItem?.title,
                                     modifier = Modifier.size(artworkSize),
                                     cornerRadiusDp = 34,
@@ -727,6 +728,7 @@ fun NowPlayingOverlay(
                             QueueRow(
                                 item = item,
                                 isCurrent = index == playbackState.currentIndex,
+                                currentServer = currentServer,
                                 onClick = { onSkipToQueueItem(index) },
                                 onRemove = { onRemoveQueueItem(index) },
                             )
@@ -948,6 +950,7 @@ private fun MetadataLinkRow(
 private fun QueueRow(
     item: PlaybackQueueItem,
     isCurrent: Boolean,
+    currentServer: ServerConfig?,
     onClick: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -968,7 +971,7 @@ private fun QueueRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ArtworkCard(
-                model = item.queueArtworkModel(),
+                model = item.queueArtworkModel(currentServer),
                 contentDescription = item.title,
                 modifier = Modifier.size(48.dp),
                 cornerRadiusDp = 16,
@@ -1010,11 +1013,10 @@ private fun DetailLine(label: String, value: String?) {
     )
 }
 
-private fun PlaybackQueueItem.queueArtworkModel(): Any? {
+private fun PlaybackQueueItem.queueArtworkModel(server: ServerConfig?): Any? {
     return when {
         !coverArtPath.isNullOrBlank() -> File(coverArtPath)
-        !artworkUri.isNullOrBlank() -> artworkUri
-        else -> null
+        else -> resolveArtworkModel(server, coverArtId, null)
     }
 }
 
