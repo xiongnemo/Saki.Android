@@ -560,8 +560,9 @@ class DefaultPlaybackManager @Inject constructor(
 
         val currentRequest = player.currentMediaItem?.toPlaybackRequestOrNull()
         val streamCached = currentRequest != null && !currentRequest.isCached &&
-            player.bufferedPosition.coerceKnownTime() >= (player.duration.coerceKnownTime() - 1000L) &&
-            player.duration.coerceKnownTime() > 0L
+            streamCacheRepository.findCachedQualityKey(
+                currentRequest.serverId, currentRequest.songId, effectiveQuality(),
+            ) != null
 
         mutablePlaybackState.update { state ->
             state.copy(
