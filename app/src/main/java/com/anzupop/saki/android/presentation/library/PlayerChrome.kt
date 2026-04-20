@@ -312,16 +312,26 @@ fun NowPlayingOverlay(
         }
 
         // Artwork pager state synced with playback queue
+        var stableQueue by remember { mutableStateOf(playbackState.queue) }
         val artworkPagerState = rememberPagerState(
             initialPage = playbackState.currentIndex.coerceAtLeast(0),
-            pageCount = { playbackState.queue.size.coerceAtLeast(1) },
+            pageCount = { stableQueue.size.coerceAtLeast(1) },
         )
         // Sync pager when track changes externally (button skip, queue tap)
-        LaunchedEffect(playbackState.currentIndex) {
-            val target = playbackState.currentIndex.coerceAtLeast(0)
-            if (artworkPagerState.currentPage != target) {
-                artworkPagerState.animateScrollToPage(target)
+        var lastTrackId by remember { mutableStateOf(track.songId) }
+        // Buffer queue to avoid pager flash during shuffle toggle:
+        // update queue snapshot only after pager has scrolled to correct page
+        val targetPage = playbackState.currentIndex.coerceAtLeast(0)
+        LaunchedEffect(targetPage, track.songId, playbackState.queue) {
+            if (track.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
+                // Same song, index changed (shuffle toggle) — scroll first, then update queue
+                artworkPagerState.scrollToPage(targetPage)
             }
+            stableQueue = playbackState.queue
+            if (track.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
+                artworkPagerState.animateScrollToPage(targetPage)
+            }
+            lastTrackId = track.songId
         }
         // When user swipes pager, trigger skip
         val currentPlaybackIndex by rememberUpdatedState(playbackState.currentIndex)
@@ -450,7 +460,7 @@ fun NowPlayingOverlay(
                                     modifier = Modifier.fillMaxWidth(),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    val queueItem = playbackState.queue.getOrNull(page)
+                                    val queueItem = stableQueue.getOrNull(page)
                                     ArtworkCard(
                                         model = queueItem?.queueArtworkModel(),
                                         contentDescription = queueItem?.title,

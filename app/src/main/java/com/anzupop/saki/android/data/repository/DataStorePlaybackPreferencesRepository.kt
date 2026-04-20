@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.anzupop.saki.android.domain.model.DEFAULT_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.MAX_STREAM_CACHE_SIZE_MB
@@ -67,6 +68,29 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
         dataStore.edit { it[KEY_BLUETOOTH_LYRICS] = enabled }
     }
 
+    override suspend fun updateShuffleState(seed: Long, anchorIndex: Int) {
+        dataStore.edit {
+            it[KEY_SHUFFLE_SEED] = seed
+            it[KEY_SHUFFLE_ANCHOR] = anchorIndex
+        }
+    }
+
+    override suspend fun clearShuffleState() {
+        dataStore.edit {
+            it.remove(KEY_SHUFFLE_SEED)
+            it.remove(KEY_SHUFFLE_ANCHOR)
+        }
+    }
+
+    override suspend fun getShuffleState(): Pair<Long, Int>? {
+        val prefs = dataStore.data
+            .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+            .first()
+        val seed = prefs[KEY_SHUFFLE_SEED] ?: return null
+        val anchor = prefs[KEY_SHUFFLE_ANCHOR] ?: return null
+        return seed to anchor
+    }
+
     companion object {
         val KEY_STREAM_QUALITY = stringPreferencesKey("stream_quality")
         val KEY_ADAPTIVE_QUALITY = booleanPreferencesKey("adaptive_quality_enabled")
@@ -75,6 +99,8 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
         val KEY_SOUND_BALANCING_MODE = stringPreferencesKey("sound_balancing_mode")
         val KEY_STREAM_CACHE_SIZE_MB = intPreferencesKey("stream_cache_size_mb")
         val KEY_BLUETOOTH_LYRICS = booleanPreferencesKey("bluetooth_lyrics_enabled")
+        val KEY_SHUFFLE_SEED = longPreferencesKey("shuffle_seed")
+        val KEY_SHUFFLE_ANCHOR = intPreferencesKey("shuffle_anchor_index")
     }
 }
 

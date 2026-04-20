@@ -66,6 +66,10 @@ class DefaultPlaybackPreferencesRepository @Inject constructor(
         }
     }
 
+    override suspend fun updateShuffleState(seed: Long, anchorIndex: Int) = Unit
+    override suspend fun clearShuffleState() = Unit
+    override suspend fun getShuffleState(): Pair<Long, Int>? = null
+
     private suspend fun updatePreferences(
         transform: (PlaybackPreferencesEntity) -> PlaybackPreferencesEntity,
     ) {

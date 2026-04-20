@@ -23,4 +23,11 @@ interface PlaybackPreferencesRepository {
     suspend fun updateStreamCacheSizeMb(sizeMb: Int)
 
     suspend fun updateBluetoothLyrics(enabled: Boolean)
+
+    suspend fun updateShuffleState(seed: Long, anchorIndex: Int)
+
+    suspend fun clearShuffleState()
+
+    /** Returns (seed, anchorIndex) or null if no shuffle state saved. */
+    suspend fun getShuffleState(): Pair<Long, Int>?
 }

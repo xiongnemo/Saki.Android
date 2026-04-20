@@ -58,9 +58,32 @@ class DefaultPlaybackManager @Inject constructor(
 ) : PlaybackManager {
     private val scope = CoroutineScope(SupervisorJob() + mainDispatcher)
     private val controllerMutex = Mutex()
+    private var lastVirtualIndex: Int = -1
+
     private val controllerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             syncState(player)
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            val order = shuffleOrder ?: return
+            val ctrl = controller ?: return
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) return
+
+            // Media3 auto-advanced in original order. Redirect to shuffled next.
+            val nextVirtual = lastVirtualIndex + 1
+            val targetVirtual = when {
+                nextVirtual < order.size -> nextVirtual
+                ctrl.repeatMode == Player.REPEAT_MODE_ALL -> 0
+                ctrl.repeatMode == Player.REPEAT_MODE_ONE -> lastVirtualIndex
+                else -> null
+            }
+            if (targetVirtual != null) {
+                val targetPlayer = virtualToPlayer(targetVirtual)
+                if (ctrl.currentMediaItemIndex != targetPlayer) {
+                    ctrl.seekToDefaultPosition(targetPlayer)
+                }
+            }
         }
     }
 
@@ -164,6 +187,8 @@ class DefaultPlaybackManager @Inject constructor(
         startIndex: Int,
     ) {
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
+        shuffleOrder = null
+        persistShuffleState()
         val mediaItems = songs.map { song ->
             val quality = resolveQualityForSong(serverId, song.id)
             song.toPlaybackRequestMediaItem(
@@ -192,6 +217,7 @@ class DefaultPlaybackManager @Inject constructor(
         positionMs: Long,
     ) {
         if (songs.isEmpty()) return
+        shuffleOrder = null
         val mediaItems = songs.map { song ->
             val quality = resolveQualityForSong(serverId, song.id)
             song.toPlaybackRequestMediaItem(
@@ -208,6 +234,15 @@ class DefaultPlaybackManager @Inject constructor(
             val safeStartIndex = startIndex.coerceIn(mediaItems.indices)
             activeController.setMediaItems(mediaItems, safeStartIndex, positionMs)
             activeController.prepare()
+
+            // Restore shuffle state if previously saved
+            val saved = playbackPreferencesRepository.getShuffleState()
+            if (saved != null && mediaItems.size > 1) {
+                shuffleSeed = saved.first
+                shuffleAnchorIndex = saved.second.coerceIn(0, mediaItems.size - 1)
+                shuffleOrder = buildShuffleOrder(mediaItems.size, shuffleAnchorIndex, shuffleSeed)
+            }
+
             syncState(activeController)
         }
     }
@@ -217,6 +252,8 @@ class DefaultPlaybackManager @Inject constructor(
         startIndex: Int,
     ) {
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
+        shuffleOrder = null
+        persistShuffleState()
         val mediaItems = songs.map(CachedSong::toCachedMediaItem)
 
         withController { activeController ->
@@ -233,6 +270,7 @@ class DefaultPlaybackManager @Inject constructor(
         songs: List<Song>,
     ) {
         if (songs.isEmpty()) return
+        if (shuffleOrder != null) { shuffleOrder = null; persistShuffleState() }
         val mediaItems = songs.map { song ->
             val quality = resolveQualityForSong(serverId, song.id)
             song.toPlaybackRequestMediaItem(
@@ -255,6 +293,7 @@ class DefaultPlaybackManager @Inject constructor(
         serverId: Long,
         song: Song,
     ) {
+        if (shuffleOrder != null) { shuffleOrder = null; persistShuffleState() }
         val quality = resolveQualityForSong(serverId, song.id)
         val mediaItem = song.toPlaybackRequestMediaItem(
             serverId = serverId,
@@ -292,41 +331,73 @@ class DefaultPlaybackManager @Inject constructor(
 
     override suspend fun skipToNext() {
         withController { activeController ->
-            val nextIndex = activeController.currentMediaItemIndex + 1
-            if (nextIndex < activeController.mediaItemCount) {
-                val nextItem = activeController.getMediaItemAt(nextIndex)
-                val request = nextItem.toPlaybackRequestOrNull()
-                if (request != null && !request.isCached) {
-                    val quality = resolveQualityForSong(request.serverId, request.songId)
-                    if (quality.maxBitRate != request.maxBitRate) {
-                        val rebuilt = request.copy(
-                            qualityLabel = quality.label,
-                            streamCacheKey = streamCacheRepository.buildCacheKey(request.serverId, request.songId, quality),
-                            maxBitRate = quality.maxBitRate,
-                            format = quality.format,
-                        ).let { updated ->
-                            MediaItem.Builder()
-                                .setMediaId(updated.songId)
-                                .setMediaMetadata(updated.toMediaMetadata())
-                                .setRequestMetadata(
-                                    MediaItem.RequestMetadata.Builder()
-                                        .setExtras(updated.toBundle())
-                                        .build(),
-                                )
-                                .build()
+            if (shuffleOrder != null) {
+                val count = activeController.mediaItemCount
+                val currentVirtual = playerToVirtual(activeController.currentMediaItemIndex)
+                val nextVirtual = currentVirtual + 1
+                val targetVirtual = when {
+                    nextVirtual < count -> nextVirtual
+                    activeController.repeatMode == Player.REPEAT_MODE_ALL -> 0
+                    activeController.repeatMode == Player.REPEAT_MODE_ONE -> currentVirtual
+                    else -> null
+                }
+                if (targetVirtual != null) {
+                    activeController.seekToDefaultPosition(virtualToPlayer(targetVirtual))
+                    activeController.play()
+                }
+            } else {
+                val nextIndex = activeController.currentMediaItemIndex + 1
+                if (nextIndex < activeController.mediaItemCount) {
+                    val nextItem = activeController.getMediaItemAt(nextIndex)
+                    val request = nextItem.toPlaybackRequestOrNull()
+                    if (request != null && !request.isCached) {
+                        val quality = resolveQualityForSong(request.serverId, request.songId)
+                        if (quality.maxBitRate != request.maxBitRate) {
+                            val rebuilt = request.copy(
+                                qualityLabel = quality.label,
+                                streamCacheKey = streamCacheRepository.buildCacheKey(request.serverId, request.songId, quality),
+                                maxBitRate = quality.maxBitRate,
+                                format = quality.format,
+                            ).let { updated ->
+                                MediaItem.Builder()
+                                    .setMediaId(updated.songId)
+                                    .setMediaMetadata(updated.toMediaMetadata())
+                                    .setRequestMetadata(
+                                        MediaItem.RequestMetadata.Builder()
+                                            .setExtras(updated.toBundle())
+                                            .build(),
+                                    )
+                                    .build()
+                            }
+                            activeController.replaceMediaItem(nextIndex, rebuilt)
                         }
-                        activeController.replaceMediaItem(nextIndex, rebuilt)
                     }
                 }
+                activeController.seekToNext()
             }
-            activeController.seekToNext()
             syncState(activeController)
         }
     }
 
     override suspend fun skipToPrevious() {
         withController { activeController ->
-            activeController.seekToPrevious()
+            if (shuffleOrder != null) {
+                val count = activeController.mediaItemCount
+                val currentVirtual = playerToVirtual(activeController.currentMediaItemIndex)
+                val prevVirtual = currentVirtual - 1
+                val targetVirtual = when {
+                    prevVirtual >= 0 -> prevVirtual
+                    activeController.repeatMode == Player.REPEAT_MODE_ALL -> count - 1
+                    activeController.repeatMode == Player.REPEAT_MODE_ONE -> currentVirtual
+                    else -> null
+                }
+                if (targetVirtual != null) {
+                    activeController.seekToDefaultPosition(virtualToPlayer(targetVirtual))
+                    activeController.play()
+                }
+            } else {
+                activeController.seekToPrevious()
+            }
             syncState(activeController)
         }
     }
@@ -349,17 +420,58 @@ class DefaultPlaybackManager @Inject constructor(
         }
     }
 
+    // Shuffle mapping: virtual index → player index. Null when shuffle is off.
+    private var shuffleOrder: List<Int>? = null
+    private var shuffleSeed: Long = 0L
+    private var shuffleAnchorIndex: Int = 0 // player index of the track that was playing when shuffle was toggled
+
+    private fun buildShuffleOrder(count: Int, anchorPlayerIndex: Int, seed: Long): List<Int> {
+        val rest = (0 until count).filter { it != anchorPlayerIndex }.shuffled(kotlin.random.Random(seed))
+        return listOf(anchorPlayerIndex) + rest
+    }
+
+    private fun persistShuffleState() {
+        scope.launch {
+            if (shuffleOrder != null) {
+                playbackPreferencesRepository.updateShuffleState(shuffleSeed, shuffleAnchorIndex)
+            } else {
+                playbackPreferencesRepository.clearShuffleState()
+            }
+        }
+    }
+
+    private fun virtualToPlayer(virtualIndex: Int): Int =
+        shuffleOrder?.getOrNull(virtualIndex) ?: virtualIndex
+
+    private fun playerToVirtual(playerIndex: Int): Int =
+        shuffleOrder?.indexOf(playerIndex)?.takeIf { it >= 0 } ?: playerIndex
+
     override suspend fun toggleShuffle() {
         withController { activeController ->
-            activeController.shuffleModeEnabled = !activeController.shuffleModeEnabled
+            val count = activeController.mediaItemCount
+            if (count <= 1) return@withController
+
+            if (shuffleOrder == null) {
+                // Shuffle ON
+                val currentPlayerIndex = activeController.currentMediaItemIndex
+                shuffleSeed = System.nanoTime()
+                shuffleAnchorIndex = currentPlayerIndex
+                shuffleOrder = buildShuffleOrder(count, currentPlayerIndex, shuffleSeed)
+            } else {
+                // Shuffle OFF
+                shuffleOrder = null
+            }
+
+            persistShuffleState()
             syncState(activeController)
         }
     }
 
     override suspend fun skipToQueueItem(index: Int) {
         withController { activeController ->
-            if (index !in 0 until activeController.mediaItemCount) return@withController
-            activeController.seekToDefaultPosition(index)
+            val playerIndex = virtualToPlayer(index)
+            if (playerIndex !in 0 until activeController.mediaItemCount) return@withController
+            activeController.seekToDefaultPosition(playerIndex)
             activeController.play()
             syncState(activeController)
         }
@@ -367,8 +479,13 @@ class DefaultPlaybackManager @Inject constructor(
 
     override suspend fun removeQueueItem(index: Int) {
         withController { activeController ->
-            if (index !in 0 until activeController.mediaItemCount) return@withController
-            activeController.removeMediaItem(index)
+            val playerIndex = virtualToPlayer(index)
+            if (playerIndex !in 0 until activeController.mediaItemCount) return@withController
+            activeController.removeMediaItem(playerIndex)
+            if (shuffleOrder != null) {
+                shuffleOrder = null
+                persistShuffleState()
+            }
             syncState(activeController)
         }
     }
@@ -422,9 +539,24 @@ class DefaultPlaybackManager @Inject constructor(
         val queue = (0 until player.mediaItemCount)
             .map(player::getMediaItemAt)
             .mapNotNull(MediaItem::toQueueItemOrNull)
-        val currentIndex = player.currentMediaItemIndex
+        val playerIndex = player.currentMediaItemIndex
             .takeUnless { it == C.INDEX_UNSET }
             ?: -1
+
+        // Expose queue in shuffled order if shuffle is active
+        val order = shuffleOrder
+        if (order != null && order.size != queue.size) {
+            // Mapping is stale, clear it
+            shuffleOrder = null
+            persistShuffleState()
+        }
+        val (displayQueue, displayIndex) = if (shuffleOrder != null && queue.isNotEmpty()) {
+            val shuffled = shuffleOrder!!.mapNotNull { queue.getOrNull(it) }
+            shuffled to playerToVirtual(playerIndex)
+        } else {
+            queue to playerIndex
+        }
+        lastVirtualIndex = displayIndex
 
         val currentRequest = player.currentMediaItem?.toPlaybackRequestOrNull()
         val streamCached = currentRequest != null && !currentRequest.isCached &&
@@ -435,9 +567,9 @@ class DefaultPlaybackManager @Inject constructor(
             state.copy(
                 isConnected = true,
                 isPlaying = player.isPlaying,
-                currentItem = queue.getOrNull(currentIndex),
-                currentIndex = currentIndex,
-                queue = queue,
+                currentItem = displayQueue.getOrNull(displayIndex),
+                currentIndex = displayIndex,
+                queue = displayQueue,
                 positionMs = player.currentPosition.coerceKnownTime(),
                 durationMs = player.duration.coerceKnownTime().takeIf { it > 0 }
                     ?: player.currentMediaItem?.metadataDurationMs()
@@ -445,7 +577,7 @@ class DefaultPlaybackManager @Inject constructor(
                 bufferedPositionMs = player.bufferedPosition.coerceKnownTime(),
                 isStreamCached = streamCached,
                 repeatMode = player.repeatMode.toRepeatModeSetting(),
-                shuffleEnabled = player.shuffleModeEnabled,
+                shuffleEnabled = shuffleOrder != null,
                 runtimeInfo = player.currentAudioRuntimeInfoOrNull(),
             )
         }
