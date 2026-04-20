@@ -164,6 +164,7 @@ class DefaultPlaybackManager @Inject constructor(
         startIndex: Int,
     ) {
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
+        originalQueue = null
         val mediaItems = songs.map { song ->
             val quality = resolveQualityForSong(serverId, song.id)
             song.toPlaybackRequestMediaItem(
@@ -192,6 +193,7 @@ class DefaultPlaybackManager @Inject constructor(
         positionMs: Long,
     ) {
         if (songs.isEmpty()) return
+        originalQueue = null
         val mediaItems = songs.map { song ->
             val quality = resolveQualityForSong(serverId, song.id)
             song.toPlaybackRequestMediaItem(
@@ -217,6 +219,7 @@ class DefaultPlaybackManager @Inject constructor(
         startIndex: Int,
     ) {
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
+        originalQueue = null
         val mediaItems = songs.map(CachedSong::toCachedMediaItem)
 
         withController { activeController ->
@@ -349,9 +352,40 @@ class DefaultPlaybackManager @Inject constructor(
         }
     }
 
+    private var originalQueue: List<MediaItem>? = null
+
     override suspend fun toggleShuffle() {
         withController { activeController ->
-            activeController.shuffleModeEnabled = !activeController.shuffleModeEnabled
+            val count = activeController.mediaItemCount
+            if (count <= 1) return@withController
+
+            if (originalQueue == null) {
+                // Shuffle ON: save original order, shuffle remaining items
+                val currentIndex = activeController.currentMediaItemIndex
+                val items = (0 until count).map(activeController::getMediaItemAt)
+                originalQueue = items
+
+                val currentItem = items[currentIndex]
+                val rest = items.toMutableList().apply { removeAt(currentIndex) }.shuffled()
+                val shuffled = listOf(currentItem) + rest
+
+                activeController.clearMediaItems()
+                activeController.setMediaItems(shuffled, 0, activeController.currentPosition)
+                activeController.prepare()
+            } else {
+                // Shuffle OFF: restore original order
+                val currentMediaId = activeController.currentMediaItem?.mediaId
+                val position = activeController.currentPosition
+                val original = originalQueue!!
+                originalQueue = null
+
+                val restoredIndex = original.indexOfFirst { it.mediaId == currentMediaId }.coerceAtLeast(0)
+                activeController.clearMediaItems()
+                activeController.setMediaItems(original, restoredIndex, position)
+                activeController.prepare()
+            }
+
+            mutablePlaybackState.update { it.copy(shuffleEnabled = originalQueue != null) }
             syncState(activeController)
         }
     }
@@ -445,7 +479,7 @@ class DefaultPlaybackManager @Inject constructor(
                 bufferedPositionMs = player.bufferedPosition.coerceKnownTime(),
                 isStreamCached = streamCached,
                 repeatMode = player.repeatMode.toRepeatModeSetting(),
-                shuffleEnabled = player.shuffleModeEnabled,
+                shuffleEnabled = originalQueue != null,
                 runtimeInfo = player.currentAudioRuntimeInfoOrNull(),
             )
         }
