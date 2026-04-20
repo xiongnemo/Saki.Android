@@ -635,7 +635,12 @@ fun NowPlayingOverlay(
                     QueuePullAffordance(
                         onClick = {
                             coroutineScope.launch {
-                                listState.animateScrollToItem(9)
+                                val queueStart = listState.layoutInfo.totalItemsCount - playbackState.queue.size
+                                val targetIndex = queueStart + playbackState.currentIndex
+                                // Show current track ~40% from top; use fixed 3-row offset
+                                // since queue rows have consistent height
+                                val scrollTo = (targetIndex - 3).coerceAtLeast(0)
+                                listState.scrollToItem(scrollTo)
                             }
                         },
                     )
