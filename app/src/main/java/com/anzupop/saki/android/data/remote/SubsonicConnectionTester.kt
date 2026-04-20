@@ -101,8 +101,11 @@ class SubsonicConnectionTester @Inject constructor(
                         endpointUrl = endpointUrl,
                         message = "The server returned an empty response.",
                     )
-                val subsonicResponse = JSONObject(body).optJSONObject("subsonic-response")
-                    ?: return@withContext ConnectionTestResult.Failure(
+                val subsonicResponse = try {
+                    JSONObject(body).optJSONObject("subsonic-response")
+                } catch (_: org.json.JSONException) {
+                    null
+                } ?: return@withContext ConnectionTestResult.Failure(
                         endpointUrl = endpointUrl,
                         message = "Unexpected response from the server.",
                     )
