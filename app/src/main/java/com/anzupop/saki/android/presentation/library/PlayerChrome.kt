@@ -57,9 +57,11 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -83,6 +85,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
@@ -511,12 +514,42 @@ fun NowPlayingOverlay(
                         )
                     }
                     item {
-                        Slider(
-                            value = sliderValue.coerceIn(0f, playbackState.durationMs.coerceAtLeast(1L).toFloat()),
-                            onValueChange = { sliderValue = it },
-                            onValueChangeFinished = { onSeekTo(sliderValue.roundToLong()) },
-                            valueRange = 0f..playbackState.durationMs.coerceAtLeast(1L).toFloat(),
-                        )
+                        val duration = playbackState.durationMs.coerceAtLeast(1L).toFloat()
+                        val bufferFraction = if (playbackState.durationMs > 0) {
+                            (playbackState.bufferedPositionMs.toFloat() / duration).coerceIn(0f, 1f)
+                        } else 0f
+                        val sliderColors = if (track.isCached) {
+                            SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.tertiary,
+                                activeTrackColor = MaterialTheme.colorScheme.tertiary,
+                                inactiveTrackColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.38f),
+                            )
+                        } else {
+                            SliderDefaults.colors(
+                                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                            )
+                        }
+                        Box {
+                            if (!track.isCached && bufferFraction > 0f) {
+                                LinearProgressIndicator(
+                                    progress = { bufferFraction },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 6.dp)
+                                        .align(Alignment.Center),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                                    trackColor = Color.Transparent,
+                                    strokeCap = StrokeCap.Round,
+                                )
+                            }
+                            Slider(
+                                value = sliderValue.coerceIn(0f, duration),
+                                onValueChange = { sliderValue = it },
+                                onValueChangeFinished = { onSeekTo(sliderValue.roundToLong()) },
+                                valueRange = 0f..duration,
+                                colors = sliderColors,
+                            )
+                        }
                     }
                     item {
                         Row(
