@@ -18,3 +18,4 @@ PROCESS.md
 local.properties
 scripts/setup-env.sh
 scripts/deploy.sh
+deploy.sh

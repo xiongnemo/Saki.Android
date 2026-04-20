@@ -208,6 +208,7 @@ data class PlaybackSessionState(
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val bufferedPositionMs: Long = 0,
+    val isStreamCached: Boolean = false,
     val repeatMode: RepeatModeSetting = RepeatModeSetting.OFF,
     val shuffleEnabled: Boolean = false,
     val preferences: PlaybackPreferences = PlaybackPreferences(),

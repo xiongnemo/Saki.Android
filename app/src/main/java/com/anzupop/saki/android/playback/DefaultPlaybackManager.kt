@@ -426,6 +426,11 @@ class DefaultPlaybackManager @Inject constructor(
             .takeUnless { it == C.INDEX_UNSET }
             ?: -1
 
+        val currentRequest = player.currentMediaItem?.toPlaybackRequestOrNull()
+        val streamCached = currentRequest != null && !currentRequest.isCached &&
+            player.bufferedPosition.coerceKnownTime() >= (player.duration.coerceKnownTime() - 1000L) &&
+            player.duration.coerceKnownTime() > 0L
+
         mutablePlaybackState.update { state ->
             state.copy(
                 isConnected = true,
@@ -438,6 +443,7 @@ class DefaultPlaybackManager @Inject constructor(
                     ?: player.currentMediaItem?.metadataDurationMs()
                     ?: 0L,
                 bufferedPositionMs = player.bufferedPosition.coerceKnownTime(),
+                isStreamCached = streamCached,
                 repeatMode = player.repeatMode.toRepeatModeSetting(),
                 shuffleEnabled = player.shuffleModeEnabled,
                 runtimeInfo = player.currentAudioRuntimeInfoOrNull(),

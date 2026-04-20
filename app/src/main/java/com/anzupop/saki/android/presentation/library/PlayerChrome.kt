@@ -60,6 +60,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -80,9 +81,14 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
@@ -409,7 +415,11 @@ fun NowPlayingOverlay(
                                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.88f),
                             ) {
                                 Text(
-                                    text = if (track.isCached) "Offline • ${track.qualityLabel}" else "Streaming • ${track.qualityLabel}",
+                                    text = when {
+                                        track.isCached -> "Offline"
+                                        playbackState.isStreamCached -> "Cached"
+                                        else -> "Streaming"
+                                    } + " • ${track.qualityLabel}",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -511,11 +521,62 @@ fun NowPlayingOverlay(
                         )
                     }
                     item {
+                        val duration = playbackState.durationMs.coerceAtLeast(1L).toFloat()
+                        val bufferFraction = if (playbackState.durationMs > 0) {
+                            (playbackState.bufferedPositionMs.toFloat() / duration).coerceIn(0f, 1f)
+                        } else 0f
+                        val isCachedTrack = track.isCached || playbackState.isStreamCached
+                        val sliderColors = if (isCachedTrack) {
+                            SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.tertiary,
+                                activeTrackColor = MaterialTheme.colorScheme.tertiary,
+                                inactiveTrackColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                            )
+                        } else {
+                            SliderDefaults.colors(
+                                inactiveTrackColor = Color.Transparent,
+                            )
+                        }
+                        val bufferColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        val trackBgColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
                         Slider(
-                            value = sliderValue.coerceIn(0f, playbackState.durationMs.coerceAtLeast(1L).toFloat()),
+                            value = sliderValue.coerceIn(0f, duration),
                             onValueChange = { sliderValue = it },
                             onValueChangeFinished = { onSeekTo(sliderValue.roundToLong()) },
-                            valueRange = 0f..playbackState.durationMs.coerceAtLeast(1L).toFloat(),
+                            valueRange = 0f..duration,
+                            colors = sliderColors,
+                            modifier = if (!isCachedTrack) {
+                                Modifier.drawBehind {
+                                    val trackHeight = 4.dp.toPx()
+                                    val y = size.height / 2
+                                    val padding = 6.dp.toPx()
+                                    val trackWidth = size.width - padding * 2
+                                    val start = if (isRtl) size.width - padding else padding
+                                    val end = if (isRtl) padding else size.width - padding
+                                    drawLine(
+                                        color = trackBgColor,
+                                        start = Offset(start, y),
+                                        end = Offset(end, y),
+                                        strokeWidth = trackHeight,
+                                        cap = StrokeCap.Round,
+                                    )
+                                    if (bufferFraction > 0f) {
+                                        val bufferEnd = if (isRtl) {
+                                            start - trackWidth * bufferFraction
+                                        } else {
+                                            start + trackWidth * bufferFraction
+                                        }
+                                        drawLine(
+                                            color = bufferColor,
+                                            start = Offset(start, y),
+                                            end = Offset(bufferEnd, y),
+                                            strokeWidth = trackHeight,
+                                            cap = StrokeCap.Round,
+                                        )
+                                    }
+                                }
+                            } else Modifier,
                         )
                     }
                     item {
