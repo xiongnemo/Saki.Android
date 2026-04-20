@@ -89,6 +89,7 @@ class DefaultPlaybackManager @Inject constructor(
 
     private var controller: MediaController? = null
     private val mutablePlaybackState = MutableStateFlow(PlaybackSessionState())
+    @Volatile private var cacheReady = false
 
     override val playbackState: StateFlow<PlaybackSessionState> = mutablePlaybackState.asStateFlow()
 
@@ -140,6 +141,9 @@ class DefaultPlaybackManager @Inject constructor(
     }
 
     init {
+        scope.launch {
+            streamCacheRepository.observeCacheVersion().collect { if (it > 0L) cacheReady = true }
+        }
         scope.launch {
             playbackPreferencesRepository.observePreferences().collect { preferences ->
                 mutablePlaybackState.update { state ->
@@ -560,8 +564,10 @@ class DefaultPlaybackManager @Inject constructor(
 
         val currentRequest = player.currentMediaItem?.toPlaybackRequestOrNull()
         val streamCached = currentRequest != null && !currentRequest.isCached &&
-            player.bufferedPosition.coerceKnownTime() >= (player.duration.coerceKnownTime() - 1000L) &&
-            player.duration.coerceKnownTime() > 0L
+            cacheReady &&
+            streamCacheRepository.findCachedQualityKey(
+                currentRequest.serverId, currentRequest.songId, effectiveQuality(),
+            ) != null
 
         mutablePlaybackState.update { state ->
             state.copy(
