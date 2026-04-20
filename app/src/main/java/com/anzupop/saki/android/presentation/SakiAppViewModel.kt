@@ -740,15 +740,19 @@ class SakiAppViewModel @Inject constructor(
         }
 
         if (selectedServerId != null && (serverChanged || lastLoadedServerId != selectedServerId)) {
-            loadServerContent(selectedServerId, forceRefresh = serverChanged)
-            servers.find { it.id == selectedServerId }?.let { server ->
-                viewModelScope.launch {
+            // Show cached content immediately, then probe + network refresh
+            loadCachedContent(selectedServerId)
+            viewModelScope.launch {
+                servers.find { it.id == selectedServerId }?.let { server ->
                     endpointSelector.probe(selectedServerId, server)
                     refreshEndpointStatus()
                 }
-            }
-            if (uiState.value.playbackState.currentItem == null) {
-                restorePlayQueue(selectedServerId)
+                if (endpointSelector.getActiveEndpointId(selectedServerId) != null) {
+                    if (uiState.value.playbackState.currentItem == null) {
+                        restorePlayQueue(selectedServerId)
+                    }
+                    refreshServerContent(selectedServerId, forceRefresh = serverChanged)
+                }
             }
         }
     }
@@ -798,6 +802,42 @@ class SakiAppViewModel @Inject constructor(
                 if (e is CancellationException) throw e
             }
         }
+    }
+
+    private fun loadCachedContent(serverId: Long) {
+        lastLoadedServerId = serverId
+        viewModelScope.launch {
+            suspend fun <T> loadCachedOrNull(block: suspend () -> T): T? = try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+
+            val artists = loadCachedOrNull { libraryCacheRepository.getArtists(serverId) }
+            if (artists != null && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(libraryIndexes = artists) }
+            }
+            val selectedAlbumFeed = uiState.value.selectedAlbumFeed
+            val albums = loadCachedOrNull { libraryCacheRepository.getAlbums(serverId, selectedAlbumFeed) }
+            if (!albums.isNullOrEmpty() && uiState.value.selectedServerId == serverId &&
+                uiState.value.selectedAlbumFeed == selectedAlbumFeed) {
+                mutableUiState.update { it.copy(albums = albums) }
+            }
+            val playlists = loadCachedOrNull { libraryCacheRepository.getPlaylists(serverId) }
+            if (!playlists.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(playlists = playlists) }
+            }
+            val songs = loadCachedOrNull { libraryCacheRepository.getSongs(serverId) }
+            if (!songs.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(songs = songs) }
+            }
+        }
+    }
+
+    private fun refreshServerContent(serverId: Long, forceRefresh: Boolean = false) {
+        loadServerContent(serverId, forceRefresh)
     }
 
     private fun loadServerContent(

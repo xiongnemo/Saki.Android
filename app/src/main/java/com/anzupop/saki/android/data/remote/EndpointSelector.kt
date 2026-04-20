@@ -15,10 +15,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -101,7 +102,15 @@ class EndpointSelector @Inject constructor(
         }
     }
 
+    /**
+     * Probe endpoints: returns as soon as the first reachable endpoint is found.
+     * Remaining probes continue in background to find the optimal endpoint.
+     * Cancels any previous in-flight probe for the same server.
+     */
+    private val activeProbeJobs = ConcurrentHashMap<Long, Job>()
+
     suspend fun probe(serverId: Long, server: ServerConfig): ServerEndpoint? {
+        activeProbeJobs.remove(serverId)?.cancel()
         serverConfigs[serverId] = server
         val endpoints = server.endpoints
         if (endpoints.isEmpty()) return null
@@ -119,32 +128,42 @@ class EndpointSelector @Inject constructor(
         }
 
         val probeResults = ConcurrentHashMap<Long, Long>()
-        kotlinx.coroutines.coroutineScope {
-            endpoints.map { endpoint ->
-                async {
-                    val latency = pingEndpoint(endpoint, server)
-                    if (latency != null) {
-                        probeResults[endpoint.id] = latency
-                        val currentBestId = bestEndpoints[serverId]
-                        val currentBestLatency = currentBestId?.let { probeResults[it] }
-                        if (currentBestLatency == null || latency < currentBestLatency) {
-                            bestEndpoints[serverId] = endpoint.id
-                            _probeVersion.update { it + 1 }
-                        }
+        // Initialize all endpoints as unreachable
+        lastProbeResults[serverId] = endpoints.map { EndpointProbeResult(it, null, false) }
+
+        val firstReachable = CompletableDeferred<ServerEndpoint?>()
+
+        val jobs = endpoints.map { endpoint ->
+            scope.launch {
+                val latency = pingEndpoint(endpoint, server)
+                if (latency != null) {
+                    probeResults[endpoint.id] = latency
+                    val currentBestId = bestEndpoints[serverId]
+                    val currentBestLatency = currentBestId?.let { probeResults[it] }
+                    if (currentBestLatency == null || latency < currentBestLatency) {
+                        bestEndpoints[serverId] = endpoint.id
                     }
                 }
-            }.forEach { it.await() }
+                // Update this endpoint's result incrementally
+                lastProbeResults[serverId] = endpoints.map { ep ->
+                    val lat = probeResults[ep.id]
+                    EndpointProbeResult(ep, lat, lat != null)
+                }
+                _probeVersion.update { it + 1 }
+                if (latency != null) firstReachable.complete(endpoint)
+            }
         }
 
-        lastProbeResults[serverId] = endpoints.map { ep ->
-            val lat = probeResults[ep.id]
-            EndpointProbeResult(ep, lat, lat != null)
+        // Single background coroutine: wait for all jobs, then finalize
+        val parentJob = scope.launch {
+            jobs.forEach { it.join() }
+            firstReachable.complete(null) // all failed
+            if (probeResults.isEmpty()) bestEndpoints.remove(serverId)
+            _probeVersion.update { it + 1 }
         }
-        if (probeResults.isEmpty()) {
-            bestEndpoints.remove(serverId)
-        }
-        _probeVersion.update { it + 1 }
-        return endpoints.find { it.id == bestEndpoints[serverId] }
+        activeProbeJobs[serverId] = parentJob
+
+        return firstReachable.await()
     }
 
     fun sortedEndpoints(serverId: Long, endpoints: List<ServerEndpoint>): List<ServerEndpoint> {
