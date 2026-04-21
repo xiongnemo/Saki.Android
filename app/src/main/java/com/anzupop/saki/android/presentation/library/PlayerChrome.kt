@@ -229,6 +229,7 @@ fun NowPlayingOverlay(
     onSkipToQueueItem: (Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
     currentServer: ServerConfig?,
+    servers: List<ServerConfig> = emptyList(),
     activeEndpointLabel: String? = null,
     activeEndpointId: Long? = null,
     endpointProbeResults: List<EndpointProbeInfo> = emptyList(),
@@ -236,6 +237,7 @@ fun NowPlayingOverlay(
     onReprobeEndpoints: () -> Unit = {},
     lyrics: SongLyrics? = null,
 ) {
+    val serversById = remember(servers) { servers.associateBy { it.id } }
     val artwork = rememberArtworkPresentation(
         fallbackModel = track.queueArtworkModel(currentServer),
     )
@@ -250,13 +252,15 @@ fun NowPlayingOverlay(
     val currentIdx = playbackState.currentIndex
     val prevSongId = queue.getOrNull(currentIdx - 1)?.songId
     val nextSongId = queue.getOrNull(currentIdx + 1)?.songId
-    LaunchedEffect(track.songId, prevSongId, nextSongId) {
+    LaunchedEffect(track.songId, prevSongId, nextSongId, currentServer) {
         val adjacentIndices = listOfNotNull(
             if (currentIdx > 0) currentIdx - 1 else null,
             if (currentIdx < queue.lastIndex) currentIdx + 1 else null,
         )
         for (i in adjacentIndices) {
-            val model = queue[i].queueArtworkModel(currentServer) ?: continue
+            val item = queue[i]
+            val server = item.serverId?.let { serversById[it] }
+            val model = item.queueArtworkModel(server) ?: continue
             val request = ImageRequest.Builder(context)
                 .data(model)
                 .size(coil3.size.Size.ORIGINAL)
@@ -475,7 +479,7 @@ fun NowPlayingOverlay(
                             ) {
                                 val queueItem = stableQueue.getOrNull(page)
                                 ArtworkCard(
-                                    model = queueItem?.queueArtworkModel(currentServer),
+                                    model = queueItem?.queueArtworkModel(queueItem.serverId?.let { serversById[it] }),
                                     contentDescription = queueItem?.title,
                                     modifier = Modifier.size(artworkSize),
                                     cornerRadiusDp = 34,
@@ -728,7 +732,7 @@ fun NowPlayingOverlay(
                             QueueRow(
                                 item = item,
                                 isCurrent = index == playbackState.currentIndex,
-                                currentServer = currentServer,
+                                currentServer = item.serverId?.let { serversById[it] },
                                 onClick = { onSkipToQueueItem(index) },
                                 onRemove = { onRemoveQueueItem(index) },
                             )
@@ -1016,7 +1020,9 @@ private fun DetailLine(label: String, value: String?) {
 private fun PlaybackQueueItem.queueArtworkModel(server: ServerConfig?): Any? {
     return when {
         !coverArtPath.isNullOrBlank() -> File(coverArtPath)
-        else -> resolveArtworkModel(server, coverArtId, null)
+        server != null -> resolveArtworkModel(server, coverArtId, null)
+        !artworkUri.isNullOrBlank() -> artworkUri
+        else -> null
     }
 }
 

@@ -341,6 +341,7 @@ private fun RootShell(
             onSkipToQueueItem = onSkipToQueueItem,
             onRemoveQueueItem = onRemoveQueueItem,
             currentServer = uiState.servers.firstOrNull { it.id == track.serverId },
+            servers = uiState.servers,
             activeEndpointLabel = endpointStatus.activeEndpointLabel,
             activeEndpointId = endpointStatus.activeEndpointId,
             endpointProbeResults = endpointStatus.probeResults,
