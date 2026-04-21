@@ -207,6 +207,30 @@ class EndpointSelector @Inject constructor(
 
     fun isForced(serverId: Long): Boolean = forcedEndpoints.containsKey(serverId)
 
+    fun findServerByHostPort(host: String, port: Int): Long? {
+        var matchedServerId: Long? = null
+        for ((serverId, config) in serverConfigs) {
+            for (ep in config.endpoints) {
+                val url = ep.baseUrl.trimEnd('/').toHttpUrlOrNull() ?: continue
+                if (url.host == host && url.port == port) {
+                    if (matchedServerId == null) {
+                        matchedServerId = serverId
+                    } else if (matchedServerId != serverId) {
+                        return null // ambiguous
+                    }
+                }
+            }
+        }
+        return matchedServerId
+    }
+
+    /** Returns the first endpoint by order for the given server (used as canonical base for Coil URLs). */
+    fun getCanonicalEndpoint(serverId: Long): ServerEndpoint? {
+        return serverConfigs[serverId]?.endpoints
+            ?.sortedBy(ServerEndpoint::order)
+            ?.firstOrNull()
+    }
+
     private suspend fun pingEndpoint(endpoint: ServerEndpoint, server: ServerConfig): Long? {
         val authQuery = SubsonicAuth.baseQuery(server)
         val urlBuilder = endpoint.baseUrl.trimEnd('/').toHttpUrlOrNull()

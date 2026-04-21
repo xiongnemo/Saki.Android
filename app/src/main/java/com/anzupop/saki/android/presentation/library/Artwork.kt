@@ -83,10 +83,15 @@ fun resolveArtworkModel(
     return server?.buildCoverArtUrl(coverArtId)
 }
 
+/**
+ * Builds a deterministic cover art URL using the first endpoint by order and a salt derived
+ * from the cover art ID. Stable for a fixed server configuration and coverArtId, enabling
+ * Coil's disk cache to reuse entries. At request time, [CoverArtEndpointInterceptor] rewrites
+ * the base URL to the current best endpoint.
+ */
 private fun ServerConfig.buildCoverArtUrl(coverArtId: String?): String? {
     if (coverArtId.isNullOrBlank()) return null
-    val endpoint = endpoints.sortedBy(ServerEndpoint::order)
-        .firstOrNull() ?: return null
+    val endpoint = endpoints.sortedBy(ServerEndpoint::order).firstOrNull() ?: return null
     val baseUrl = endpoint.baseUrl.toHttpUrlOrNull() ?: return null
     val salt = md5(coverArtId).take(8)
     val hash = md5("$password$salt")

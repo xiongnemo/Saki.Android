@@ -1,6 +1,8 @@
 package com.anzupop.saki.android.di
 
 import com.anzupop.saki.android.BuildConfig
+import com.anzupop.saki.android.data.remote.CoverArtEndpointInterceptor
+import com.anzupop.saki.android.data.remote.EndpointSelector
 import com.anzupop.saki.android.data.remote.HTTP_USER_AGENT
 import com.anzupop.saki.android.data.remote.subsonic.SubsonicApiService
 import com.squareup.moshi.Moshi
@@ -46,15 +48,25 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideCoverArtEndpointInterceptor(
+        endpointSelector: dagger.Lazy<EndpointSelector>,
+    ): CoverArtEndpointInterceptor {
+        return CoverArtEndpointInterceptor { endpointSelector.get() }
+    }
+
+    @Provides
+    @Singleton
     fun provideOkHttpClient(
         loggingInterceptor: HttpLoggingInterceptor,
         userAgentInterceptor: Interceptor,
+        coverArtEndpointInterceptor: CoverArtEndpointInterceptor,
     ): OkHttpClient {
         return OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(userAgentInterceptor)
+            .addInterceptor(coverArtEndpointInterceptor)
             .addInterceptor(loggingInterceptor)
             .build()
     }
