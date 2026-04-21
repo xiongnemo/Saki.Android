@@ -1104,6 +1104,7 @@ class SakiAppViewModel @Inject constructor(
             current.copy(
                 activeEndpointLabel = results.find { it.endpoint.id == activeId }?.endpoint?.label,
                 activeEndpointId = activeId,
+                isForced = endpointSelector.isForced(serverId),
                 probeResults = results.map { r ->
                     EndpointProbeInfo(
                         id = r.endpoint.id,
@@ -1114,6 +1115,15 @@ class SakiAppViewModel @Inject constructor(
                     )
                 },
             )
+        }
+    }
+
+    fun forceEndpoint(endpointId: Long) {
+        val serverId = uiState.value.selectedServerId ?: return
+        if (endpointSelector.getActiveEndpointId(serverId) == endpointId && endpointSelector.isForced(serverId)) {
+            endpointSelector.clearForce(serverId)
+        } else {
+            endpointSelector.forceEndpoint(serverId, endpointId)
         }
     }
 
@@ -1179,6 +1189,7 @@ class SakiAppViewModel @Inject constructor(
 data class EndpointStatus(
     val activeEndpointLabel: String? = null,
     val activeEndpointId: Long? = null,
+    val isForced: Boolean = false,
     val probeResults: List<EndpointProbeInfo> = emptyList(),
     val isProbing: Boolean = false,
 )

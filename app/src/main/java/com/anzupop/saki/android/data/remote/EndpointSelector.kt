@@ -44,6 +44,7 @@ class EndpointSelector @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     private val bestEndpoints = ConcurrentHashMap<Long, Long>()
+    private val forcedEndpoints = ConcurrentHashMap<Long, Long>()
     private val lastProbeResults = ConcurrentHashMap<Long, List<EndpointProbeResult>>()
     private val serverConfigs = ConcurrentHashMap<Long, ServerConfig>()
 
@@ -86,12 +87,14 @@ class EndpointSelector @Inject constructor(
     fun unregisterServer(serverId: Long) {
         serverConfigs.remove(serverId)
         bestEndpoints.remove(serverId)
+        forcedEndpoints.remove(serverId)
         lastProbeResults.remove(serverId)
     }
 
     private var reprobeJob: kotlinx.coroutines.Job? = null
 
     private fun onNetworkChanged() {
+        forcedEndpoints.clear()
         reprobeJob?.cancel()
         reprobeJob = scope.launch {
             val delays = longArrayOf(0, 3_000, 6_000, 12_000)
@@ -118,10 +121,12 @@ class EndpointSelector @Inject constructor(
             val ep = endpoints.first()
             val latency = pingEndpoint(ep, server)
             lastProbeResults[serverId] = listOf(EndpointProbeResult(ep, latency, latency != null))
-            if (latency != null) {
-                bestEndpoints[serverId] = ep.id
-            } else {
-                bestEndpoints.remove(serverId)
+            if (forcedEndpoints[serverId] == null) {
+                if (latency != null) {
+                    bestEndpoints[serverId] = ep.id
+                } else {
+                    bestEndpoints.remove(serverId)
+                }
             }
             _probeVersion.update { it + 1 }
             return if (latency != null) ep else null
@@ -138,10 +143,12 @@ class EndpointSelector @Inject constructor(
                 val latency = pingEndpoint(endpoint, server)
                 if (latency != null) {
                     probeResults[endpoint.id] = latency
-                    val currentBestId = bestEndpoints[serverId]
-                    val currentBestLatency = currentBestId?.let { probeResults[it] }
-                    if (currentBestLatency == null || latency < currentBestLatency) {
-                        bestEndpoints[serverId] = endpoint.id
+                    if (forcedEndpoints[serverId] == null) {
+                        val currentBestId = bestEndpoints[serverId]
+                        val currentBestLatency = currentBestId?.let { probeResults[it] }
+                        if (currentBestLatency == null || latency < currentBestLatency) {
+                            bestEndpoints[serverId] = endpoint.id
+                        }
                     }
                 }
                 // Update this endpoint's result incrementally
@@ -158,7 +165,9 @@ class EndpointSelector @Inject constructor(
         val parentJob = scope.launch {
             jobs.forEach { it.join() }
             firstReachable.complete(null) // all failed
-            if (probeResults.isEmpty()) bestEndpoints.remove(serverId)
+            if (probeResults.isEmpty() && forcedEndpoints[serverId] == null) {
+                bestEndpoints.remove(serverId)
+            }
             _probeVersion.update { it + 1 }
         }
         activeProbeJobs[serverId] = parentJob
@@ -173,6 +182,7 @@ class EndpointSelector @Inject constructor(
     }
 
     fun invalidate(serverId: Long, failedEndpointId: Long) {
+        forcedEndpoints.remove(serverId, failedEndpointId)
         if (bestEndpoints.remove(serverId, failedEndpointId)) {
             _probeVersion.update { it + 1 }
         }
@@ -182,6 +192,20 @@ class EndpointSelector @Inject constructor(
 
     fun getLastProbeResults(serverId: Long): List<EndpointProbeResult> =
         lastProbeResults[serverId] ?: emptyList()
+
+    fun forceEndpoint(serverId: Long, endpointId: Long) {
+        forcedEndpoints[serverId] = endpointId
+        bestEndpoints[serverId] = endpointId
+        _probeVersion.update { it + 1 }
+    }
+
+    fun clearForce(serverId: Long) {
+        forcedEndpoints.remove(serverId)
+        bestEndpoints.remove(serverId)
+        _probeVersion.update { it + 1 }
+    }
+
+    fun isForced(serverId: Long): Boolean = forcedEndpoints.containsKey(serverId)
 
     private suspend fun pingEndpoint(endpoint: ServerEndpoint, server: ServerConfig): Long? {
         val authQuery = SubsonicAuth.baseQuery(server)
