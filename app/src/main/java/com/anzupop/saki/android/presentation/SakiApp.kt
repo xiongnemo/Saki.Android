@@ -295,6 +295,9 @@ private fun RootShell(
                 NowPlayingCapsule(
                     track = currentOrQueuedTrack,
                     isPlaying = uiState.playbackState.isPlaying,
+                    currentServer = currentOrQueuedTrack?.serverId?.let { sid ->
+                        uiState.servers.firstOrNull { it.id == sid }
+                    },
                     onExpand = onOpenNowPlaying,
                     onPlayPause = {
                         if (uiState.playbackState.isPlaying) onPausePlayback() else onResumePlayback()
@@ -338,6 +341,7 @@ private fun RootShell(
             onSkipToQueueItem = onSkipToQueueItem,
             onRemoveQueueItem = onRemoveQueueItem,
             currentServer = uiState.servers.firstOrNull { it.id == track.serverId },
+            servers = uiState.servers,
             activeEndpointLabel = endpointStatus.activeEndpointLabel,
             activeEndpointId = endpointStatus.activeEndpointId,
             endpointProbeResults = endpointStatus.probeResults,
