@@ -106,7 +106,7 @@ class SakiPlaybackService : MediaSessionService() {
             .build()
             .apply {
                 preloadConfiguration =
-                    ExoPlayer.PreloadConfiguration(/* targetPreloadDurationUs = */ 10_000_000L)
+                    ExoPlayer.PreloadConfiguration(10 * C.MICROS_PER_SECOND)
                 addListener(PlaybackRecoveryListener())
                 addListener(PlayQueueSaveListener())
             }
