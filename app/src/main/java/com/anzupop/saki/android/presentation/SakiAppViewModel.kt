@@ -754,6 +754,14 @@ class SakiAppViewModel @Inject constructor(
                     refreshServerContent(selectedServerId, forceRefresh = serverChanged)
                 }
             }
+        } else if (selectedServerId != null) {
+            // Server didn't change but config may have (e.g. endpoints added/removed) — re-probe
+            viewModelScope.launch {
+                servers.find { it.id == selectedServerId }?.let { server ->
+                    endpointSelector.registerServer(server)
+                    endpointSelector.probe(selectedServerId, server)
+                }
+            }
         }
     }
 
