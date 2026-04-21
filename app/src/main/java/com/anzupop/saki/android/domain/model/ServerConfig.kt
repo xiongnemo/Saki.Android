@@ -19,6 +19,5 @@ data class ServerEndpoint(
     val id: Long = 0,
     val label: String,
     val baseUrl: String,
-    val isPrimary: Boolean = false,
     val order: Int = 0,
 )

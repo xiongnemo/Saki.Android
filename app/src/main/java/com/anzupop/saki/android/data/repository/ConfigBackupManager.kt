@@ -43,7 +43,7 @@ data class BackupServer(
 data class BackupEndpoint(
     val label: String,
     val url: String,
-    val isPrimary: Boolean = false,
+    val isPrimary: Boolean? = null,
 )
 
 @Singleton
@@ -65,8 +65,8 @@ class ConfigBackupManager @Inject constructor(
                 clientName = server.clientName,
                 apiVersion = server.apiVersion,
                 endpoints = server.endpoints
-                    .sortedWith(compareByDescending<ServerEndpoint> { it.isPrimary }.thenBy { it.order })
-                    .map { ep -> BackupEndpoint(label = ep.label, url = ep.baseUrl, isPrimary = ep.isPrimary) },
+                    .sortedBy(ServerEndpoint::order)
+                    .map { ep -> BackupEndpoint(label = ep.label, url = ep.baseUrl) },
             )
         }
 
@@ -107,7 +107,7 @@ class ConfigBackupManager @Inject constructor(
                 clientName = backupServer.clientName ?: DEFAULT_SUBSONIC_CLIENT,
                 apiVersion = backupServer.apiVersion ?: DEFAULT_SUBSONIC_API_VERSION,
                 endpoints = backupServer.endpoints.mapIndexed { index, ep ->
-                    ServerEndpoint(label = ep.label, baseUrl = ep.url, isPrimary = ep.isPrimary, order = index)
+                    ServerEndpoint(label = ep.label, baseUrl = ep.url, order = index)
                 },
             )
             serverConfigRepository.saveServerConfig(config)

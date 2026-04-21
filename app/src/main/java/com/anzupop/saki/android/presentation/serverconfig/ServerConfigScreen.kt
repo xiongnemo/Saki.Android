@@ -113,7 +113,6 @@ fun ServerConfigRoute(
         onRemoveEndpoint = viewModel::removeEndpoint,
         onEndpointLabelChanged = viewModel::updateEndpointLabel,
         onEndpointUrlChanged = viewModel::updateEndpointUrl,
-        onSetPrimaryEndpoint = viewModel::setPrimaryEndpoint,
         onTestEndpoint = viewModel::testEndpoint,
         onSaveServer = viewModel::saveServer,
     )
@@ -136,7 +135,6 @@ fun ServerConfigScreen(
     onRemoveEndpoint: (Long) -> Unit,
     onEndpointLabelChanged: (Long, String) -> Unit,
     onEndpointUrlChanged: (Long, String) -> Unit,
-    onSetPrimaryEndpoint: (Long) -> Unit,
     onTestEndpoint: (Long) -> Unit,
     onSaveServer: () -> Unit,
     modifier: Modifier = Modifier,
@@ -270,7 +268,6 @@ fun ServerConfigScreen(
                             onRemoveEndpoint = onRemoveEndpoint,
                             onEndpointLabelChanged = onEndpointLabelChanged,
                             onEndpointUrlChanged = onEndpointUrlChanged,
-                            onSetPrimaryEndpoint = onSetPrimaryEndpoint,
                             onTestEndpoint = onTestEndpoint,
                             onSaveServer = onSaveServer,
                         )
@@ -342,7 +339,7 @@ private fun EmptyStateCard(
                 style = MaterialTheme.typography.headlineMedium,
             )
             Text(
-                text = "Each profile can carry a primary endpoint plus fallbacks you will use in Phase 3. Save the local and remote addresses together now.",
+                text = "Each profile can carry multiple endpoints — save your local and remote addresses together now.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -359,8 +356,6 @@ private fun ServerCard(
     onEditServer: () -> Unit,
     onDeleteServer: () -> Unit,
 ) {
-    val primaryEndpoint = server.endpoints.firstOrNull(ServerEndpoint::isPrimary) ?: server.endpoints.firstOrNull()
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -406,32 +401,6 @@ private fun ServerCard(
                 }
             }
 
-            primaryEndpoint?.let { endpoint ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.78f),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = "Primary endpoint",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Text(
-                            text = endpoint.baseUrl,
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -464,11 +433,7 @@ private fun EndpointBadge(
 ) {
     Surface(
         shape = MaterialTheme.shapes.medium,
-        color = if (endpoint.isPrimary) {
-            MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
-        },
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Text(
             text = buildString {
@@ -478,11 +443,7 @@ private fun EndpointBadge(
             },
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             style = MaterialTheme.typography.labelLarge,
-            color = if (endpoint.isPrimary) {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -501,7 +462,6 @@ private fun ServerEditorSheet(
     onRemoveEndpoint: (Long) -> Unit,
     onEndpointLabelChanged: (Long, String) -> Unit,
     onEndpointUrlChanged: (Long, String) -> Unit,
-    onSetPrimaryEndpoint: (Long) -> Unit,
     onTestEndpoint: (Long) -> Unit,
     onSaveServer: () -> Unit,
     modifier: Modifier = Modifier,
@@ -624,7 +584,6 @@ private fun ServerEditorSheet(
                     canRemove = editor.endpoints.size > 1,
                     onLabelChanged = { onEndpointLabelChanged(endpoint.editorId, it) },
                     onUrlChanged = { onEndpointUrlChanged(endpoint.editorId, it) },
-                    onSetPrimary = { onSetPrimaryEndpoint(endpoint.editorId) },
                     onRemove = { onRemoveEndpoint(endpoint.editorId) },
                     onTest = { onTestEndpoint(endpoint.editorId) },
                 )
@@ -673,7 +632,6 @@ private fun EndpointEditorCard(
     canRemove: Boolean,
     onLabelChanged: (String) -> Unit,
     onUrlChanged: (String) -> Unit,
-    onSetPrimary: () -> Unit,
     onRemove: () -> Unit,
     onTest: () -> Unit,
 ) {
@@ -699,17 +657,6 @@ private fun EndpointEditorCard(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = endpoint.isPrimary,
-                        onClick = onSetPrimary,
-                    )
-                    Text(
-                        text = "Primary",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
             }
 
             OutlinedTextField(
@@ -863,7 +810,6 @@ private fun ServerConfigScreenPreview() {
                                 id = 1,
                                 label = "LAN",
                                 baseUrl = "http://192.168.1.50:4533",
-                                isPrimary = true,
                             ),
                             ServerEndpoint(
                                 id = 2,
@@ -882,7 +828,6 @@ private fun ServerConfigScreenPreview() {
                             editorId = 1,
                             label = "LAN",
                             baseUrl = "http://192.168.1.10:4040",
-                            isPrimary = true,
                             testState = EndpointConnectionState.Success(serverVersion = "1.16.1", latencyMs = 12),
                         ),
                         ServerEndpointEditorState(
@@ -908,7 +853,6 @@ private fun ServerConfigScreenPreview() {
             onRemoveEndpoint = {},
             onEndpointLabelChanged = { _, _ -> },
             onEndpointUrlChanged = { _, _ -> },
-            onSetPrimaryEndpoint = {},
             onTestEndpoint = {},
             onSaveServer = {},
         )

@@ -247,6 +247,32 @@ object DatabaseModule {
         }
     }
 
+    private val migration9To10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `server_endpoints_new` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `serverId` INTEGER NOT NULL,
+                    `label` TEXT NOT NULL,
+                    `baseUrl` TEXT NOT NULL,
+                    `displayOrder` INTEGER NOT NULL,
+                    FOREIGN KEY(`serverId`) REFERENCES `servers`(`id`) ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                INSERT INTO `server_endpoints_new` (`id`, `serverId`, `label`, `baseUrl`, `displayOrder`)
+                SELECT `id`, `serverId`, `label`, `baseUrl`, `displayOrder` FROM `server_endpoints`
+                """.trimIndent(),
+            )
+            db.execSQL("DROP TABLE `server_endpoints`")
+            db.execSQL("ALTER TABLE `server_endpoints_new` RENAME TO `server_endpoints`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_server_endpoints_serverId` ON `server_endpoints` (`serverId`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideSakiDatabase(
@@ -263,6 +289,7 @@ object DatabaseModule {
     fun allMigrations() = arrayOf(
         migration1To2, migration2To3, migration3To4, migration4To5,
         migration5To6, migration6To7, migration7To8, migration8To9,
+        migration9To10,
     )
 
     @Provides

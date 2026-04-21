@@ -25,6 +25,5 @@ data class ServerEndpointEntity(
     val serverId: Long,
     val label: String,
     val baseUrl: String,
-    val isPrimary: Boolean,
     val displayOrder: Int,
 )

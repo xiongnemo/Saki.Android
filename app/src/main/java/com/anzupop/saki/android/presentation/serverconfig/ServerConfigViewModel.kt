@@ -52,7 +52,7 @@ class ServerConfigViewModel @Inject constructor(
 
     fun startAddingServer() {
         editorState.value = ServerEditorState(
-            endpoints = listOf(newEndpoint(isPrimary = true)),
+            endpoints = listOf(newEndpoint()),
         )
     }
 
@@ -114,7 +114,7 @@ class ServerConfigViewModel @Inject constructor(
     fun addEndpoint() {
         updateEditor {
             copy(
-                endpoints = endpoints + newEndpoint(isPrimary = endpoints.isEmpty()),
+                endpoints = endpoints + newEndpoint(),
                 formError = null,
             )
         }
@@ -124,16 +124,7 @@ class ServerConfigViewModel @Inject constructor(
         updateEditor {
             val remaining = endpoints.filterNot { it.editorId == editorId }
             copy(
-                endpoints = when {
-                    remaining.isEmpty() -> listOf(newEndpoint(isPrimary = true))
-                    remaining.none(ServerEndpointEditorState::isPrimary) -> {
-                        remaining.mapIndexed { index, endpoint ->
-                            endpoint.copy(isPrimary = index == 0)
-                        }
-                    }
-
-                    else -> remaining
-                },
+                endpoints = remaining.ifEmpty { listOf(newEndpoint()) },
                 formError = null,
             )
         }
@@ -169,17 +160,6 @@ class ServerConfigViewModel @Inject constructor(
                     } else {
                         endpoint
                     }
-                },
-                formError = null,
-            )
-        }
-    }
-
-    fun setPrimaryEndpoint(editorId: Long) {
-        updateEditor {
-            copy(
-                endpoints = endpoints.map { endpoint ->
-                    endpoint.copy(isPrimary = endpoint.editorId == editorId)
                 },
                 formError = null,
             )
@@ -277,9 +257,6 @@ class ServerConfigViewModel @Inject constructor(
         if (draft.password.isBlank()) return "Enter the server password."
         if (draft.endpoints.isEmpty()) return "Add at least one endpoint."
         if (draft.endpoints.any { it.baseUrl.isBlank() }) return "Each endpoint needs a URL."
-        if (draft.endpoints.none(ServerEndpointEditorState::isPrimary)) {
-            return "Select a primary endpoint."
-        }
         return null
     }
 
@@ -312,11 +289,10 @@ class ServerConfigViewModel @Inject constructor(
         }
     }
 
-    private fun newEndpoint(isPrimary: Boolean): ServerEndpointEditorState {
+    private fun newEndpoint(): ServerEndpointEditorState {
         nextEditorId += 1
         return ServerEndpointEditorState(
             editorId = nextEditorId,
-            isPrimary = isPrimary,
         )
     }
 
@@ -335,7 +311,6 @@ class ServerConfigViewModel @Inject constructor(
                     persistedId = endpoint.id,
                     label = endpoint.label,
                     baseUrl = endpoint.baseUrl,
-                    isPrimary = endpoint.isPrimary,
                 )
             },
         )
@@ -354,7 +329,6 @@ class ServerConfigViewModel @Inject constructor(
                     id = endpoint.persistedId,
                     label = endpoint.label.trim(),
                     baseUrl = endpoint.baseUrl.trim(),
-                    isPrimary = endpoint.isPrimary,
                     order = index,
                 )
             },
@@ -384,7 +358,6 @@ data class ServerEndpointEditorState(
     val persistedId: Long = 0,
     val label: String = "",
     val baseUrl: String = "",
-    val isPrimary: Boolean = false,
     val testState: EndpointConnectionState = EndpointConnectionState.Idle,
 )
 
