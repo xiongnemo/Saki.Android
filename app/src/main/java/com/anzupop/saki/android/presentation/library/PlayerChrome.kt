@@ -328,17 +328,20 @@ fun NowPlayingOverlay(
         )
         // Sync pager when track changes externally (button skip, queue tap)
         var lastTrackId by remember { mutableStateOf(track.songId) }
+        // Guard: suppress pager-driven skips during programmatic scroll
+        var suppressPagerSkip by remember { mutableStateOf(false) }
         // Buffer queue to avoid pager flash during shuffle toggle:
         // update queue snapshot only after pager has scrolled to correct page
         val targetPage = playbackState.currentIndex.coerceAtLeast(0)
         LaunchedEffect(targetPage, track.songId, playbackState.queue) {
             if (track.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
-                // Same song, index changed (shuffle toggle) — scroll first, then update queue
-                artworkPagerState.scrollToPage(targetPage)
+                suppressPagerSkip = true
+                try { artworkPagerState.scrollToPage(targetPage) } finally { suppressPagerSkip = false }
             }
             stableQueue = playbackState.queue
             if (track.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
-                artworkPagerState.animateScrollToPage(targetPage)
+                suppressPagerSkip = true
+                try { artworkPagerState.animateScrollToPage(targetPage) } finally { suppressPagerSkip = false }
             }
             lastTrackId = track.songId
         }
@@ -349,6 +352,7 @@ fun NowPlayingOverlay(
             snapshotFlow { artworkPagerState.settledPage }
                 .distinctUntilChanged()
                 .collect { page ->
+                    if (suppressPagerSkip) return@collect
                     if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
                         onSkipToQueueItem(page)
                     }
