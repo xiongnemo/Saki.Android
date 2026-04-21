@@ -3,6 +3,7 @@ package com.anzupop.saki.android.playback
 import android.app.PendingIntent
 import android.content.Intent
 import android.media.audiofx.LoudnessEnhancer
+import android.os.Bundle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -19,6 +20,8 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSession.ConnectionResult
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.MediaSession.ControllerInfo
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.anzupop.saki.android.MainActivity
 import com.anzupop.saki.android.data.remote.HTTP_USER_AGENT
 import com.anzupop.saki.android.domain.model.LyricLine
@@ -49,6 +52,14 @@ import okhttp3.OkHttpClient
 @AndroidEntryPoint
 @UnstableApi
 class SakiPlaybackService : MediaSessionService() {
+    companion object {
+        const val ACTION_SET_SHUFFLE_ORDER = "saki.action.SET_SHUFFLE_ORDER"
+        const val EXTRA_SHUFFLE_SEED = "saki.extra.SHUFFLE_SEED"
+        const val EXTRA_SHUFFLE_ANCHOR = "saki.extra.SHUFFLE_ANCHOR"
+        const val EXTRA_SHUFFLE_COUNT = "saki.extra.SHUFFLE_COUNT"
+    }
+
+    private var pendingShuffleOrder: Triple<Long, Int, Int>? = null // seed, anchor, count
     @Inject
     lateinit var okHttpClient: OkHttpClient
 
@@ -110,6 +121,16 @@ class SakiPlaybackService : MediaSessionService() {
                     ExoPlayer.PreloadConfiguration(10 * C.MICROS_PER_SECOND)
                 addListener(PlaybackRecoveryListener())
                 addListener(PlayQueueSaveListener())
+                addListener(object : Player.Listener {
+                    override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                        val pending = pendingShuffleOrder ?: return
+                        val (seed, anchor, count) = pending
+                        if (mediaItemCount == count) {
+                            setShuffleOrder(SakiShuffleOrder(count, seed, anchor))
+                            pendingShuffleOrder = null
+                        }
+                    }
+                })
             }
 
         val sessionActivity = PendingIntent.getActivity(
@@ -251,7 +272,12 @@ class SakiPlaybackService : MediaSessionService() {
         ): ConnectionResult {
             val baseResult = ConnectionResult.AcceptedResultBuilder(session)
             if (controller.packageName == packageName || controller.isTrusted) {
-                return baseResult.build()
+                val sessionCommands = ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                    .add(SessionCommand(ACTION_SET_SHUFFLE_ORDER, Bundle.EMPTY))
+                    .build()
+                return baseResult
+                    .setAvailableSessionCommands(sessionCommands)
+                    .build()
             }
 
             val filteredPlayerCommands = Player.Commands.Builder()
@@ -284,6 +310,31 @@ class SakiPlaybackService : MediaSessionService() {
             }
 
             return future
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            if (customCommand.customAction == ACTION_SET_SHUFFLE_ORDER) {
+                val seed = args.getLong(EXTRA_SHUFFLE_SEED)
+                val anchor = args.getInt(EXTRA_SHUFFLE_ANCHOR)
+                val count = args.getInt(EXTRA_SHUFFLE_COUNT)
+                val exoPlayer = player as? ExoPlayer
+                if (exoPlayer != null && count > 0 && count == exoPlayer.mediaItemCount) {
+                    val order = SakiShuffleOrder(count, seed, anchor)
+                    exoPlayer.setShuffleOrder(order)
+                    pendingShuffleOrder = null
+                } else {
+                    pendingShuffleOrder = Triple(seed, anchor, count)
+                }
+                return SettableFuture.create<SessionResult>().apply {
+                    set(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+            }
+            return super.onCustomCommand(session, controller, customCommand, args)
         }
 
         private suspend fun resolvePlayableItem(
