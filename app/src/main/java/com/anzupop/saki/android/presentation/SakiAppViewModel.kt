@@ -1145,7 +1145,7 @@ class SakiAppViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 val json = configBackupManager.exportToJson()
-                appContext.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                appContext.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
                     ?: error("Cannot open output stream")
             }
                 .onSuccess { snackbarMessages.tryEmit("Backup exported") }
