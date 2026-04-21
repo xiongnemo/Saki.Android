@@ -76,6 +76,7 @@ class SakiPlaybackService : MediaSessionService() {
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
     private var originalMediaTitle: CharSequence? = null
+    private var originalMediaId: String? = null
     private var soundBalancingMode = SoundBalancingMode.OFF
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var loudnessEnhancerSessionId: Int = C.AUDIO_SESSION_ID_UNSET
@@ -165,6 +166,7 @@ class SakiPlaybackService : MediaSessionService() {
                                 val item = activePlayer.currentMediaItem ?: break
                                 if (originalMediaTitle == null) {
                                     originalMediaTitle = item.mediaMetadata.title
+                                    originalMediaId = item.mediaId
                                 }
                                 val updated = item.buildUpon()
                                     .setMediaMetadata(
@@ -371,15 +373,17 @@ class SakiPlaybackService : MediaSessionService() {
     private fun restoreOriginalTitle() {
         val activePlayer = player ?: return
         val title = originalMediaTitle ?: return
+        val savedId = originalMediaId
+        originalMediaTitle = null
+        originalMediaId = null
         val item = activePlayer.currentMediaItem ?: return
-        if (item.mediaMetadata.title == title) return
+        if (item.mediaId != savedId || item.mediaMetadata.title == title) return
         val restored = item.buildUpon()
             .setMediaMetadata(
                 item.mediaMetadata.buildUpon().setTitle(title).build(),
             )
             .build()
         activePlayer.replaceMediaItem(activePlayer.currentMediaItemIndex, restored)
-        originalMediaTitle = null
     }
 
     private fun List<LyricLine>.binarySearchLastBefore(positionMs: Long): Int {
