@@ -23,7 +23,6 @@ import com.anzupop.saki.android.domain.model.StreamQuality
 import com.anzupop.saki.android.domain.repository.PlaybackManager
 import com.anzupop.saki.android.domain.repository.PlaybackPreferencesRepository
 import com.anzupop.saki.android.domain.repository.StreamCacheRepository
-import com.anzupop.saki.android.domain.repository.SubsonicRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutionException
@@ -53,7 +52,6 @@ class DefaultPlaybackManager @Inject constructor(
     @param:MainDispatcher private val mainDispatcher: CoroutineDispatcher,
     private val playbackPreferencesRepository: PlaybackPreferencesRepository,
     private val streamCacheRepository: StreamCacheRepository,
-    private val subsonicRepository: SubsonicRepository,
     private val networkTypeProvider: NetworkTypeProvider,
 ) : PlaybackManager {
     private val scope = CoroutineScope(SupervisorJob() + mainDispatcher)
@@ -199,7 +197,7 @@ class DefaultPlaybackManager @Inject constructor(
                 serverId = serverId,
                 qualityLabel = quality.label,
                 streamCacheKey = streamCacheRepository.buildCacheKey(serverId, song.id, quality),
-                artworkUri = buildArtworkUri(serverId, song.coverArtId),
+                artworkUri = null,
                 maxBitRate = quality.maxBitRate,
                 format = quality.format,
             )
@@ -228,7 +226,7 @@ class DefaultPlaybackManager @Inject constructor(
                 serverId = serverId,
                 qualityLabel = quality.label,
                 streamCacheKey = streamCacheRepository.buildCacheKey(serverId, song.id, quality),
-                artworkUri = buildArtworkUri(serverId, song.coverArtId),
+                artworkUri = null,
                 maxBitRate = quality.maxBitRate,
                 format = quality.format,
             )
@@ -281,7 +279,7 @@ class DefaultPlaybackManager @Inject constructor(
                 serverId = serverId,
                 qualityLabel = quality.label,
                 streamCacheKey = streamCacheRepository.buildCacheKey(serverId, song.id, quality),
-                artworkUri = buildArtworkUri(serverId, song.coverArtId),
+                artworkUri = null,
                 maxBitRate = quality.maxBitRate,
                 format = quality.format,
             )
@@ -303,7 +301,7 @@ class DefaultPlaybackManager @Inject constructor(
             serverId = serverId,
             qualityLabel = quality.label,
             streamCacheKey = streamCacheRepository.buildCacheKey(serverId, song.id, quality),
-            artworkUri = buildArtworkUri(serverId, song.coverArtId),
+            artworkUri = null,
             maxBitRate = quality.maxBitRate,
             format = quality.format,
         )
@@ -492,20 +490,6 @@ class DefaultPlaybackManager @Inject constructor(
             }
             syncState(activeController)
         }
-    }
-
-    private suspend fun buildArtworkUri(
-        serverId: Long,
-        coverArtId: String?,
-    ): String? {
-        if (coverArtId.isNullOrBlank()) return null
-        return runCatching {
-            subsonicRepository.buildCoverArtRequest(
-                serverId = serverId,
-                coverArtId = coverArtId,
-                size = 720,
-            ).candidates.firstOrNull()?.url
-        }.getOrNull()
     }
 
     private suspend fun <T> withController(

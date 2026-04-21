@@ -318,15 +318,28 @@ class SakiPlaybackService : MediaSessionService() {
                 format = format,
             )
 
-            val finalRequest = if (effectiveQuality != null && effectiveQuality.maxBitRate != request.maxBitRate) {
-                request.copy(
+            // Resolve artwork URL if missing (queue was built without it for performance)
+            val resolvedArtworkUri = request.artworkUri ?: request.coverArtId?.let { coverArtId ->
+                runCatching {
+                    subsonicRepository.buildCoverArtRequest(request.serverId, coverArtId, 720)
+                        .candidates.firstOrNull()?.url
+                }.getOrNull()
+            }
+            val artworkRequest = if (resolvedArtworkUri != null && request.artworkUri == null) {
+                request.copy(artworkUri = resolvedArtworkUri)
+            } else {
+                request
+            }
+
+            val finalRequest = if (effectiveQuality != null && effectiveQuality.maxBitRate != artworkRequest.maxBitRate) {
+                artworkRequest.copy(
                     qualityLabel = effectiveQuality.label,
                     maxBitRate = effectiveQuality.maxBitRate,
                     format = effectiveQuality.format,
-                    streamCacheKey = streamCacheRepository.buildCacheKey(request.serverId, request.songId, effectiveQuality),
+                    streamCacheKey = streamCacheRepository.buildCacheKey(artworkRequest.serverId, artworkRequest.songId, effectiveQuality),
                 )
             } else {
-                request
+                artworkRequest
             }
 
             return finalRequest.toPlayableMediaItem(streamRequest)
