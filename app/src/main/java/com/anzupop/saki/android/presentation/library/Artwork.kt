@@ -85,10 +85,8 @@ fun resolveArtworkModel(
 
 private fun ServerConfig.buildCoverArtUrl(coverArtId: String?): String? {
     if (coverArtId.isNullOrBlank()) return null
-    val endpoint = endpoints.sortedWith(
-        compareByDescending<ServerEndpoint> { it.isPrimary }
-            .thenBy(ServerEndpoint::order),
-    ).firstOrNull() ?: return null
+    val endpoint = endpoints.sortedBy(ServerEndpoint::order)
+        .firstOrNull() ?: return null
     val baseUrl = endpoint.baseUrl.toHttpUrlOrNull() ?: return null
     val salt = md5(coverArtId).take(8)
     val hash = md5("$password$salt")

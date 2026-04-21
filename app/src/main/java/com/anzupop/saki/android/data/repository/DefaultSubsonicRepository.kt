@@ -439,10 +439,7 @@ class DefaultSubsonicRepository @Inject constructor(
     private fun orderedEndpoints(server: ServerConfig): List<ServerEndpoint> {
         return endpointSelector.sortedEndpoints(
             serverId = server.id,
-            endpoints = server.endpoints.sortedWith(
-                compareByDescending<ServerEndpoint> { it.isPrimary }
-                    .thenBy(ServerEndpoint::order),
-            ),
+            endpoints = server.endpoints.sortedBy(ServerEndpoint::order),
         )
     }
 

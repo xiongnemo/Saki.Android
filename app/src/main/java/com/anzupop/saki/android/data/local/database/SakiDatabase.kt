@@ -29,7 +29,7 @@ import com.anzupop.saki.android.data.local.entity.ServerEntity
         ServerEntity::class,
         ServerEndpointEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class SakiDatabase : RoomDatabase() {

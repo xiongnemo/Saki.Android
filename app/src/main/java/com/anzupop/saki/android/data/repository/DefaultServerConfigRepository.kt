@@ -58,7 +58,6 @@ class DefaultServerConfigRepository @Inject constructor(
                     serverId = persistedServer.id,
                     label = endpoint.label,
                     baseUrl = endpoint.baseUrl,
-                    isPrimary = endpoint.isPrimary,
                     displayOrder = endpoint.order,
                 )
             },
@@ -70,17 +69,12 @@ class DefaultServerConfigRepository @Inject constructor(
     }
 
     private fun normalizeEndpoints(endpoints: List<ServerEndpoint>): List<ServerEndpoint> {
-        val cleaned = endpoints.mapIndexed { index, endpoint ->
+        return endpoints.mapIndexed { index, endpoint ->
             endpoint.copy(
                 label = endpoint.label.ifBlank { "Endpoint ${index + 1}" }.trim(),
                 baseUrl = endpoint.baseUrl.trim().trimEnd('/'),
                 order = index,
             )
-        }
-        val primaryIndex = cleaned.indexOfFirst { it.isPrimary }.takeIf { it >= 0 } ?: 0
-
-        return cleaned.mapIndexed { index, endpoint ->
-            endpoint.copy(isPrimary = index == primaryIndex, order = index)
         }
     }
 }
@@ -100,7 +94,6 @@ private fun ServerWithEndpoints.toDomain(): ServerConfig {
                     id = endpoint.id,
                     label = endpoint.label,
                     baseUrl = endpoint.baseUrl,
-                    isPrimary = endpoint.isPrimary,
                     order = endpoint.displayOrder,
                 )
             },
