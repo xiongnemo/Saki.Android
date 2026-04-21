@@ -143,6 +143,7 @@ fun SakiApp(
                         onRemoveQueueItem = viewModel::removeQueueItem,
                         endpointStatus = endpointStatus,
                         onReprobeEndpoints = viewModel::reprobeEndpoints,
+                        onForceEndpoint = viewModel::forceEndpoint,
                     )
                 }
             }
@@ -209,6 +210,7 @@ private fun RootShell(
     onRemoveQueueItem: (Int) -> Unit,
     endpointStatus: EndpointStatus = EndpointStatus(),
     onReprobeEndpoints: () -> Unit = {},
+    onForceEndpoint: (Long) -> Unit = {},
 ) {
     val currentOrQueuedTrack = uiState.playbackState.currentItem ?: uiState.playbackState.queue.firstOrNull()
     val shellBackgroundBrush = rememberBrowseBackgroundBrush()
@@ -344,9 +346,11 @@ private fun RootShell(
             servers = uiState.servers,
             activeEndpointLabel = endpointStatus.activeEndpointLabel,
             activeEndpointId = endpointStatus.activeEndpointId,
+            isEndpointForced = endpointStatus.isForced,
             endpointProbeResults = endpointStatus.probeResults,
             isProbing = endpointStatus.isProbing,
             onReprobeEndpoints = onReprobeEndpoints,
+            onForceEndpoint = onForceEndpoint,
             lyrics = uiState.currentLyrics,
         )
     }
