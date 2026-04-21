@@ -105,6 +105,8 @@ class SakiPlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
             .apply {
+                preloadConfiguration =
+                    ExoPlayer.PreloadConfiguration(10 * C.MICROS_PER_SECOND)
                 addListener(PlaybackRecoveryListener())
                 addListener(PlayQueueSaveListener())
             }
