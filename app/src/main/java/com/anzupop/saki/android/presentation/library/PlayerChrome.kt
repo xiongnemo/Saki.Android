@@ -232,9 +232,11 @@ fun NowPlayingOverlay(
     servers: List<ServerConfig> = emptyList(),
     activeEndpointLabel: String? = null,
     activeEndpointId: Long? = null,
+    isEndpointForced: Boolean = false,
     endpointProbeResults: List<EndpointProbeInfo> = emptyList(),
     isProbing: Boolean = false,
     onReprobeEndpoints: () -> Unit = {},
+    onForceEndpoint: (Long) -> Unit = {},
     lyrics: SongLyrics? = null,
 ) {
     val serversById = remember(servers) { servers.associateBy { it.id } }
@@ -798,11 +800,13 @@ fun NowPlayingOverlay(
                         endpointProbeResults.forEach { result ->
                             val isActive = result.id == activeEndpointId
                             Surface(
+                                onClick = { onForceEndpoint(result.id) },
+                                enabled = result.reachable || (isActive && isEndpointForced),
                                 shape = MaterialTheme.shapes.medium,
-                                color = if (isActive) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
+                                color = when {
+                                    isActive -> MaterialTheme.colorScheme.primaryContainer
+                                    !result.reachable -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    else -> MaterialTheme.colorScheme.surfaceVariant
                                 },
                             ) {
                                 Row(
@@ -814,13 +818,26 @@ fun NowPlayingOverlay(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = result.label + if (isActive) " ✓" else "",
+                                            text = result.label + when {
+                                                isActive && isEndpointForced -> " 📌"
+                                                isActive -> " ✓"
+                                                else -> ""
+                                            },
                                             style = MaterialTheme.typography.bodyLarge,
+                                            color = if (!result.reachable) {
+                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            },
                                         )
                                         Text(
                                             text = result.baseUrl,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            color = if (!result.reachable) {
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
                                         )
                                     }
                                     Text(
@@ -829,7 +846,7 @@ fun NowPlayingOverlay(
                                         color = if (result.reachable) {
                                             MaterialTheme.colorScheme.onSurface
                                         } else {
-                                            MaterialTheme.colorScheme.error
+                                            MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
                                         },
                                     )
                                 }
