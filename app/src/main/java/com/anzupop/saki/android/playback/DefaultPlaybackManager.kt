@@ -100,9 +100,25 @@ class DefaultPlaybackManager @Inject constructor(
             val upcoming = shuffleDisplayOrder?.let { order ->
                 val pos = order.indexOf(current)
                 if (pos == -1) return@let null
-                order.drop(pos + 1).take(10)
-            } ?: ((current + 1) until (current + 11).coerceAtMost(count)).toList()
+                val tail = order.drop(pos + 1)
+                // Wrap around for repeat-all so tracks after the end are also rebuilt
+                if (tail.size < 10 && activeController.repeatMode == Player.REPEAT_MODE_ALL) {
+                    (tail + order.take(10 - tail.size)).take(10)
+                } else {
+                    tail.take(10)
+                }
+            } ?: run {
+                val next = (current + 1).coerceAtMost(count)
+                val end = (current + 11).coerceAtMost(count)
+                val tail = (next until end).toList()
+                if (tail.size < 10 && activeController.repeatMode == Player.REPEAT_MODE_ALL) {
+                    (tail + (0 until (10 - tail.size).coerceAtMost(next))).take(10)
+                } else {
+                    tail
+                }
+            }
 
+            var replaced = false
             for (i in upcoming) {
                 if (i !in 0 until count) continue
                 val item = activeController.getMediaItemAt(i)
@@ -127,11 +143,12 @@ class DefaultPlaybackManager @Inject constructor(
                         .build()
                 }
                 activeController.replaceMediaItem(i, rebuilt)
+                replaced = true
             }
 
             // replaceMediaItem internally does remove+insert which corrupts ExoPlayer's
             // ShuffleOrder. Re-send our deterministic order to restore it.
-            if (shuffleDisplayOrder != null) {
+            if (replaced && shuffleDisplayOrder != null) {
                 sendShuffleOrderToService(activeController, activeController.mediaItemCount, shuffleSeed, shuffleAnchorIndex)
             }
         }
