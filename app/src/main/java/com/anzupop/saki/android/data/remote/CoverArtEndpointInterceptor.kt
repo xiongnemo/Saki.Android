@@ -1,5 +1,6 @@
 package com.anzupop.saki.android.data.remote
 
+import java.io.IOException
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -66,6 +67,11 @@ class CoverArtEndpointInterceptor(
             .encodedPath(bestBasePath + relativePath)
             .build()
 
-        return chain.proceed(request.newBuilder().url(newUrl).build())
+        return try {
+            chain.proceed(request.newBuilder().url(newUrl).build())
+        } catch (e: IllegalStateException) {
+            // Stale connection after network switch — rethrow as IOException so OkHttp retries
+            throw IOException("Stale connection after endpoint rewrite", e)
+        }
     }
 }

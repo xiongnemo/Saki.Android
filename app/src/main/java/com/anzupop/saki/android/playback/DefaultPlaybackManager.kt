@@ -95,8 +95,16 @@ class DefaultPlaybackManager @Inject constructor(
         withController { activeController ->
             val current = activeController.currentMediaItemIndex
             if (current == C.INDEX_UNSET) return@withController
-            val end = (current + 11).coerceAtMost(activeController.mediaItemCount)
-            for (i in (current + 1) until end) {
+            val count = activeController.mediaItemCount
+
+            val upcoming = shuffleDisplayOrder?.let { order ->
+                val pos = order.indexOf(current)
+                if (pos == -1) return@let null
+                order.drop(pos + 1).take(10)
+            } ?: ((current + 1) until (current + 11).coerceAtMost(count)).toList()
+
+            for (i in upcoming) {
+                if (i !in 0 until count) continue
                 val item = activeController.getMediaItemAt(i)
                 val request = item.toPlaybackRequestOrNull() ?: continue
                 if (request.isCached) continue
@@ -119,6 +127,12 @@ class DefaultPlaybackManager @Inject constructor(
                         .build()
                 }
                 activeController.replaceMediaItem(i, rebuilt)
+            }
+
+            // replaceMediaItem internally does remove+insert which corrupts ExoPlayer's
+            // ShuffleOrder. Re-send our deterministic order to restore it.
+            if (shuffleDisplayOrder != null) {
+                sendShuffleOrderToService(activeController, activeController.mediaItemCount, shuffleSeed, shuffleAnchorIndex)
             }
         }
     }
