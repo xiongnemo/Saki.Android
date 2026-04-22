@@ -123,10 +123,18 @@ enum class BufferStrategy(
     }
 }
 
-const val DEFAULT_CUSTOM_BUFFER_SECONDS = 50
+const val DEFAULT_CUSTOM_BUFFER_SECONDS = 45
 const val MIN_CUSTOM_BUFFER_SECONDS = 15
 const val MAX_CUSTOM_BUFFER_SECONDS = 600
 const val CUSTOM_BUFFER_STEP_SECONDS = 15
+
+fun normalizeCustomBufferSeconds(seconds: Int): Int {
+    val clamped = seconds.coerceIn(MIN_CUSTOM_BUFFER_SECONDS, MAX_CUSTOM_BUFFER_SECONDS)
+    val stepsFromMin = ((clamped - MIN_CUSTOM_BUFFER_SECONDS).toFloat() / CUSTOM_BUFFER_STEP_SECONDS).toInt()
+    val lower = MIN_CUSTOM_BUFFER_SECONDS + (stepsFromMin * CUSTOM_BUFFER_STEP_SECONDS)
+    val upper = (lower + CUSTOM_BUFFER_STEP_SECONDS).coerceAtMost(MAX_CUSTOM_BUFFER_SECONDS)
+    return if (clamped - lower < upper - clamped) lower else upper
+}
 
 data class PlaybackPreferences(
     val streamQuality: StreamQuality = StreamQuality.ORIGINAL,

@@ -67,8 +67,10 @@ class DefaultPlaybackPreferencesRepository @Inject constructor(
         }
     }
 
-    override suspend fun updateBufferStrategy(strategy: BufferStrategy) = Unit
-    override suspend fun updateCustomBufferSeconds(seconds: Int) = Unit
+    override suspend fun updateBufferStrategy(strategy: BufferStrategy) =
+        error("Room-backed repository does not support buffer settings. Use DataStore implementation.")
+    override suspend fun updateCustomBufferSeconds(seconds: Int) =
+        error("Room-backed repository does not support buffer settings. Use DataStore implementation.")
 
     override suspend fun updateShuffleState(seed: Long, anchorIndex: Int) = Unit
     override suspend fun clearShuffleState() = Unit

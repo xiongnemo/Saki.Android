@@ -11,9 +11,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.anzupop.saki.android.domain.model.BufferStrategy
 import com.anzupop.saki.android.domain.model.DEFAULT_CUSTOM_BUFFER_SECONDS
 import com.anzupop.saki.android.domain.model.DEFAULT_STREAM_CACHE_SIZE_MB
+import com.anzupop.saki.android.domain.model.normalizeCustomBufferSeconds
 import com.anzupop.saki.android.domain.model.MAX_STREAM_CACHE_SIZE_MB
-import com.anzupop.saki.android.domain.model.MIN_CUSTOM_BUFFER_SECONDS
-import com.anzupop.saki.android.domain.model.MAX_CUSTOM_BUFFER_SECONDS
 import com.anzupop.saki.android.domain.model.MIN_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.PlaybackPreferences
 import com.anzupop.saki.android.domain.model.STREAM_CACHE_SIZE_STEP_MB
@@ -78,7 +77,7 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
 
     override suspend fun updateCustomBufferSeconds(seconds: Int) {
         dataStore.edit {
-            it[KEY_CUSTOM_BUFFER_SECONDS] = seconds.coerceIn(MIN_CUSTOM_BUFFER_SECONDS, MAX_CUSTOM_BUFFER_SECONDS)
+            it[KEY_CUSTOM_BUFFER_SECONDS] = normalizeCustomBufferSeconds(seconds)
         }
     }
 
@@ -140,8 +139,10 @@ private fun Preferences.toPlaybackPreferences() = PlaybackPreferences(
     bufferStrategy = BufferStrategy.fromStorageKey(
         this[DataStorePlaybackPreferencesRepository.KEY_BUFFER_STRATEGY],
     ),
-    customBufferSeconds = (this[DataStorePlaybackPreferencesRepository.KEY_CUSTOM_BUFFER_SECONDS]
-        ?: DEFAULT_CUSTOM_BUFFER_SECONDS).coerceIn(MIN_CUSTOM_BUFFER_SECONDS, MAX_CUSTOM_BUFFER_SECONDS),
+    customBufferSeconds = normalizeCustomBufferSeconds(
+        this[DataStorePlaybackPreferencesRepository.KEY_CUSTOM_BUFFER_SECONDS]
+            ?: DEFAULT_CUSTOM_BUFFER_SECONDS,
+    ),
 )
 
 private fun Int.normalizeStreamCacheSizeMb(): Int {

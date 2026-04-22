@@ -121,7 +121,9 @@ class SakiPlaybackService : MediaSessionService() {
             resolveStreamDataSpec(dataSpec)
         }
 
-        val initialPrefs = runBlocking { playbackPreferencesRepository.getPreferences() }
+        val initialPrefs = runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            playbackPreferencesRepository.getPreferences()
+        }
         cachedPlaybackPrefs = initialPrefs
 
         val maxBufferMs = when (initialPrefs.bufferStrategy) {
@@ -132,7 +134,7 @@ class SakiPlaybackService : MediaSessionService() {
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                minOf(DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, maxBufferMs),
                 maxBufferMs,
                 DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
                 DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
