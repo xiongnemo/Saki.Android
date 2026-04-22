@@ -85,6 +85,9 @@ class SakiPlaybackService : MediaSessionService() {
     @Inject
     lateinit var streamCacheRepository: com.anzupop.saki.android.domain.repository.StreamCacheRepository
 
+    @Inject
+    lateinit var endpointSelector: com.anzupop.saki.android.data.remote.EndpointSelector
+
     private val serviceScope = CoroutineScope(SupervisorJob())
     private val playerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -250,8 +253,25 @@ class SakiPlaybackService : MediaSessionService() {
             if (cachedKey != null) com.anzupop.saki.android.domain.model.StreamQuality.fromStorageKey(cachedKey) else preferred
         } else {
             val maxBitRate = uri.getQueryParameter("maxBitRate")?.toIntOrNull()
-            com.anzupop.saki.android.domain.model.StreamQuality.entries.find { it.maxBitRate == maxBitRate }
+            val format = uri.getQueryParameter("format")
+            val matched = com.anzupop.saki.android.domain.model.StreamQuality.entries.find { it.maxBitRate == maxBitRate }
                 ?: com.anzupop.saki.android.domain.model.StreamQuality.ORIGINAL
+            // If the placeholder has a specific format, pass it through to buildStreamRequest
+            if (format != null && format != matched.format) {
+                // Use maxBitRate/format directly instead of going through StreamQuality enum
+                val streamRequest = runBlocking {
+                    subsonicRepository.buildStreamRequest(serverId, songId, maxBitRate, format)
+                }
+                if (streamRequest.candidates.isEmpty()) {
+                    throw IOException("No stream candidates for song $songId on server $serverId")
+                }
+                val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, matched)
+                return dataSpec.buildUpon()
+                    .setUri(streamRequest.candidates.first().url)
+                    .setKey(cacheKey)
+                    .build()
+            }
+            matched
         }
 
         val streamRequest = runBlocking {
@@ -465,8 +485,15 @@ class SakiPlaybackService : MediaSessionService() {
                 return
             }
 
-            // Re-prepare to retry — ResolvingDataSource will resolve the URL again,
-            // and EndpointSelector will have deprioritized the failed endpoint.
+            // Invalidate the failed endpoint so the resolver picks a different one on retry
+            val request = activePlayer.currentMediaItem?.toPlaybackRequestOrNull()
+            if (request != null) {
+                val activeEndpointId = endpointSelector.getActiveEndpointId(request.serverId)
+                if (activeEndpointId != null) {
+                    endpointSelector.invalidate(request.serverId, activeEndpointId)
+                }
+            }
+
             val resumePositionMs = activePlayer.currentPosition.coerceAtLeast(0L)
             val wasPlaying = activePlayer.playWhenReady
             activePlayer.prepare()
