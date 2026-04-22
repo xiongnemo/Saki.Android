@@ -10,7 +10,10 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import android.net.Uri
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -47,6 +50,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 
 @AndroidEntryPoint
@@ -81,6 +85,9 @@ class SakiPlaybackService : MediaSessionService() {
     @Inject
     lateinit var streamCacheRepository: com.anzupop.saki.android.domain.repository.StreamCacheRepository
 
+    @Inject
+    lateinit var endpointSelector: com.anzupop.saki.android.data.remote.EndpointSelector
+
     private val serviceScope = CoroutineScope(SupervisorJob())
     private val playerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -105,10 +112,13 @@ class SakiPlaybackService : MediaSessionService() {
             OkHttpDataSource.Factory(okHttpClient)
                 .setUserAgent(HTTP_USER_AGENT),
         )
-        val dataSourceFactory = CacheDataSource.Factory()
+        val cacheFactory = CacheDataSource.Factory()
             .setCache(streamCache)
             .setUpstreamDataSourceFactory(upstreamDataSourceFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        val dataSourceFactory = ResolvingDataSource.Factory(cacheFactory) { dataSpec ->
+            resolveStreamDataSpec(dataSpec)
+        }
 
         val exoPlayer = ExoPlayer.Builder(this)
             .setAudioAttributes(audioAttributes, true)
@@ -159,6 +169,11 @@ class SakiPlaybackService : MediaSessionService() {
                 }
         }
 
+        // Keep playback prefs in memory for the non-suspend ResolvingDataSource resolver
+        playerScope.launch {
+            playbackPreferencesRepository.observePreferences().collect { cachedPlaybackPrefs = it }
+        }
+
         playerScope.launch {
             combine(
                 playbackPreferencesRepository.observePreferences()
@@ -207,6 +222,72 @@ class SakiPlaybackService : MediaSessionService() {
                     }
                 }
         }
+    }
+
+    /** Latest playback preferences, kept in memory to avoid blocking reads in the resolver. */
+    @Volatile
+    private var cachedPlaybackPrefs: com.anzupop.saki.android.domain.model.PlaybackPreferences? = null
+
+    /**
+     * Resolves placeholder `saki://stream` URIs to real Subsonic stream URLs at the moment
+     * ExoPlayer actually opens the data source. This ensures the quality and endpoint are
+     * determined by the current network state, not the queue build time.
+     */
+    private fun resolveStreamDataSpec(dataSpec: DataSpec): DataSpec {
+        val uri = dataSpec.uri
+        if (uri.scheme != "saki" || uri.host != "stream") return dataSpec
+
+        val serverId = uri.getQueryParameter("serverId")?.toLongOrNull()
+            ?: throw IOException("Missing serverId in stream placeholder URI")
+        val songId = uri.getQueryParameter("songId")
+            ?: throw IOException("Missing songId in stream placeholder URI")
+
+        // Use cached prefs to avoid blocking; fall back to blocking read if not yet available
+        val prefs = cachedPlaybackPrefs ?: runBlocking { playbackPreferencesRepository.getPreferences() }
+        val quality = if (prefs.adaptiveQualityEnabled) {
+            val preferred = when (networkTypeProvider.networkType.value) {
+                com.anzupop.saki.android.data.remote.NetworkType.WIFI -> prefs.wifiStreamQuality
+                com.anzupop.saki.android.data.remote.NetworkType.MOBILE -> prefs.mobileStreamQuality
+            }
+            val cachedKey = streamCacheRepository.findCachedQualityKey(serverId, songId, preferred)
+            if (cachedKey != null) com.anzupop.saki.android.domain.model.StreamQuality.fromStorageKey(cachedKey) else preferred
+        } else {
+            val maxBitRate = uri.getQueryParameter("maxBitRate")?.toIntOrNull()
+            val format = uri.getQueryParameter("format")
+            val matched = com.anzupop.saki.android.domain.model.StreamQuality.entries.find { it.maxBitRate == maxBitRate }
+                ?: com.anzupop.saki.android.domain.model.StreamQuality.ORIGINAL
+            // If the placeholder has a specific format, pass it through to buildStreamRequest
+            if (format != null && format != matched.format) {
+                // Use maxBitRate/format directly instead of going through StreamQuality enum
+                val streamRequest = runBlocking {
+                    subsonicRepository.buildStreamRequest(serverId, songId, maxBitRate, format)
+                }
+                if (streamRequest.candidates.isEmpty()) {
+                    throw IOException("No stream candidates for song $songId on server $serverId")
+                }
+                val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, matched)
+                return dataSpec.buildUpon()
+                    .setUri(streamRequest.candidates.first().url)
+                    .setKey(cacheKey)
+                    .build()
+            }
+            matched
+        }
+
+        val streamRequest = runBlocking {
+            subsonicRepository.buildStreamRequest(serverId, songId, quality.maxBitRate, quality.format)
+        }
+        if (streamRequest.candidates.isEmpty()) {
+            throw IOException("No stream candidates for song $songId on server $serverId")
+        }
+
+        val realUrl = streamRequest.candidates.first().url
+        val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, quality)
+
+        return dataSpec.buildUpon()
+            .setUri(realUrl)
+            .setKey(cacheKey)
+            .build()
     }
 
     override fun onGetSession(
@@ -348,28 +429,17 @@ class SakiPlaybackService : MediaSessionService() {
                 "Missing Subsonic playback request metadata for ${mediaItem.mediaId}"
             }
 
-            // Resolve effective quality at play time for adaptive quality
-            val prefs = playbackPreferencesRepository.getPreferences()
-            val effectiveQuality = if (prefs.adaptiveQualityEnabled) {
-                val preferred = when (networkTypeProvider.networkType.value) {
-                    com.anzupop.saki.android.data.remote.NetworkType.WIFI -> prefs.wifiStreamQuality
-                    com.anzupop.saki.android.data.remote.NetworkType.MOBILE -> prefs.mobileStreamQuality
+            // Build placeholder URI — real stream URL resolved at play time by ResolvingDataSource
+            val placeholderUri = Uri.Builder()
+                .scheme("saki")
+                .authority("stream")
+                .appendQueryParameter("serverId", request.serverId.toString())
+                .appendQueryParameter("songId", request.songId)
+                .apply {
+                    request.maxBitRate?.let { appendQueryParameter("maxBitRate", it.toString()) }
+                    request.format?.let { appendQueryParameter("format", it) }
                 }
-                val cachedKey = streamCacheRepository.findCachedQualityKey(request.serverId, request.songId, preferred)
-                if (cachedKey != null) com.anzupop.saki.android.domain.model.StreamQuality.fromStorageKey(cachedKey) else preferred
-            } else {
-                null
-            }
-
-            val maxBitRate = effectiveQuality?.maxBitRate ?: request.maxBitRate
-            val format = effectiveQuality?.format ?: request.format
-
-            val streamRequest = subsonicRepository.buildStreamRequest(
-                serverId = request.serverId,
-                songId = request.songId,
-                maxBitRate = maxBitRate,
-                format = format,
-            )
+                .build()
 
             // Resolve artwork URL if missing (queue was built without it for performance)
             val resolvedArtworkUri = request.artworkUri ?: request.coverArtId?.let { coverArtId ->
@@ -378,24 +448,24 @@ class SakiPlaybackService : MediaSessionService() {
                         .candidates.firstOrNull()?.url
                 }.getOrNull()
             }
-            val artworkRequest = if (resolvedArtworkUri != null && request.artworkUri == null) {
+            val finalRequest = if (resolvedArtworkUri != null && request.artworkUri == null) {
                 request.copy(artworkUri = resolvedArtworkUri)
             } else {
                 request
             }
 
-            val finalRequest = if (effectiveQuality != null && effectiveQuality.maxBitRate != artworkRequest.maxBitRate) {
-                artworkRequest.copy(
-                    qualityLabel = effectiveQuality.label,
-                    maxBitRate = effectiveQuality.maxBitRate,
-                    format = effectiveQuality.format,
-                    streamCacheKey = streamCacheRepository.buildCacheKey(artworkRequest.serverId, artworkRequest.songId, effectiveQuality),
+            return MediaItem.Builder()
+                .setMediaId(finalRequest.songId)
+                .setUri(placeholderUri)
+                .setMimeType(finalRequest.mimeType)
+                .setMediaMetadata(finalRequest.toMediaMetadata())
+                .setRequestMetadata(
+                    MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(placeholderUri)
+                        .setExtras(finalRequest.toBundle())
+                        .build(),
                 )
-            } else {
-                artworkRequest
-            }
-
-            return finalRequest.toPlayableMediaItem(streamRequest)
+                .build()
         }
     }
 
@@ -415,11 +485,17 @@ class SakiPlaybackService : MediaSessionService() {
                 return
             }
 
-            val replacement = activePlayer.currentMediaItem?.nextStreamCandidateOrNull() ?: return
+            // Invalidate the failed endpoint so the resolver picks a different one on retry
+            val request = activePlayer.currentMediaItem?.toPlaybackRequestOrNull()
+            if (request != null) {
+                val activeEndpointId = endpointSelector.getActiveEndpointId(request.serverId)
+                if (activeEndpointId != null) {
+                    endpointSelector.invalidate(request.serverId, activeEndpointId)
+                }
+            }
+
             val resumePositionMs = activePlayer.currentPosition.coerceAtLeast(0L)
             val wasPlaying = activePlayer.playWhenReady
-
-            activePlayer.replaceMediaItem(currentIndex, replacement)
             activePlayer.prepare()
             activePlayer.seekTo(currentIndex, resumePositionMs)
             activePlayer.playWhenReady = wasPlaying
