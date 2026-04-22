@@ -1,5 +1,6 @@
 package com.anzupop.saki.android.data.remote
 
+import java.io.IOException
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -29,33 +30,33 @@ class CoverArtEndpointInterceptor(
         val endpointSelector = endpointSelectorProvider()
 
         val matchedServerId = endpointSelector.findServerByHostPort(url.host, url.port)
-            ?: return chain.proceed(request)
+            ?: return proceedSafely(chain, request)
 
         // Only rewrite if this request uses the canonical (first-by-order) endpoint.
         // Non-canonical requests come from SubsonicRepository fallback and should not be rewritten.
         val canonicalEndpoint = endpointSelector.getCanonicalEndpoint(matchedServerId)
-            ?: return chain.proceed(request)
+            ?: return proceedSafely(chain, request)
         val canonicalBase = canonicalEndpoint.baseUrl.trimEnd('/').toHttpUrlOrNull()
-            ?: return chain.proceed(request)
+            ?: return proceedSafely(chain, request)
         if (url.host != canonicalBase.host || url.port != canonicalBase.port || url.scheme != canonicalBase.scheme) {
-            return chain.proceed(request)
+            return proceedSafely(chain, request)
         }
 
         val bestEndpointId = endpointSelector.getActiveEndpointId(matchedServerId)
-            ?: return chain.proceed(request)
+            ?: return proceedSafely(chain, request)
         if (canonicalEndpoint.id == bestEndpointId) {
-            return chain.proceed(request)
+            return proceedSafely(chain, request)
         }
 
         val results = endpointSelector.getLastProbeResults(matchedServerId)
         val bestEndpoint = results.find { it.endpoint.id == bestEndpointId }?.endpoint
-            ?: return chain.proceed(request)
+            ?: return proceedSafely(chain, request)
         val bestBase = bestEndpoint.baseUrl.trimEnd('/').toHttpUrlOrNull()
-            ?: return chain.proceed(request)
+            ?: return proceedSafely(chain, request)
 
         // Extract the relative path after /rest/ and rebuild with best endpoint's base path
         val restIndex = url.encodedPath.indexOf("/rest/")
-        if (restIndex == -1) return chain.proceed(request)
+        if (restIndex == -1) return proceedSafely(chain, request)
         val relativePath = url.encodedPath.substring(restIndex)
 
         val bestBasePath = bestBase.encodedPath.trimEnd('/')
@@ -66,6 +67,14 @@ class CoverArtEndpointInterceptor(
             .encodedPath(bestBasePath + relativePath)
             .build()
 
-        return chain.proceed(request.newBuilder().url(newUrl).build())
+        return proceedSafely(chain, request.newBuilder().url(newUrl).build())
     }
+
+    /** Proceed with the request, converting stale-connection [IllegalStateException] to [IOException]. */
+    private fun proceedSafely(chain: Interceptor.Chain, request: okhttp3.Request): Response =
+        try {
+            chain.proceed(request)
+        } catch (e: IllegalStateException) {
+            throw IOException("Stale connection during cover art request", e)
+        }
 }

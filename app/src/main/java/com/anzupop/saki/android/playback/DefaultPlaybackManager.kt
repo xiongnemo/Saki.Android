@@ -95,8 +95,32 @@ class DefaultPlaybackManager @Inject constructor(
         withController { activeController ->
             val current = activeController.currentMediaItemIndex
             if (current == C.INDEX_UNSET) return@withController
-            val end = (current + 11).coerceAtMost(activeController.mediaItemCount)
-            for (i in (current + 1) until end) {
+            val count = activeController.mediaItemCount
+
+            val upcoming = shuffleDisplayOrder?.let { order ->
+                val pos = order.indexOf(current)
+                if (pos == -1) return@let null
+                val tail = order.drop(pos + 1)
+                // Wrap around for repeat-all so tracks after the end are also rebuilt
+                if (tail.size < 10 && activeController.repeatMode == Player.REPEAT_MODE_ALL) {
+                    (tail + order.take(10 - tail.size)).take(10)
+                } else {
+                    tail.take(10)
+                }
+            } ?: run {
+                val next = (current + 1).coerceAtMost(count)
+                val end = (current + 11).coerceAtMost(count)
+                val tail = (next until end).toList()
+                if (tail.size < 10 && activeController.repeatMode == Player.REPEAT_MODE_ALL) {
+                    (tail + (0 until (10 - tail.size).coerceAtMost(next))).take(10)
+                } else {
+                    tail
+                }
+            }
+
+            var replaced = false
+            for (i in upcoming) {
+                if (i !in 0 until count) continue
                 val item = activeController.getMediaItemAt(i)
                 val request = item.toPlaybackRequestOrNull() ?: continue
                 if (request.isCached) continue
@@ -119,6 +143,13 @@ class DefaultPlaybackManager @Inject constructor(
                         .build()
                 }
                 activeController.replaceMediaItem(i, rebuilt)
+                replaced = true
+            }
+
+            // replaceMediaItem internally does remove+insert which corrupts ExoPlayer's
+            // ShuffleOrder. Re-send our deterministic order to restore it.
+            if (replaced && shuffleDisplayOrder != null) {
+                sendShuffleOrderToService(activeController, activeController.mediaItemCount, shuffleSeed, shuffleAnchorIndex)
             }
         }
     }
