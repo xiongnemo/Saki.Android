@@ -1,5 +1,6 @@
 package com.anzupop.saki.android.domain.repository
 
+import com.anzupop.saki.android.domain.model.BufferStrategy
 import com.anzupop.saki.android.domain.model.PlaybackPreferences
 import com.anzupop.saki.android.domain.model.SoundBalancingMode
 import com.anzupop.saki.android.domain.model.StreamQuality
@@ -23,6 +24,10 @@ interface PlaybackPreferencesRepository {
     suspend fun updateStreamCacheSizeMb(sizeMb: Int)
 
     suspend fun updateBluetoothLyrics(enabled: Boolean)
+
+    suspend fun updateBufferStrategy(strategy: BufferStrategy)
+
+    suspend fun updateCustomBufferSeconds(seconds: Int)
 
     suspend fun updateShuffleState(seed: Long, anchorIndex: Int)
 
