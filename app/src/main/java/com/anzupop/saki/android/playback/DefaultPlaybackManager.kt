@@ -91,69 +91,6 @@ class DefaultPlaybackManager @Inject constructor(
         return if (cachedKey != null) StreamQuality.fromStorageKey(cachedKey) else preferred
     }
 
-    private suspend fun rebuildUpcomingItems() {
-        withController { activeController ->
-            val current = activeController.currentMediaItemIndex
-            if (current == C.INDEX_UNSET) return@withController
-            val count = activeController.mediaItemCount
-
-            val upcoming = shuffleDisplayOrder?.let { order ->
-                val pos = order.indexOf(current)
-                if (pos == -1) return@let null
-                val tail = order.drop(pos + 1)
-                // Wrap around for repeat-all so tracks after the end are also rebuilt
-                if (tail.size < 10 && activeController.repeatMode == Player.REPEAT_MODE_ALL) {
-                    (tail + order.take(10 - tail.size)).take(10)
-                } else {
-                    tail.take(10)
-                }
-            } ?: run {
-                val next = (current + 1).coerceAtMost(count)
-                val end = (current + 11).coerceAtMost(count)
-                val tail = (next until end).toList()
-                if (tail.size < 10 && activeController.repeatMode == Player.REPEAT_MODE_ALL) {
-                    (tail + (0 until (10 - tail.size).coerceAtMost(next))).take(10)
-                } else {
-                    tail
-                }
-            }
-
-            var replaced = false
-            for (i in upcoming) {
-                if (i !in 0 until count) continue
-                val item = activeController.getMediaItemAt(i)
-                val request = item.toPlaybackRequestOrNull() ?: continue
-                if (request.isCached) continue
-                val quality = resolveQualityForSong(request.serverId, request.songId)
-                if (quality.maxBitRate == request.maxBitRate) continue
-                val rebuilt = request.copy(
-                    qualityLabel = quality.label,
-                    streamCacheKey = streamCacheRepository.buildCacheKey(request.serverId, request.songId, quality),
-                    maxBitRate = quality.maxBitRate,
-                    format = quality.format,
-                ).let { updated ->
-                    MediaItem.Builder()
-                        .setMediaId(updated.songId)
-                        .setMediaMetadata(updated.toMediaMetadata())
-                        .setRequestMetadata(
-                            MediaItem.RequestMetadata.Builder()
-                                .setExtras(updated.toBundle())
-                                .build(),
-                        )
-                        .build()
-                }
-                activeController.replaceMediaItem(i, rebuilt)
-                replaced = true
-            }
-
-            // replaceMediaItem internally does remove+insert which corrupts ExoPlayer's
-            // ShuffleOrder. Re-send our deterministic order to restore it.
-            if (replaced && shuffleDisplayOrder != null) {
-                sendShuffleOrderToService(activeController, activeController.mediaItemCount, shuffleSeed, shuffleAnchorIndex)
-            }
-        }
-    }
-
     init {
         scope.launch {
             streamCacheRepository.observeCacheVersion().collect { if (it > 0L) cacheReady = true }
@@ -162,13 +99,6 @@ class DefaultPlaybackManager @Inject constructor(
             playbackPreferencesRepository.observePreferences().collect { preferences ->
                 mutablePlaybackState.update { state ->
                     state.copy(preferences = preferences)
-                }
-            }
-        }
-        scope.launch {
-            networkTypeProvider.networkType.collect { _ ->
-                if (playbackState.value.preferences.adaptiveQualityEnabled) {
-                    rebuildUpcomingItems()
                 }
             }
         }
@@ -559,17 +489,31 @@ class DefaultPlaybackManager @Inject constructor(
         }
 
         val currentRequest = player.currentMediaItem?.toPlaybackRequestOrNull()
-        val streamCached = currentRequest != null && !currentRequest.isCached &&
-            cacheReady &&
+        val cachedQualityKey = if (currentRequest != null && !currentRequest.isCached && cacheReady) {
             streamCacheRepository.findCachedQualityKey(
                 currentRequest.serverId, currentRequest.songId, effectiveQuality(),
-            ) != null
+            )
+        } else null
+        val streamCached = cachedQualityKey != null
 
         mutablePlaybackState.update { state ->
+            val currentDisplayItem = displayQueue.getOrNull(displayIndex)?.let { item ->
+                if (item.isCached) return@let item
+                if (state.preferences.adaptiveQualityEnabled) {
+                    val label = if (streamCached) {
+                        com.anzupop.saki.android.domain.model.StreamQuality.fromStorageKey(cachedQualityKey!!).label
+                    } else {
+                        effectiveQuality().label
+                    }
+                    item.copy(qualityLabel = label)
+                } else {
+                    item
+                }
+            }
             state.copy(
                 isConnected = true,
                 isPlaying = player.isPlaying,
-                currentItem = displayQueue.getOrNull(displayIndex),
+                currentItem = currentDisplayItem,
                 currentIndex = displayIndex,
                 queue = displayQueue,
                 positionMs = player.currentPosition.coerceKnownTime(),
