@@ -166,6 +166,11 @@ class SakiPlaybackService : MediaSessionService() {
                 }
         }
 
+        // Keep playback prefs in memory for the non-suspend ResolvingDataSource resolver
+        playerScope.launch {
+            playbackPreferencesRepository.observePreferences().collect { cachedPlaybackPrefs = it }
+        }
+
         playerScope.launch {
             combine(
                 playbackPreferencesRepository.observePreferences()
@@ -216,6 +221,10 @@ class SakiPlaybackService : MediaSessionService() {
         }
     }
 
+    /** Latest playback preferences, kept in memory to avoid blocking reads in the resolver. */
+    @Volatile
+    private var cachedPlaybackPrefs: com.anzupop.saki.android.domain.model.PlaybackPreferences? = null
+
     /**
      * Resolves placeholder `saki://stream` URIs to real Subsonic stream URLs at the moment
      * ExoPlayer actually opens the data source. This ensures the quality and endpoint are
@@ -225,11 +234,13 @@ class SakiPlaybackService : MediaSessionService() {
         val uri = dataSpec.uri
         if (uri.scheme != "saki" || uri.host != "stream") return dataSpec
 
-        val serverId = uri.getQueryParameter("serverId")?.toLongOrNull() ?: return dataSpec
-        val songId = uri.getQueryParameter("songId") ?: return dataSpec
+        val serverId = uri.getQueryParameter("serverId")?.toLongOrNull()
+            ?: throw IOException("Missing serverId in stream placeholder URI")
+        val songId = uri.getQueryParameter("songId")
+            ?: throw IOException("Missing songId in stream placeholder URI")
 
-        // Resolve quality based on current network
-        val prefs = runBlocking { playbackPreferencesRepository.getPreferences() }
+        // Use cached prefs to avoid blocking; fall back to blocking read if not yet available
+        val prefs = cachedPlaybackPrefs ?: runBlocking { playbackPreferencesRepository.getPreferences() }
         val quality = if (prefs.adaptiveQualityEnabled) {
             val preferred = when (networkTypeProvider.networkType.value) {
                 com.anzupop.saki.android.data.remote.NetworkType.WIFI -> prefs.wifiStreamQuality
@@ -239,19 +250,16 @@ class SakiPlaybackService : MediaSessionService() {
             if (cachedKey != null) com.anzupop.saki.android.domain.model.StreamQuality.fromStorageKey(cachedKey) else preferred
         } else {
             val maxBitRate = uri.getQueryParameter("maxBitRate")?.toIntOrNull()
-            val format = uri.getQueryParameter("format")
-            if (maxBitRate != null || format != null) {
-                com.anzupop.saki.android.domain.model.StreamQuality.entries.find { it.maxBitRate == maxBitRate }
-                    ?: com.anzupop.saki.android.domain.model.StreamQuality.ORIGINAL
-            } else {
-                com.anzupop.saki.android.domain.model.StreamQuality.ORIGINAL
-            }
+            com.anzupop.saki.android.domain.model.StreamQuality.entries.find { it.maxBitRate == maxBitRate }
+                ?: com.anzupop.saki.android.domain.model.StreamQuality.ORIGINAL
         }
 
         val streamRequest = runBlocking {
             subsonicRepository.buildStreamRequest(serverId, songId, quality.maxBitRate, quality.format)
         }
-        if (streamRequest.candidates.isEmpty()) return dataSpec
+        if (streamRequest.candidates.isEmpty()) {
+            throw IOException("No stream candidates for song $songId on server $serverId")
+        }
 
         val realUrl = streamRequest.candidates.first().url
         val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, quality)
@@ -457,11 +465,10 @@ class SakiPlaybackService : MediaSessionService() {
                 return
             }
 
-            val replacement = activePlayer.currentMediaItem?.nextStreamCandidateOrNull() ?: return
+            // Re-prepare to retry — ResolvingDataSource will resolve the URL again,
+            // and EndpointSelector will have deprioritized the failed endpoint.
             val resumePositionMs = activePlayer.currentPosition.coerceAtLeast(0L)
             val wasPlaying = activePlayer.playWhenReady
-
-            activePlayer.replaceMediaItem(currentIndex, replacement)
             activePlayer.prepare()
             activePlayer.seekTo(currentIndex, resumePositionMs)
             activePlayer.playWhenReady = wasPlaying
