@@ -108,6 +108,34 @@ enum class SoundBalancingMode(
     }
 }
 
+enum class BufferStrategy(
+    val storageKey: String,
+    val label: String,
+) {
+    NORMAL("normal", "Normal"),
+    AGGRESSIVE("aggressive", "Aggressive"),
+    CUSTOM("custom", "Custom"),
+    ;
+
+    companion object {
+        fun fromStorageKey(storageKey: String?): BufferStrategy =
+            entries.firstOrNull { it.storageKey == storageKey } ?: NORMAL
+    }
+}
+
+const val DEFAULT_CUSTOM_BUFFER_SECONDS = 45
+const val MIN_CUSTOM_BUFFER_SECONDS = 15
+const val MAX_CUSTOM_BUFFER_SECONDS = 600
+const val CUSTOM_BUFFER_STEP_SECONDS = 15
+
+fun normalizeCustomBufferSeconds(seconds: Int): Int {
+    val clamped = seconds.coerceIn(MIN_CUSTOM_BUFFER_SECONDS, MAX_CUSTOM_BUFFER_SECONDS)
+    val stepsFromMin = ((clamped - MIN_CUSTOM_BUFFER_SECONDS).toFloat() / CUSTOM_BUFFER_STEP_SECONDS).toInt()
+    val lower = MIN_CUSTOM_BUFFER_SECONDS + (stepsFromMin * CUSTOM_BUFFER_STEP_SECONDS)
+    val upper = (lower + CUSTOM_BUFFER_STEP_SECONDS).coerceAtMost(MAX_CUSTOM_BUFFER_SECONDS)
+    return if (clamped - lower < upper - clamped) lower else upper
+}
+
 data class PlaybackPreferences(
     val streamQuality: StreamQuality = StreamQuality.ORIGINAL,
     val adaptiveQualityEnabled: Boolean = false,
@@ -116,6 +144,8 @@ data class PlaybackPreferences(
     val soundBalancingMode: SoundBalancingMode = SoundBalancingMode.OFF,
     val streamCacheSizeMb: Int = DEFAULT_STREAM_CACHE_SIZE_MB,
     val bluetoothLyricsEnabled: Boolean = false,
+    val bufferStrategy: BufferStrategy = BufferStrategy.NORMAL,
+    val customBufferSeconds: Int = DEFAULT_CUSTOM_BUFFER_SECONDS,
 ) {
     val streamCacheSizeBytes: Long
         get() = streamCacheSizeMb.toLong() * 1024L * 1024L

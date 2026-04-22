@@ -18,6 +18,7 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSession.ConnectionResult
@@ -120,10 +121,31 @@ class SakiPlaybackService : MediaSessionService() {
             resolveStreamDataSpec(dataSpec)
         }
 
+        val initialPrefs = runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            playbackPreferencesRepository.getPreferences()
+        }
+        cachedPlaybackPrefs = initialPrefs
+
+        val maxBufferMs = when (initialPrefs.bufferStrategy) {
+            com.anzupop.saki.android.domain.model.BufferStrategy.AGGRESSIVE -> Int.MAX_VALUE
+            com.anzupop.saki.android.domain.model.BufferStrategy.CUSTOM ->
+                initialPrefs.customBufferSeconds * 1_000
+            else -> DefaultLoadControl.DEFAULT_MAX_BUFFER_MS
+        }
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                minOf(DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, maxBufferMs),
+                maxBufferMs,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+            )
+            .build()
+
         val exoPlayer = ExoPlayer.Builder(this)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setLoadControl(loadControl)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
             .apply {

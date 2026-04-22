@@ -4,6 +4,7 @@ import com.anzupop.saki.android.data.local.dao.PlaybackPreferencesDao
 import com.anzupop.saki.android.data.local.entity.PlaybackPreferencesEntity
 import com.anzupop.saki.android.di.IoDispatcher
 import com.anzupop.saki.android.domain.model.DEFAULT_STREAM_CACHE_SIZE_MB
+import com.anzupop.saki.android.domain.model.BufferStrategy
 import com.anzupop.saki.android.domain.model.MAX_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.MIN_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.PlaybackPreferences
@@ -65,6 +66,11 @@ class DefaultPlaybackPreferencesRepository @Inject constructor(
             current.copy(bluetoothLyricsEnabled = enabled)
         }
     }
+
+    override suspend fun updateBufferStrategy(strategy: BufferStrategy) =
+        error("Room-backed repository does not support buffer settings. Use DataStore implementation.")
+    override suspend fun updateCustomBufferSeconds(seconds: Int) =
+        error("Room-backed repository does not support buffer settings. Use DataStore implementation.")
 
     override suspend fun updateShuffleState(seed: Long, anchorIndex: Int) = Unit
     override suspend fun clearShuffleState() = Unit

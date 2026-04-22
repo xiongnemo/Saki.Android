@@ -658,6 +658,30 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    fun updateBufferStrategy(strategy: com.anzupop.saki.android.domain.model.BufferStrategy) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateBufferStrategy(strategy)
+            }.onSuccess {
+                snackbarMessages.emit("Buffer strategy set to ${strategy.label}. Restart app to apply.")
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.message ?: "Unable to update buffer strategy.")
+            }
+        }
+    }
+
+    fun updateCustomBufferSeconds(seconds: Int) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateCustomBufferSeconds(seconds)
+            }.onSuccess {
+                snackbarMessages.emit("Custom buffer set to $seconds s. Restart app to apply.")
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.message ?: "Unable to update custom buffer.")
+            }
+        }
+    }
+
     fun pausePlayback() {
         viewModelScope.launch {
             playbackManager.pause()

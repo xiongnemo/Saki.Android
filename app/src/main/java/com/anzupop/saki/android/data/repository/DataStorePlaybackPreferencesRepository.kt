@@ -8,7 +8,10 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.anzupop.saki.android.domain.model.BufferStrategy
+import com.anzupop.saki.android.domain.model.DEFAULT_CUSTOM_BUFFER_SECONDS
 import com.anzupop.saki.android.domain.model.DEFAULT_STREAM_CACHE_SIZE_MB
+import com.anzupop.saki.android.domain.model.normalizeCustomBufferSeconds
 import com.anzupop.saki.android.domain.model.MAX_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.MIN_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.PlaybackPreferences
@@ -68,6 +71,16 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
         dataStore.edit { it[KEY_BLUETOOTH_LYRICS] = enabled }
     }
 
+    override suspend fun updateBufferStrategy(strategy: BufferStrategy) {
+        dataStore.edit { it[KEY_BUFFER_STRATEGY] = strategy.storageKey }
+    }
+
+    override suspend fun updateCustomBufferSeconds(seconds: Int) {
+        dataStore.edit {
+            it[KEY_CUSTOM_BUFFER_SECONDS] = normalizeCustomBufferSeconds(seconds)
+        }
+    }
+
     override suspend fun updateShuffleState(seed: Long, anchorIndex: Int) {
         dataStore.edit {
             it[KEY_SHUFFLE_SEED] = seed
@@ -99,6 +112,8 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
         val KEY_SOUND_BALANCING_MODE = stringPreferencesKey("sound_balancing_mode")
         val KEY_STREAM_CACHE_SIZE_MB = intPreferencesKey("stream_cache_size_mb")
         val KEY_BLUETOOTH_LYRICS = booleanPreferencesKey("bluetooth_lyrics_enabled")
+        val KEY_BUFFER_STRATEGY = stringPreferencesKey("buffer_strategy")
+        val KEY_CUSTOM_BUFFER_SECONDS = intPreferencesKey("custom_buffer_seconds")
         val KEY_SHUFFLE_SEED = longPreferencesKey("shuffle_seed")
         val KEY_SHUFFLE_ANCHOR = intPreferencesKey("shuffle_anchor_index")
     }
@@ -121,6 +136,13 @@ private fun Preferences.toPlaybackPreferences() = PlaybackPreferences(
     streamCacheSizeMb = (this[DataStorePlaybackPreferencesRepository.KEY_STREAM_CACHE_SIZE_MB]
         ?: DEFAULT_STREAM_CACHE_SIZE_MB).normalizeStreamCacheSizeMb(),
     bluetoothLyricsEnabled = this[DataStorePlaybackPreferencesRepository.KEY_BLUETOOTH_LYRICS] ?: false,
+    bufferStrategy = BufferStrategy.fromStorageKey(
+        this[DataStorePlaybackPreferencesRepository.KEY_BUFFER_STRATEGY],
+    ),
+    customBufferSeconds = normalizeCustomBufferSeconds(
+        this[DataStorePlaybackPreferencesRepository.KEY_CUSTOM_BUFFER_SECONDS]
+            ?: DEFAULT_CUSTOM_BUFFER_SECONDS,
+    ),
 )
 
 private fun Int.normalizeStreamCacheSizeMb(): Int {

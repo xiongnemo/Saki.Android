@@ -53,6 +53,10 @@ import androidx.compose.ui.unit.dp
 import com.anzupop.saki.android.domain.model.CachedSong
 import com.anzupop.saki.android.domain.model.MAX_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.MIN_STREAM_CACHE_SIZE_MB
+import com.anzupop.saki.android.domain.model.BufferStrategy
+import com.anzupop.saki.android.domain.model.CUSTOM_BUFFER_STEP_SECONDS
+import com.anzupop.saki.android.domain.model.MAX_CUSTOM_BUFFER_SECONDS
+import com.anzupop.saki.android.domain.model.MIN_CUSTOM_BUFFER_SECONDS
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.SoundBalancingMode
 import com.anzupop.saki.android.domain.model.STREAM_CACHE_SIZE_STEP_MB
@@ -80,6 +84,8 @@ fun SettingsScreen(
     onUpdateTextScale: (TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
+    onUpdateBufferStrategy: (BufferStrategy) -> Unit,
+    onUpdateCustomBufferSeconds: (Int) -> Unit,
     onExportConfig: (android.net.Uri) -> Unit,
     onImportConfig: (android.net.Uri) -> Unit,
     onPlayCachedSong: (CachedSong) -> Unit,
@@ -242,6 +248,83 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+        }
+
+        item {
+            val prefs = uiState.playbackState.preferences
+            val configuredSeconds = prefs.customBufferSeconds
+            var bufferSliderValue by remember(configuredSeconds) {
+                mutableFloatStateOf(configuredSeconds.toFloat())
+            }
+            SettingsSectionCard(
+                title = "Buffer strategy",
+                body = "Control how much of the current track is buffered ahead during playback.",
+                action = null,
+            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    BufferStrategy.entries.forEach { strategy ->
+                        FilterChip(
+                            selected = prefs.bufferStrategy == strategy,
+                            onClick = { onUpdateBufferStrategy(strategy) },
+                            label = { Text(strategy.label) },
+                        )
+                    }
+                }
+                when (prefs.bufferStrategy) {
+                    BufferStrategy.NORMAL -> Text(
+                        text = "Default buffering (~50 s ahead). Balances memory use and playback reliability.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    BufferStrategy.AGGRESSIVE -> Text(
+                        text = "Buffers the entire current track. Best on stable WiFi for instant seeking.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    BufferStrategy.CUSTOM -> {
+                        Text(
+                            text = "Buffer ${bufferSliderValue.toBufferSeconds()} s ahead",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Slider(
+                            value = bufferSliderValue,
+                            onValueChange = { bufferSliderValue = it },
+                            valueRange = MIN_CUSTOM_BUFFER_SECONDS.toFloat()..MAX_CUSTOM_BUFFER_SECONDS.toFloat(),
+                            steps = ((MAX_CUSTOM_BUFFER_SECONDS - MIN_CUSTOM_BUFFER_SECONDS) / CUSTOM_BUFFER_STEP_SECONDS) - 1,
+                            onValueChangeFinished = {
+                                val newSeconds = bufferSliderValue.toBufferSeconds()
+                                bufferSliderValue = newSeconds.toFloat()
+                                if (newSeconds != configuredSeconds) {
+                                    onUpdateCustomBufferSeconds(newSeconds)
+                                }
+                            },
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = "${MIN_CUSTOM_BUFFER_SECONDS} s",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = "${MAX_CUSTOM_BUFFER_SECONDS} s",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = "Changes take effect after restarting the app.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -616,4 +699,10 @@ private fun Float.toStreamCacheSizeMb(): Int {
     val stepsFromMin = ((this - MIN_STREAM_CACHE_SIZE_MB) / STREAM_CACHE_SIZE_STEP_MB).roundToInt()
     return (MIN_STREAM_CACHE_SIZE_MB + (stepsFromMin * STREAM_CACHE_SIZE_STEP_MB))
         .coerceIn(MIN_STREAM_CACHE_SIZE_MB, MAX_STREAM_CACHE_SIZE_MB)
+}
+
+private fun Float.toBufferSeconds(): Int {
+    val stepsFromMin = ((this - MIN_CUSTOM_BUFFER_SECONDS) / CUSTOM_BUFFER_STEP_SECONDS).roundToInt()
+    return (MIN_CUSTOM_BUFFER_SECONDS + (stepsFromMin * CUSTOM_BUFFER_STEP_SECONDS))
+        .coerceIn(MIN_CUSTOM_BUFFER_SECONDS, MAX_CUSTOM_BUFFER_SECONDS)
 }
