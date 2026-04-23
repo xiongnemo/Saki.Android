@@ -7,6 +7,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,12 +16,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -51,6 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -58,8 +63,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.anzupop.saki.android.domain.model.AlbumListType
 import com.anzupop.saki.android.domain.model.CachedSong
 import com.anzupop.saki.android.domain.model.SearchResults
@@ -69,6 +76,7 @@ import com.anzupop.saki.android.presentation.BrowseSection
 import com.anzupop.saki.android.presentation.rememberBrowseBackgroundBrush
 import com.anzupop.saki.android.presentation.SakiAppUiState
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
@@ -582,27 +590,90 @@ private fun ArtistsPage(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
-    ) {
-        if (indexes.shortcuts.isNotEmpty()) {
-            item { SectionTitle("Shortcuts", "Pinned artists") }
-            item {
-                LazyRow {
-                    items(indexes.shortcuts, key = { it.id }) { artist ->
-                        ArtistShortcutCard(artist = artist, onOpenArtist = onOpenArtist)
-                    }
+    // Build section-to-item-index mapping for scroll bar
+    val nonEmptySections = remember(indexes) { indexes.sections.filter { it.artists.isNotEmpty() } }
+    // Scroll bar: # A-Z, plus … for any non-Latin sections
+    val scrollBarMapping = remember(nonEmptySections) {
+        val result = mutableListOf<Pair<String, Int>>()
+        var hasOther = false
+        var firstOtherIdx = -1
+        nonEmptySections.forEachIndexed { idx, section ->
+            val name = section.name
+            when {
+                name.length == 1 && name[0] in 'A'..'Z' -> result.add(name to idx)
+                name == "#" -> result.add(0, "#" to idx) // # always first
+                else -> {
+                    if (!hasOther) { firstOtherIdx = idx; hasOther = true }
                 }
             }
         }
-        indexes.sections.forEach { section ->
-            if (section.artists.isNotEmpty()) {
+        if (hasOther) result.add("…" to firstOtherIdx)
+        result
+    }
+    val visibleScrollLabels = remember(scrollBarMapping) { scrollBarMapping.map { it.first } }
+    val scrollLabelToSection = remember(scrollBarMapping) { scrollBarMapping.toMap() }
+    val sectionItemIndices = remember(indexes, nonEmptySections) {
+        val map = mutableMapOf<Int, Int>()
+        var itemIndex = if (indexes.shortcuts.isNotEmpty()) 2 else 0 // shortcuts title + row
+        nonEmptySections.forEachIndexed { sectionIdx, section ->
+            map[sectionIdx] = itemIndex
+            itemIndex += 1 + section.artists.size // section title + artists
+        }
+        map
+    }
+
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp, end = 24.dp),
+        ) {
+            if (indexes.shortcuts.isNotEmpty()) {
+                item { SectionTitle("Shortcuts", "Pinned artists") }
+                item {
+                    LazyRow {
+                        items(indexes.shortcuts, key = { it.id }) { artist ->
+                            ArtistShortcutCard(artist = artist, onOpenArtist = onOpenArtist)
+                        }
+                    }
+                }
+            }
+            nonEmptySections.forEach { section ->
                 item { SectionTitle(section.name, "${section.artists.size} ${if (section.artists.size == 1) "artist" else "artists"}") }
                 items(section.artists, key = { it.id }) { artist ->
                     ArtistRow(artist = artist, onOpenArtist = onOpenArtist)
                 }
             }
+        }
+
+        var showScrollBar by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(500)
+            showScrollBar = true
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showScrollBar && visibleScrollLabels.size > 1,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(vertical = 8.dp),
+        ) {
+            AlphabetScrollBar(
+                labels = visibleScrollLabels,
+                onScrollTo = { idx ->
+                    val label = visibleScrollLabels.getOrNull(idx) ?: return@AlphabetScrollBar
+                    val sectionIdx = scrollLabelToSection[label] ?: return@AlphabetScrollBar
+                    val itemIdx = sectionItemIndices[sectionIdx] ?: return@AlphabetScrollBar
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    coroutineScope.launch { listState.scrollToItem(itemIdx) }
+                },
+            )
         }
     }
 }
@@ -767,3 +838,64 @@ private val AlbumListType.displayLabel: String
         AlbumListType.BY_YEAR -> "By year"
         AlbumListType.BY_GENRE -> "By genre"
     }
+
+@Composable
+private fun AlphabetScrollBar(
+    labels: List<String>,
+    onScrollTo: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var activeIndex by remember { mutableStateOf(-1) }
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .pointerInput(labels) {
+                detectTapGestures { offset ->
+                    val idx = (offset.y / (size.height.toFloat() / labels.size))
+                        .toInt()
+                        .coerceIn(0, labels.lastIndex)
+                    onScrollTo(idx)
+                }
+            }
+            .pointerInput(labels) {
+                detectVerticalDragGestures(
+                    onDragStart = { offset ->
+                        val idx = (offset.y / (size.height.toFloat() / labels.size))
+                            .toInt()
+                            .coerceIn(0, labels.lastIndex)
+                        activeIndex = idx
+                        onScrollTo(idx)
+                    },
+                    onDragEnd = { activeIndex = -1 },
+                    onDragCancel = { activeIndex = -1 },
+                    onVerticalDrag = { change, _ ->
+                        val idx = (change.position.y / (size.height.toFloat() / labels.size))
+                            .toInt()
+                            .coerceIn(0, labels.lastIndex)
+                        if (idx != activeIndex) {
+                            activeIndex = idx
+                            onScrollTo(idx)
+                        }
+                    },
+                )
+            }
+            .padding(horizontal = 4.dp),
+        verticalArrangement = Arrangement.SpaceEvenly,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val fontSize = if (labels.size > 30) 8.sp else 10.sp
+        labels.forEachIndexed { index, label ->
+            Text(
+                text = label,
+                fontSize = fontSize,
+                lineHeight = fontSize,
+                color = if (index == activeIndex) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+    }
+}

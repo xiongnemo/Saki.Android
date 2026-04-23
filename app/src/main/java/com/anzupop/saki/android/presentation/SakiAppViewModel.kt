@@ -13,6 +13,7 @@ import com.anzupop.saki.android.domain.model.Artist
 import com.anzupop.saki.android.domain.model.CacheStorageSummary
 import com.anzupop.saki.android.domain.model.CachedSong
 import com.anzupop.saki.android.domain.model.LibraryIndexes
+import com.anzupop.saki.android.domain.model.regroupByLocale
 import com.anzupop.saki.android.domain.model.PlaybackSessionState
 import com.anzupop.saki.android.domain.model.Playlist
 import com.anzupop.saki.android.domain.model.PlaylistSummary
@@ -849,7 +850,7 @@ class SakiAppViewModel @Inject constructor(
 
             val artists = loadCachedOrNull { libraryCacheRepository.getArtists(serverId) }
             if (artists != null && uiState.value.selectedServerId == serverId) {
-                mutableUiState.update { it.copy(libraryIndexes = artists) }
+                mutableUiState.update { it.copy(libraryIndexes = artists.regroupByLocale()) }
             }
             val selectedAlbumFeed = uiState.value.selectedAlbumFeed
             val albums = loadCachedOrNull { libraryCacheRepository.getAlbums(serverId, selectedAlbumFeed) }
@@ -890,20 +891,20 @@ class SakiAppViewModel @Inject constructor(
         if (!forceRefresh && uiState.value.libraryIndexes != null) return
 
         viewModelScope.launch {
+            mutableUiState.update { it.copy(isArtistsLoading = true, artistsError = null) }
+
             if (!forceRefresh) {
                 val cached = runCatching { libraryCacheRepository.getArtists(serverId) }.getOrNull()
                 if (cached != null && uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { it.copy(libraryIndexes = cached) }
+                    mutableUiState.update { it.copy(libraryIndexes = cached.regroupByLocale()) }
                 }
             }
-
-            mutableUiState.update { it.copy(isArtistsLoading = true, artistsError = null) }
 
             runCatching {
                 subsonicRepository.getIndexes(serverId).data
             }.onSuccess { indexes ->
                 if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { it.copy(libraryIndexes = indexes, isArtistsLoading = false, artistsError = null) }
+                    mutableUiState.update { it.copy(libraryIndexes = indexes.regroupByLocale(), isArtistsLoading = false, artistsError = null) }
                 }
                 runCatching { libraryCacheRepository.saveArtists(serverId, indexes) }
                     .onFailure { Log.w("SakiApp", "Failed to cache artists", it) }
