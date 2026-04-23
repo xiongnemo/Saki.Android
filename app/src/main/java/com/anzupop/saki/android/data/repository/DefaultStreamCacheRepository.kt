@@ -146,7 +146,15 @@ class DefaultStreamCacheRepository @Inject constructor(
             bytesByServer[parsed.serverId] = (bytesByServer[parsed.serverId] ?: 0L) + cachedBytes
 
             val contentLength = ContentMetadata.getContentLength(streamCache.getContentMetadata(key))
-            if (contentLength != C.LENGTH_UNSET.toLong() && contentLength > 0L && streamCache.isCached(key, 0, contentLength)) {
+            val isFullyCached = if (contentLength != C.LENGTH_UNSET.toLong() && contentLength > 0L) {
+                streamCache.isCached(key, 0, contentLength)
+            } else {
+                // No Content-Length (e.g. transcoded stream): consider cached if there is
+                // a single contiguous span starting at 0 with meaningful size
+                val spans = streamCache.getCachedSpans(key)
+                spans.size == 1 && spans.first().position == 0L && cachedBytes > 0L
+            }
+            if (isFullyCached) {
                 cachedSongIdsByServerAndQuality
                     .getOrPut(parsed.serverId) { mutableMapOf() }
                     .getOrPut(parsed.qualityKey) { mutableSetOf() }
