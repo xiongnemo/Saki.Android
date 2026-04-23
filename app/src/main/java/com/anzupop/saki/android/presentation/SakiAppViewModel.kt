@@ -850,7 +850,7 @@ class SakiAppViewModel @Inject constructor(
 
             val artists = loadCachedOrNull { libraryCacheRepository.getArtists(serverId) }
             if (artists != null && uiState.value.selectedServerId == serverId) {
-                mutableUiState.update { it.copy(libraryIndexes = artists) }
+                mutableUiState.update { it.copy(libraryIndexes = artists.regroupByLocale()) }
             }
             val selectedAlbumFeed = uiState.value.selectedAlbumFeed
             val albums = loadCachedOrNull { libraryCacheRepository.getAlbums(serverId, selectedAlbumFeed) }

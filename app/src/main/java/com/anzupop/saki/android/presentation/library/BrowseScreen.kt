@@ -8,6 +8,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -849,6 +850,14 @@ private fun AlphabetScrollBar(
     Column(
         modifier = modifier
             .fillMaxHeight()
+            .pointerInput(labels) {
+                detectTapGestures { offset ->
+                    val idx = (offset.y / (size.height.toFloat() / labels.size))
+                        .toInt()
+                        .coerceIn(0, labels.lastIndex)
+                    onScrollTo(idx)
+                }
+            }
             .pointerInput(labels) {
                 detectVerticalDragGestures(
                     onDragStart = { offset ->
