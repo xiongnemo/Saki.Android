@@ -683,6 +683,18 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    fun updateImageCacheSizeMb(sizeMb: Int) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateImageCacheSizeMb(sizeMb)
+            }.onSuccess {
+                snackbarMessages.emit("Image cache limit updated. Restart app to apply.")
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.message ?: "Unable to update image cache size.")
+            }
+        }
+    }
+
     fun pausePlayback() {
         viewModelScope.launch {
             playbackManager.pause()

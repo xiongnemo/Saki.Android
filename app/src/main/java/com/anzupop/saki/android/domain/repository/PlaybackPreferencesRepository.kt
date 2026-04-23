@@ -29,6 +29,8 @@ interface PlaybackPreferencesRepository {
 
     suspend fun updateCustomBufferSeconds(seconds: Int)
 
+    suspend fun updateImageCacheSizeMb(sizeMb: Int)
+
     suspend fun updateShuffleState(seed: Long, anchorIndex: Int)
 
     suspend fun clearShuffleState()

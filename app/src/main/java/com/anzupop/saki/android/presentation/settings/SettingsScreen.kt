@@ -56,6 +56,9 @@ import com.anzupop.saki.android.domain.model.MIN_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.BufferStrategy
 import com.anzupop.saki.android.domain.model.CUSTOM_BUFFER_STEP_SECONDS
 import com.anzupop.saki.android.domain.model.MAX_CUSTOM_BUFFER_SECONDS
+import com.anzupop.saki.android.domain.model.MAX_IMAGE_CACHE_SIZE_MB
+import com.anzupop.saki.android.domain.model.IMAGE_CACHE_SIZE_STEP_MB
+import com.anzupop.saki.android.domain.model.MIN_IMAGE_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.MIN_CUSTOM_BUFFER_SECONDS
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.SoundBalancingMode
@@ -81,6 +84,7 @@ fun SettingsScreen(
     onUpdateMobileStreamQuality: (StreamQuality) -> Unit,
     onUpdateSoundBalancing: (SoundBalancingMode) -> Unit,
     onUpdateStreamCacheSizeMb: (Int) -> Unit,
+    onUpdateImageCacheSizeMb: (Int) -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
@@ -102,6 +106,10 @@ fun SettingsScreen(
     val configuredStreamCacheSizeMb = uiState.playbackState.preferences.streamCacheSizeMb
     var streamCacheSliderValue by remember(configuredStreamCacheSizeMb) {
         mutableFloatStateOf(configuredStreamCacheSizeMb.toFloat())
+    }
+    val configuredImageCacheSizeMb = uiState.playbackState.preferences.imageCacheSizeMb
+    var imageCacheSliderValue by remember(configuredImageCacheSizeMb) {
+        mutableFloatStateOf(configuredImageCacheSizeMb.toFloat())
     }
 
     LazyColumn(
@@ -428,6 +436,43 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                Text(
+                    text = "Cover art cache",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "Adjust how much disk space album artwork can use. Current: ${formatStorageSize(imageCacheSliderValue.toImageCacheSizeMb().toLong() * 1024L * 1024L)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Slider(
+                    value = imageCacheSliderValue,
+                    onValueChange = { imageCacheSliderValue = it },
+                    valueRange = MIN_IMAGE_CACHE_SIZE_MB.toFloat()..MAX_IMAGE_CACHE_SIZE_MB.toFloat(),
+                    steps = ((MAX_IMAGE_CACHE_SIZE_MB - MIN_IMAGE_CACHE_SIZE_MB) / IMAGE_CACHE_SIZE_STEP_MB) - 1,
+                    onValueChangeFinished = {
+                        val newSizeMb = imageCacheSliderValue.toImageCacheSizeMb()
+                        imageCacheSliderValue = newSizeMb.toFloat()
+                        if (newSizeMb != configuredImageCacheSizeMb) {
+                            onUpdateImageCacheSizeMb(newSizeMb)
+                        }
+                    },
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = formatStorageSize(MIN_IMAGE_CACHE_SIZE_MB.toLong() * 1024L * 1024L),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = formatStorageSize(MAX_IMAGE_CACHE_SIZE_MB.toLong() * 1024L * 1024L),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (visibleCachedSongs.isNotEmpty()) {
                         OutlinedButton(onClick = { onPlayCachedQueue(visibleCachedSongs, 0) }) {
@@ -705,4 +750,10 @@ private fun Float.toBufferSeconds(): Int {
     val stepsFromMin = ((this - MIN_CUSTOM_BUFFER_SECONDS) / CUSTOM_BUFFER_STEP_SECONDS).roundToInt()
     return (MIN_CUSTOM_BUFFER_SECONDS + (stepsFromMin * CUSTOM_BUFFER_STEP_SECONDS))
         .coerceIn(MIN_CUSTOM_BUFFER_SECONDS, MAX_CUSTOM_BUFFER_SECONDS)
+}
+
+private fun Float.toImageCacheSizeMb(): Int {
+    val stepsFromMin = ((this - MIN_IMAGE_CACHE_SIZE_MB) / IMAGE_CACHE_SIZE_STEP_MB).roundToInt()
+    return (MIN_IMAGE_CACHE_SIZE_MB + (stepsFromMin * IMAGE_CACHE_SIZE_STEP_MB))
+        .coerceIn(MIN_IMAGE_CACHE_SIZE_MB, MAX_IMAGE_CACHE_SIZE_MB)
 }

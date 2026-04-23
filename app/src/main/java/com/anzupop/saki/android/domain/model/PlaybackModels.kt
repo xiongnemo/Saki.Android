@@ -72,6 +72,11 @@ const val MIN_STREAM_CACHE_SIZE_MB = 256
 const val MAX_STREAM_CACHE_SIZE_MB = 8_192
 const val STREAM_CACHE_SIZE_STEP_MB = 256
 
+const val DEFAULT_IMAGE_CACHE_SIZE_MB = 128
+const val MIN_IMAGE_CACHE_SIZE_MB = 64
+const val MAX_IMAGE_CACHE_SIZE_MB = 1_024
+const val IMAGE_CACHE_SIZE_STEP_MB = 64
+
 enum class SoundBalancingMode(
     val storageKey: String,
     val label: String,
@@ -146,6 +151,7 @@ data class PlaybackPreferences(
     val bluetoothLyricsEnabled: Boolean = false,
     val bufferStrategy: BufferStrategy = BufferStrategy.NORMAL,
     val customBufferSeconds: Int = DEFAULT_CUSTOM_BUFFER_SECONDS,
+    val imageCacheSizeMb: Int = DEFAULT_IMAGE_CACHE_SIZE_MB,
 ) {
     val streamCacheSizeBytes: Long
         get() = streamCacheSizeMb.toLong() * 1024L * 1024L

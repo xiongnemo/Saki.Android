@@ -10,9 +10,13 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.anzupop.saki.android.domain.model.BufferStrategy
 import com.anzupop.saki.android.domain.model.DEFAULT_CUSTOM_BUFFER_SECONDS
+import com.anzupop.saki.android.domain.model.DEFAULT_IMAGE_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.DEFAULT_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.normalizeCustomBufferSeconds
 import com.anzupop.saki.android.domain.model.MAX_STREAM_CACHE_SIZE_MB
+import com.anzupop.saki.android.domain.model.MAX_IMAGE_CACHE_SIZE_MB
+import com.anzupop.saki.android.domain.model.MIN_IMAGE_CACHE_SIZE_MB
+import com.anzupop.saki.android.domain.model.IMAGE_CACHE_SIZE_STEP_MB
 import com.anzupop.saki.android.domain.model.MIN_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.PlaybackPreferences
 import com.anzupop.saki.android.domain.model.STREAM_CACHE_SIZE_STEP_MB
@@ -81,6 +85,12 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
         }
     }
 
+    override suspend fun updateImageCacheSizeMb(sizeMb: Int) {
+        dataStore.edit {
+            it[KEY_IMAGE_CACHE_SIZE_MB] = normalizeImageCacheSizeMb(sizeMb)
+        }
+    }
+
     override suspend fun updateShuffleState(seed: Long, anchorIndex: Int) {
         dataStore.edit {
             it[KEY_SHUFFLE_SEED] = seed
@@ -114,6 +124,7 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
         val KEY_BLUETOOTH_LYRICS = booleanPreferencesKey("bluetooth_lyrics_enabled")
         val KEY_BUFFER_STRATEGY = stringPreferencesKey("buffer_strategy")
         val KEY_CUSTOM_BUFFER_SECONDS = intPreferencesKey("custom_buffer_seconds")
+        val KEY_IMAGE_CACHE_SIZE_MB = intPreferencesKey("image_cache_size_mb")
         val KEY_SHUFFLE_SEED = longPreferencesKey("shuffle_seed")
         val KEY_SHUFFLE_ANCHOR = intPreferencesKey("shuffle_anchor_index")
     }
@@ -143,6 +154,10 @@ private fun Preferences.toPlaybackPreferences() = PlaybackPreferences(
         this[DataStorePlaybackPreferencesRepository.KEY_CUSTOM_BUFFER_SECONDS]
             ?: DEFAULT_CUSTOM_BUFFER_SECONDS,
     ),
+    imageCacheSizeMb = normalizeImageCacheSizeMb(
+        this[DataStorePlaybackPreferencesRepository.KEY_IMAGE_CACHE_SIZE_MB]
+            ?: DEFAULT_IMAGE_CACHE_SIZE_MB,
+    ),
 )
 
 private fun Int.normalizeStreamCacheSizeMb(): Int {
@@ -150,5 +165,13 @@ private fun Int.normalizeStreamCacheSizeMb(): Int {
     val stepsFromMin = ((clamped - MIN_STREAM_CACHE_SIZE_MB) / STREAM_CACHE_SIZE_STEP_MB.toDouble()).toInt()
     val lower = MIN_STREAM_CACHE_SIZE_MB + (stepsFromMin * STREAM_CACHE_SIZE_STEP_MB)
     val upper = (lower + STREAM_CACHE_SIZE_STEP_MB).coerceAtMost(MAX_STREAM_CACHE_SIZE_MB)
+    return if (clamped - lower < upper - clamped) lower else upper
+}
+
+private fun normalizeImageCacheSizeMb(sizeMb: Int): Int {
+    val clamped = sizeMb.coerceIn(MIN_IMAGE_CACHE_SIZE_MB, MAX_IMAGE_CACHE_SIZE_MB)
+    val stepsFromMin = ((clamped - MIN_IMAGE_CACHE_SIZE_MB) / IMAGE_CACHE_SIZE_STEP_MB.toDouble()).toInt()
+    val lower = MIN_IMAGE_CACHE_SIZE_MB + (stepsFromMin * IMAGE_CACHE_SIZE_STEP_MB)
+    val upper = (lower + IMAGE_CACHE_SIZE_STEP_MB).coerceAtMost(MAX_IMAGE_CACHE_SIZE_MB)
     return if (clamped - lower < upper - clamped) lower else upper
 }
