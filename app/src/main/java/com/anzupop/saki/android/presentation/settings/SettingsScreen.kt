@@ -84,7 +84,9 @@ fun SettingsScreen(
     onUpdateMobileStreamQuality: (StreamQuality) -> Unit,
     onUpdateSoundBalancing: (SoundBalancingMode) -> Unit,
     onUpdateStreamCacheSizeMb: (Int) -> Unit,
+    onClearStreamCache: () -> Unit,
     onUpdateImageCacheSizeMb: (Int) -> Unit,
+    onClearImageCache: () -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
@@ -420,6 +422,13 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                OutlinedButton(
+                    onClick = onClearStreamCache,
+                    enabled = storageSummary.streamCacheBytes > 0L,
+                ) {
+                    Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
+                    Text("Clear stream cache", modifier = Modifier.padding(start = 8.dp))
+                }
             }
         }
 
@@ -479,6 +488,13 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                OutlinedButton(
+                    onClick = onClearImageCache,
+                    enabled = storageSummary.imageCacheBytes > 0L,
+                ) {
+                    Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
+                    Text("Clear cover art cache", modifier = Modifier.padding(start = 8.dp))
+                }
             }
         }
 
@@ -502,7 +518,7 @@ fun SettingsScreen(
                     }
                     OutlinedButton(
                         onClick = onClearCachedSongs,
-                        enabled = visibleCachedSongs.isNotEmpty() || storageSummary.streamCacheBytes > 0L,
+                        enabled = visibleCachedSongs.isNotEmpty(),
                     ) {
                         Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
                         Text("Clear all", modifier = Modifier.padding(start = 8.dp))

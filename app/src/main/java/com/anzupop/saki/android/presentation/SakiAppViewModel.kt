@@ -571,26 +571,49 @@ class SakiAppViewModel @Inject constructor(
         val targetServerId = uiState.value.selectedServerId
         viewModelScope.launch {
             runCatching {
-                val removedDownloads = cachedSongRepository.clearCachedSongs(targetServerId)
-                val removedStreamCacheEntries = streamCacheRepository.clearStreamCache(targetServerId)
-                removedDownloads to removedStreamCacheEntries
-            }.onSuccess { (removedDownloads, removedStreamCacheEntries) ->
+                cachedSongRepository.clearCachedSongs(targetServerId)
+            }.onSuccess { removed ->
                 snackbarMessages.emit(
-                    if (removedDownloads > 0 || removedStreamCacheEntries > 0) {
-                        buildString {
-                            append("Cleared ")
-                            append("$removedDownloads download")
-                            if (removedDownloads != 1) append("s")
-                            append(" and ")
-                            append("$removedStreamCacheEntries stream cache entr")
-                            append(if (removedStreamCacheEntries == 1) "y." else "ies.")
-                        }
-                    } else {
-                        "No stored audio to clear."
-                    },
+                    if (removed > 0) "Cleared $removed download${if (removed != 1) "s" else ""}."
+                    else "No downloads to clear.",
                 )
+                refreshCacheStorageSummary(targetServerId)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to clear stored audio.")
+                snackbarMessages.emit(throwable.message ?: "Unable to clear downloads.")
+            }
+        }
+    }
+
+    fun clearStreamCache() {
+        val targetServerId = uiState.value.selectedServerId
+        viewModelScope.launch {
+            runCatching {
+                streamCacheRepository.clearStreamCache(targetServerId)
+            }.onSuccess { removed ->
+                snackbarMessages.emit(
+                    if (removed > 0) "Cleared $removed stream cache entr${if (removed == 1) "y" else "ies"}."
+                    else "No stream cache to clear.",
+                )
+                refreshCacheStorageSummary(targetServerId)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.message ?: "Unable to clear stream cache.")
+            }
+        }
+    }
+
+    fun clearImageCache() {
+        viewModelScope.launch {
+            runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val dir = appContext.cacheDir.resolve("image_cache")
+                    dir.deleteRecursively()
+                    dir.mkdirs()
+                }
+            }.onSuccess {
+                snackbarMessages.emit("Cover art cache cleared.")
+                refreshCacheStorageSummary(uiState.value.selectedServerId)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.message ?: "Unable to clear cover art cache.")
             }
         }
     }
