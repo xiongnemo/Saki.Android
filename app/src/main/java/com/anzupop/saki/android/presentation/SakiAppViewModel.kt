@@ -683,6 +683,18 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    fun updateImageCacheSizeMb(sizeMb: Int) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateImageCacheSizeMb(sizeMb)
+            }.onSuccess {
+                snackbarMessages.emit("Cover art cache limit updated. Restart app to apply.")
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.message ?: "Unable to update cover art cache size.")
+            }
+        }
+    }
+
     fun pausePlayback() {
         viewModelScope.launch {
             playbackManager.pause()
@@ -797,6 +809,10 @@ class SakiAppViewModel @Inject constructor(
             serverId = serverId,
             quality = uiState.value.playbackState.preferences.streamQuality,
         )
+        val imageCacheDir = appContext.cacheDir.resolve("image_cache")
+        val imageCacheBytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            imageCacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        }
         mutableUiState.update { state ->
             if (state.selectedServerId == serverId) {
                 state.copy(
@@ -804,6 +820,7 @@ class SakiAppViewModel @Inject constructor(
                         streamCachedSongCount = fullStreamSummary.cachedSongIds.size,
                         streamCacheBytes = fullStreamSummary.bytes,
                         hasStreamingCache = true,
+                        imageCacheBytes = imageCacheBytes,
                     ),
                     streamCachedSongIds = playableStreamSummary.cachedSongIds,
                 )
