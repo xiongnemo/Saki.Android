@@ -331,12 +331,14 @@ private fun RootShell(
             onDismiss = onDismissNowPlaying,
             canOpenArtist = canOpenArtistFromNowPlaying,
             onOpenArtist = {
-                onDismissNowPlaying()
+                showSettings = false
                 onOpenArtistFromPlayback(track.serverId, track.artistId)
+                onDismissNowPlaying()
             },
             onOpenAlbum = {
-                onDismissNowPlaying()
+                showSettings = false
                 onOpenAlbumFromPlayback(track.serverId, track.albumId)
+                onDismissNowPlaying()
             },
             onPlayPause = {
                 if (uiState.playbackState.isPlaying) onPausePlayback() else onResumePlayback()
