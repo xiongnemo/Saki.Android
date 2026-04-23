@@ -688,9 +688,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateImageCacheSizeMb(sizeMb)
             }.onSuccess {
-                snackbarMessages.emit("Image cache limit updated. Restart app to apply.")
+                snackbarMessages.emit("Cover art cache limit updated. Restart app to apply.")
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to update image cache size.")
+                snackbarMessages.emit(throwable.message ?: "Unable to update cover art cache size.")
             }
         }
     }
@@ -810,7 +810,9 @@ class SakiAppViewModel @Inject constructor(
             quality = uiState.value.playbackState.preferences.streamQuality,
         )
         val imageCacheDir = appContext.cacheDir.resolve("image_cache")
-        val imageCacheBytes = imageCacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        val imageCacheBytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            imageCacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        }
         mutableUiState.update { state ->
             if (state.selectedServerId == serverId) {
                 state.copy(

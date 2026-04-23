@@ -385,7 +385,7 @@ fun SettingsScreen(
                     },
                 )
                 StorageSummaryRow(
-                    label = "Cover art cache",
+                    label = "Cover art cache (all servers)",
                     value = formatStorageSize(storageSummary.imageCacheBytes),
                 )
                 StorageSummaryRow(

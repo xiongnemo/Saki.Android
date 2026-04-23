@@ -43,7 +43,7 @@ class SakiApplication : Application(), SingletonImageLoader.Factory {
                     .build()
             }
             .diskCache {
-                val imageCacheSizeMb = runBlocking {
+                val imageCacheSizeMb = runBlocking(kotlinx.coroutines.Dispatchers.IO) {
                     runCatching { playbackPreferencesRepository.getPreferences().imageCacheSizeMb }
                         .getOrDefault(DEFAULT_IMAGE_CACHE_SIZE_MB)
                 }
