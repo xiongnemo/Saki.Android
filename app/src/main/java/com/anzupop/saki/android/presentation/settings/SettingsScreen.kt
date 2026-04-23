@@ -362,53 +362,33 @@ fun SettingsScreen(
 
         item {
             SettingsSectionCard(
-                title = "Offline audio",
+                title = "Streaming cache",
                 body = buildString {
-                    append("${storageSummary.downloadedSongCount} download")
-                    if (storageSummary.downloadedSongCount != 1) append("s")
-                    append(" • ${storageSummary.streamCachedSongCount} stream-cached track")
+                    append("${storageSummary.streamCachedSongCount} stream-cached track")
                     if (storageSummary.streamCachedSongCount != 1) append("s")
                     if (selectedServer != null) append(" on ${selectedServer.name}")
                 },
                 action = null,
             ) {
-                StorageSummaryRow(
-                    label = "Downloaded songs",
-                    value = formatStorageSize(storageSummary.downloadedBytes),
-                )
-                StorageSummaryRow(
-                    label = "Streaming cache",
-                    value = if (storageSummary.hasStreamingCache) {
-                        formatStorageSize(storageSummary.streamCacheBytes)
-                    } else {
-                        "Disabled"
-                    },
-                )
-                StorageSummaryRow(
-                    label = "Cover art cache (all servers)",
-                    value = formatStorageSize(storageSummary.imageCacheBytes),
-                )
-                StorageSummaryRow(
-                    label = "Cache limit",
-                    value = formatStorageSize(streamCacheSliderValue.toStreamCacheSizeMb().toLong() * 1024L * 1024L),
-                )
-                Text(
-                    text = "Automatic streaming cache",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = "Adjust how much disk space automatic streaming cache can use before older tracks are evicted.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = formatStorageSize(storageSummary.streamCacheBytes),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "/ ${formatStorageSize(configuredStreamCacheSizeMb.toLong() * 1024L * 1024L)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 LinearProgressIndicator(
                     progress = {
                         val limit = configuredStreamCacheSizeMb.toLong() * 1024L * 1024L
-                        if (limit <= 0L) {
-                            0f
-                        } else {
-                            (storageSummary.streamCacheBytes.toFloat() / limit.toFloat()).coerceIn(0f, 1f)
-                        }
+                        if (limit <= 0L) 0f
+                        else (storageSummary.streamCacheBytes.toFloat() / limit.toFloat()).coerceIn(0f, 1f)
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -440,14 +420,36 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text(
-                    text = "Cover art cache",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = "Adjust how much disk space album artwork can use. Current: ${formatStorageSize(imageCacheSliderValue.toImageCacheSizeMb().toLong() * 1024L * 1024L)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            }
+        }
+
+        item {
+            SettingsSectionCard(
+                title = "Cover art cache",
+                body = "Album artwork cached across all servers.",
+                action = null,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = formatStorageSize(storageSummary.imageCacheBytes),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "/ ${formatStorageSize(configuredImageCacheSizeMb.toLong() * 1024L * 1024L)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                LinearProgressIndicator(
+                    progress = {
+                        val limit = configuredImageCacheSizeMb.toLong() * 1024L * 1024L
+                        if (limit <= 0L) 0f
+                        else (storageSummary.imageCacheBytes.toFloat() / limit.toFloat()).coerceIn(0f, 1f)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Slider(
                     value = imageCacheSliderValue,
@@ -477,6 +479,20 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+        }
+
+        item {
+            SettingsSectionCard(
+                title = "Downloads",
+                body = buildString {
+                    append("${storageSummary.downloadedSongCount} download")
+                    if (storageSummary.downloadedSongCount != 1) append("s")
+                    append(" • ${formatStorageSize(storageSummary.downloadedBytes)}")
+                    if (selectedServer != null) append(" on ${selectedServer.name}")
+                },
+                action = null,
+            ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (visibleCachedSongs.isNotEmpty()) {
                         OutlinedButton(onClick = { onPlayCachedQueue(visibleCachedSongs, 0) }) {
@@ -496,7 +512,7 @@ fun SettingsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.CloudDownload, contentDescription = null)
                         Text(
-                            text = "No cached tracks for this server yet.",
+                            text = "No downloaded tracks yet.",
                             modifier = Modifier.padding(start = 10.dp),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
