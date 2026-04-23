@@ -809,6 +809,8 @@ class SakiAppViewModel @Inject constructor(
             serverId = serverId,
             quality = uiState.value.playbackState.preferences.streamQuality,
         )
+        val imageCacheDir = appContext.cacheDir.resolve("image_cache")
+        val imageCacheBytes = imageCacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
         mutableUiState.update { state ->
             if (state.selectedServerId == serverId) {
                 state.copy(
@@ -816,6 +818,7 @@ class SakiAppViewModel @Inject constructor(
                         streamCachedSongCount = fullStreamSummary.cachedSongIds.size,
                         streamCacheBytes = fullStreamSummary.bytes,
                         hasStreamingCache = true,
+                        imageCacheBytes = imageCacheBytes,
                     ),
                     streamCachedSongIds = playableStreamSummary.cachedSongIds,
                 )

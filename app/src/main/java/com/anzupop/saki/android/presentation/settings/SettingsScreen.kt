@@ -385,6 +385,10 @@ fun SettingsScreen(
                     },
                 )
                 StorageSummaryRow(
+                    label = "Cover art cache",
+                    value = formatStorageSize(storageSummary.imageCacheBytes),
+                )
+                StorageSummaryRow(
                     label = "Cache limit",
                     value = formatStorageSize(streamCacheSliderValue.toStreamCacheSizeMb().toLong() * 1024L * 1024L),
                 )

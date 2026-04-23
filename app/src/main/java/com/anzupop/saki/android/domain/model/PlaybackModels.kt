@@ -200,6 +200,7 @@ data class CacheStorageSummary(
     val streamCachedSongCount: Int = 0,
     val streamCacheBytes: Long = 0,
     val hasStreamingCache: Boolean = false,
+    val imageCacheBytes: Long = 0,
 )
 
 data class StreamCacheSummary(
