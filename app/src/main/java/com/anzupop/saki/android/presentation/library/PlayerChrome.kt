@@ -322,7 +322,7 @@ fun NowPlayingOverlay(
         var sliderValue by remember(track.songId) {
             mutableFloatStateOf(playbackState.positionMs.toFloat())
         }
-        var isDragging by remember { mutableStateOf(false) }
+        var isDragging by remember(track.songId) { mutableStateOf(false) }
 
         LaunchedEffect(playbackState.positionMs, track.songId) {
             if (!isDragging) {
@@ -572,8 +572,14 @@ fun NowPlayingOverlay(
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
                     Slider(
                         value = sliderValue.coerceIn(0f, duration),
-                        onValueChange = { isDragging = true; sliderValue = it },
-                        onValueChangeFinished = { isDragging = false; onSeekTo(sliderValue.roundToLong()) },
+                        onValueChange = {
+                            isDragging = true
+                            sliderValue = it
+                        },
+                        onValueChangeFinished = {
+                            isDragging = false
+                            onSeekTo(sliderValue.roundToLong())
+                        },
                         valueRange = 0f..duration,
                         colors = sliderColors,
                         modifier = if (!isCachedTrack) {
