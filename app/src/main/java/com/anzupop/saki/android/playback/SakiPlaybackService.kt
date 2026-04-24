@@ -178,6 +178,7 @@ class SakiPlaybackService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, exoPlayer)
             .setSessionActivity(sessionActivity)
             .setCallback(SakiMediaSessionCallback())
+            .setBitmapLoader(CoilBitmapLoader(this))
             .build()
 
         playerScope.launch {
@@ -463,11 +464,17 @@ class SakiPlaybackService : MediaSessionService() {
                 }
                 .build()
 
-            // Resolve artwork URL if missing (queue was built without it for performance)
+            // Resolve artwork URL using canonical endpoint (first by order) so
+            // CoverArtEndpointInterceptor can rewrite it to the current best endpoint at load time
             val resolvedArtworkUri = request.artworkUri ?: request.coverArtId?.let { coverArtId ->
                 runCatching {
-                    subsonicRepository.buildCoverArtRequest(request.serverId, coverArtId, 720)
-                        .candidates.firstOrNull()?.url
+                    val canonical = endpointSelector.getCanonicalEndpoint(request.serverId)
+                    val candidates = subsonicRepository.buildCoverArtRequest(request.serverId, coverArtId, 720).candidates
+                    // Prefer the canonical endpoint URL for stable caching + interceptor rewriting
+                    if (canonical != null) {
+                        candidates.find { it.url.contains(canonical.baseUrl.trimEnd('/').substringAfter("://")) }?.url
+                    } else null
+                        ?: candidates.firstOrNull()?.url
                 }.getOrNull()
             }
             val finalRequest = if (resolvedArtworkUri != null && request.artworkUri == null) {
