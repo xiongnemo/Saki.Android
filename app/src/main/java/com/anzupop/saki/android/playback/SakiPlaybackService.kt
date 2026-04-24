@@ -470,11 +470,11 @@ class SakiPlaybackService : MediaSessionService() {
                 runCatching {
                     val canonical = endpointSelector.getCanonicalEndpoint(request.serverId)
                     val candidates = subsonicRepository.buildCoverArtRequest(request.serverId, coverArtId, 720).candidates
-                    // Prefer the canonical endpoint URL for stable caching + interceptor rewriting
-                    if (canonical != null) {
-                        candidates.find { it.url.contains(canonical.baseUrl.trimEnd('/').substringAfter("://")) }?.url
-                    } else null
-                        ?: candidates.firstOrNull()?.url
+                    val canonicalUrl = canonical?.let { c ->
+                        val host = c.baseUrl.trimEnd('/').substringAfter("://")
+                        candidates.find { it.url.contains(host) }?.url
+                    }
+                    canonicalUrl ?: candidates.firstOrNull()?.url
                 }.getOrNull()
             }
             val finalRequest = if (resolvedArtworkUri != null && request.artworkUri == null) {

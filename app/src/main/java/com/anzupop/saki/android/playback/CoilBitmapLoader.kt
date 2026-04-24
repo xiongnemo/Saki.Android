@@ -15,7 +15,10 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -24,22 +27,27 @@ import kotlinx.coroutines.launch
  * so artwork loads correctly after network/endpoint changes.
  */
 @UnstableApi
-class CoilBitmapLoader(private val context: Context) : BitmapLoader {
+class CoilBitmapLoader(context: Context) : BitmapLoader {
 
+    private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val bitmapCache = android.util.LruCache<String, Bitmap>(20)
+
+    // Cache sized by memory (max 8 MB), not entry count
+    private val bitmapCache = object : android.util.LruCache<String, Bitmap>(8 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
+
+    fun release() { scope.cancel() }
 
     override fun supportsMimeType(mimeType: String): Boolean = mimeType.startsWith("image/")
 
     override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> {
-        val future = SettableFuture.create<Bitmap>()
-        try {
-            val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
-            if (bitmap != null) future.set(bitmap) else future.setException(IllegalArgumentException("Failed to decode bitmap"))
-        } catch (e: Exception) {
-            future.setException(e)
+        val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
+        return if (bitmap != null) {
+            Futures.immediateFuture(bitmap)
+        } else {
+            Futures.immediateFailedFuture(IllegalArgumentException("Failed to decode bitmap"))
         }
-        return future
     }
 
     override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> {
@@ -47,30 +55,27 @@ class CoilBitmapLoader(private val context: Context) : BitmapLoader {
         bitmapCache.get(key)?.let { return Futures.immediateFuture(it) }
 
         val future = SettableFuture.create<Bitmap>()
-        scope.launch {
-            try {
-                val bitmap = loadWithCoil(key) ?: run {
-                    // Retry once after a short delay — EndpointSelector may need time to reprobe
-                    kotlinx.coroutines.delay(2000)
-                    loadWithCoil(key)
-                }
-                if (bitmap != null) {
-                    bitmapCache.put(key, bitmap)
-                    future.set(bitmap)
-                } else {
-                    future.setException(IllegalStateException("Coil failed to load $uri"))
-                }
-            } catch (e: Exception) {
-                future.setException(e)
+        val job = scope.launch {
+            val bitmap = loadWithCoil(key) ?: run {
+                delay(2000)
+                loadWithCoil(key)
+            }
+            if (future.isCancelled) return@launch
+            if (bitmap != null) {
+                bitmapCache.put(key, bitmap)
+                future.set(bitmap)
+            } else {
+                future.setException(IllegalStateException("Coil failed to load $uri"))
             }
         }
+        future.addListener({ if (future.isCancelled) job.cancel() }, Runnable::run)
         return future
     }
 
     private suspend fun loadWithCoil(url: String): Bitmap? {
-        val result = SingletonImageLoader.get(context)
+        val result = SingletonImageLoader.get(appContext)
             .execute(
-                ImageRequest.Builder(context)
+                ImageRequest.Builder(appContext)
                     .data(url)
                     .size(600)
                     .build(),
