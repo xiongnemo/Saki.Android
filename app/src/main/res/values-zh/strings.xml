@@ -1,17 +1,7 @@
 <resources>
-    <string name="onboarding_tagline">基于 Subsonic 协议的音乐客户端，支持多端点切换、流式播放与离线收听。</string>
-    <string name="onboarding_feature_endpoints_title">一个服务器，多个端点</string>
-    <string name="onboarding_feature_endpoints_body">将局域网和广域网地址保存在同一配置中，网络变化时自动切换。</string>
-    <string name="onboarding_feature_offline_title">离线优先</string>
-    <string name="onboarding_feature_offline_body">缓存曲目以供离线播放，下载状态在曲库中清晰可见。</string>
-    <string name="onboarding_feature_playback_title">专注播放</string>
-    <string name="onboarding_feature_playback_body">浏览艺术家、专辑、播放列表和歌曲，配备常驻播放器和专属正在播放界面。</string>
-    <string name="onboarding_set_up_library">设置我的曲库</string>
-    <string name="onboarding_import_backup">导入备份</string>
-    <string name="onboarding_continue_without_setup">跳过设置</string>
 
     <string name="settings_title">设置</string>
-    <string name="settings_intro">管理服务器、字体大小、串流质量、音量均衡、离线下载和引导流程。</string>
+    <string name="settings_intro">管理服务器、字体大小、串流质量、音量均衡和离线下载。</string>
     <string name="settings_server_profiles_title">服务器配置</string>
     <string name="settings_server_profiles_body">选择当前服务器，或打开完整的配置编辑器。</string>
     <string name="settings_no_servers">尚未配置服务器。</string>
@@ -52,9 +42,6 @@
     <string name="settings_backup_restore_body">导出或导入服务器配置和设置。注意：导出文件中的密码为明文。</string>
     <string name="settings_export">导出</string>
     <string name="settings_import">导入</string>
-    <string name="settings_onboarding_title">引导流程</string>
-    <string name="settings_onboarding_body">重新运行首次设置流程。</string>
-    <string name="settings_run_onboarding_again">重新运行引导</string>
     <string name="settings_language_title">语言</string>
     <string name="settings_language_body">选择应用的显示语言。</string>
     <string name="settings_language_system">跟随系统</string>
@@ -174,6 +161,7 @@
     <string name="browse_needs_server">浏览需要服务器配置</string>
     <string name="browse_needs_server_body">请先添加 Subsonic 服务器，然后浏览艺术家、专辑、播放列表和歌曲。</string>
     <string name="browse_add_server">添加服务器</string>
+    <string name="browse_import_backup">导入备份</string>
     <string name="browse_search_placeholder">搜索 %1$s</string>
     <string name="browse_close_search">关闭搜索</string>
     <string name="browse_search_server">搜索此服务器</string>

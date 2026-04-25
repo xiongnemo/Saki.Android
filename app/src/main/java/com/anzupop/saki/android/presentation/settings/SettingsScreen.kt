@@ -93,7 +93,6 @@ fun SettingsScreen(
     onUpdateImageCacheSizeMb: (Int) -> Unit,
     onClearImageCache: () -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
-    onReplayOnboarding: () -> Unit,
     onUpdateLanguage: (AppLanguage) -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
     onUpdateBufferStrategy: (BufferStrategy) -> Unit,
@@ -663,21 +662,6 @@ fun SettingsScreen(
                     OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }) {
                         Icon(Icons.Rounded.Download, contentDescription = null)
                         Text(stringResource(R.string.settings_import), modifier = Modifier.padding(start = 8.dp))
-                    }
-                }
-            }
-        }
-
-        item {
-            SettingsSectionCard(
-                title = stringResource(R.string.settings_onboarding_title),
-                body = stringResource(R.string.settings_onboarding_body),
-                action = null,
-            ) {
-                Row {
-                    Button(onClick = onReplayOnboarding) {
-                        Icon(Icons.Rounded.Storage, contentDescription = null)
-                        Text(stringResource(R.string.settings_run_onboarding_again), modifier = Modifier.padding(start = 8.dp))
                     }
                 }
             }

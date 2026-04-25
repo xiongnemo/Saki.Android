@@ -1,6 +1,8 @@
 package com.anzupop.saki.android.presentation.library
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Spring
@@ -106,6 +108,7 @@ fun BrowseScreen(
     onPlaySongNext: (Song) -> Unit,
     onToggleSongDownload: (Song) -> Unit,
     onOpenSettings: () -> Unit,
+    onImportConfig: (android.net.Uri) -> Unit,
 ) {
     val background = rememberBrowseBackgroundBrush()
     val currentServer = uiState.servers.firstOrNull { it.id == uiState.selectedServerId }
@@ -141,9 +144,13 @@ fun BrowseScreen(
             .padding(horizontal = 16.dp),
     ) {
         if (currentServer == null) {
+            val importLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument(),
+            ) { uri -> if (uri != null) onImportConfig(uri) }
             NoServerBrowseState(
                 modifier = Modifier.weight(1f),
                 onManageServers = onManageServers,
+                onImportBackup = { importLauncher.launch(arrayOf("application/json", "*/*")) },
             )
         } else {
             AnimatedContent(

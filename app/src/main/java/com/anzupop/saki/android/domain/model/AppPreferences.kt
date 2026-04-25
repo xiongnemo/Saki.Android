@@ -39,7 +39,6 @@ enum class TextScale(
 }
 
 data class AppPreferences(
-    val hasCompletedOnboarding: Boolean = false,
     val textScale: TextScale = TextScale.DEFAULT,
     val language: AppLanguage = AppLanguage.SYSTEM,
 )

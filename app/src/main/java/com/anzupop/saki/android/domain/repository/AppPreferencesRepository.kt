@@ -10,8 +10,6 @@ interface AppPreferencesRepository {
 
     suspend fun getPreferences(): AppPreferences
 
-    suspend fun setOnboardingCompleted(completed: Boolean)
-
     suspend fun updateTextScale(textScale: TextScale)
 
     suspend fun updateLanguage(language: AppLanguage)
