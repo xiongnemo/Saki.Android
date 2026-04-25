@@ -9,6 +9,8 @@ import com.anzupop.saki.android.data.repository.ConfigBackupManager
 import com.anzupop.saki.android.data.repository.ImportResult
 import com.anzupop.saki.android.domain.model.Album
 import com.anzupop.saki.android.domain.model.AlbumListType
+import com.anzupop.saki.android.domain.model.AppLanguage
+import com.anzupop.saki.android.domain.model.AppPreferences
 import com.anzupop.saki.android.domain.model.AlbumSummary
 import com.anzupop.saki.android.domain.model.Artist
 import com.anzupop.saki.android.domain.model.CacheStorageSummary
@@ -94,7 +96,16 @@ class SakiAppViewModel @Inject constructor(
                         isAppReady = true,
                         hasCompletedOnboarding = preferences.hasCompletedOnboarding,
                         textScale = preferences.textScale,
+                        appPreferences = preferences,
                     )
+                }
+                // Apply saved locale on first load
+                if (preferences.language != AppLanguage.SYSTEM) {
+                    val locales = androidx.core.os.LocaleListCompat.forLanguageTags(preferences.language.tag)
+                    val current = androidx.appcompat.app.AppCompatDelegate.getApplicationLocales()
+                    if (current != locales) {
+                        androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(locales)
+                    }
                 }
             }
         }
@@ -242,6 +253,20 @@ class SakiAppViewModel @Inject constructor(
                 )
             }.onFailure { throwable ->
                 snackbarMessages.emit(throwable.localizedOr(R.string.error_update_text_size))
+            }
+        }
+    }
+
+    fun updateLanguage(language: AppLanguage) {
+        viewModelScope.launch {
+            runCatching {
+                appPreferencesRepository.updateLanguage(language)
+            }.onSuccess {
+                val locales = when (language) {
+                    AppLanguage.SYSTEM -> androidx.core.os.LocaleListCompat.getEmptyLocaleList()
+                    else -> androidx.core.os.LocaleListCompat.forLanguageTags(language.tag)
+                }
+                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(locales)
             }
         }
     }
@@ -1327,6 +1352,7 @@ data class SakiAppUiState(
     val isAppReady: Boolean = false,
     val hasCompletedOnboarding: Boolean = false,
     val textScale: TextScale = TextScale.DEFAULT,
+    val appPreferences: AppPreferences = AppPreferences(),
     val selectedBrowseSection: BrowseSection = BrowseSection.ARTISTS,
     val servers: List<ServerConfig> = emptyList(),
     val selectedServerId: Long? = null,
