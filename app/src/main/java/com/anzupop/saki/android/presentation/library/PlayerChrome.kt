@@ -1085,16 +1085,16 @@ private fun QueueRow(
 
 @Composable
 private fun localizeQualityLabel(label: String): String {
-    val mapping = mapOf(
-        "Original" to R.string.stream_quality_original,
-        "320 kbps" to R.string.stream_quality_320_kbps,
-        "256 kbps" to R.string.stream_quality_256_kbps,
-        "192 kbps" to R.string.stream_quality_192_kbps,
-        "160 kbps" to R.string.stream_quality_160_kbps,
-        "128 kbps" to R.string.stream_quality_128_kbps,
-        "96 kbps" to R.string.stream_quality_96_kbps,
-    )
-    val resId = mapping[label] ?: return label
+    val resId = when (label) {
+        "Original" -> R.string.stream_quality_original
+        "320 kbps" -> R.string.stream_quality_320_kbps
+        "256 kbps" -> R.string.stream_quality_256_kbps
+        "192 kbps" -> R.string.stream_quality_192_kbps
+        "160 kbps" -> R.string.stream_quality_160_kbps
+        "128 kbps" -> R.string.stream_quality_128_kbps
+        "96 kbps" -> R.string.stream_quality_96_kbps
+        else -> return label
+    }
     return stringResource(resId)
 }
 

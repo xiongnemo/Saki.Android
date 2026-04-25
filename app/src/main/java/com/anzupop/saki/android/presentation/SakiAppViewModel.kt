@@ -99,7 +99,7 @@ class SakiAppViewModel @Inject constructor(
                         appPreferences = preferences,
                     )
                 }
-                // Apply saved locale on first load
+                // Apply saved locale when preference changes (no-ops if already matching)
                 if (preferences.language != AppLanguage.SYSTEM) {
                     val locales = androidx.core.os.LocaleListCompat.forLanguageTags(preferences.language.tag)
                     val current = androidx.appcompat.app.AppCompatDelegate.getApplicationLocales()

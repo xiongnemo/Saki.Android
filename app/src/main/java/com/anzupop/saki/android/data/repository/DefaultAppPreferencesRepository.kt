@@ -43,7 +43,7 @@ class DefaultAppPreferencesRepository @Inject constructor(
     }
 
     override suspend fun updateLanguage(language: AppLanguage) {
-        error("Room repository does not support language preference; use DataStore")
+        // Language preference is only supported via DataStore; no-op here
     }
 }
 

@@ -94,7 +94,7 @@ fun SettingsScreen(
     onClearImageCache: () -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
-    onUpdateLanguage: (com.anzupop.saki.android.domain.model.AppLanguage) -> Unit,
+    onUpdateLanguage: (AppLanguage) -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
     onUpdateBufferStrategy: (BufferStrategy) -> Unit,
     onUpdateCustomBufferSeconds: (Int) -> Unit,
@@ -859,30 +859,27 @@ private fun LanguageChip(
 @Composable
 private fun translationCoverage(locale: String): Int {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val res = context.resources
+    return remember(locale) {
+        val res = context.resources
+        val enConfig = android.content.res.Configuration(res.configuration).apply {
+            setLocale(java.util.Locale.ENGLISH)
+        }
+        val enRes = context.createConfigurationContext(enConfig).resources
+        val localeConfig = android.content.res.Configuration(res.configuration).apply {
+            setLocale(java.util.Locale.forLanguageTag(locale))
+        }
+        val localizedRes = context.createConfigurationContext(localeConfig).resources
 
-    // Always compare against English as the baseline
-    val enConfig = android.content.res.Configuration(res.configuration).apply {
-        setLocale(java.util.Locale.ENGLISH)
+        val fields = R.string::class.java.fields
+        var total = 0
+        var translated = 0
+        for (field in fields) {
+            val id = field.getInt(null)
+            if (enRes.getString(id) != localizedRes.getString(id)) translated++
+            total++
+        }
+        if (total > 0) (translated * 100) / total else 0
     }
-    val enRes = context.createConfigurationContext(enConfig).resources
-
-    val localeConfig = android.content.res.Configuration(res.configuration).apply {
-        setLocale(java.util.Locale.forLanguageTag(locale))
-    }
-    val localizedRes = context.createConfigurationContext(localeConfig).resources
-
-    val fields = R.string::class.java.fields
-    var total = 0
-    var translated = 0
-    for (field in fields) {
-        val id = field.getInt(null)
-        val enValue = enRes.getString(id)
-        val localizedValue = localizedRes.getString(id)
-        total++
-        if (localizedValue != enValue) translated++
-    }
-    return if (total > 0) (translated * 100) / total else 0
 }
 
 private fun formatStorageSize(bytes: Long): String {
