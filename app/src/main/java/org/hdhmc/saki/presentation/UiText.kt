@@ -3,6 +3,7 @@ package org.hdhmc.saki.presentation
 import android.content.Context
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
@@ -59,3 +60,9 @@ fun Throwable.localizedOr(@StringRes fallback: Int): UiText {
     val detail = message?.takeIf { it.isNotBlank() }
     return if (detail != null) UiText.Dynamic(detail) else UiText.Resource(fallback)
 }
+
+data class SnackbarMessage(
+    val text: UiText,
+    val actionLabel: UiText? = null,
+    val duration: SnackbarDuration = SnackbarDuration.Short,
+)

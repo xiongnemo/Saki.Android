@@ -67,6 +67,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -80,6 +84,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -126,6 +131,7 @@ import coil3.request.ImageRequest
 import coil3.toBitmap
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -382,6 +388,8 @@ fun NowPlayingOverlay(
                 .navigationBarsPadding()
                 .imePadding(),
         ) {
+            val playerSnackbarHostState = remember { SnackbarHostState() }
+            val scope = rememberCoroutineScope()
             val combinedMetadata = listOfNotNull(track.artist, track.album).joinToString(" • ")
             val denseTitle = track.title.length >= 24
             val denseMetadata = combinedMetadata.length >= 42
@@ -528,7 +536,6 @@ fun NowPlayingOverlay(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val toastContext = LocalContext.current
                         val repeatDescription = stringResource(R.string.player_repeat)
                         val repeatOneLabel = stringResource(R.string.player_repeat_one)
                         val repeatAllLabel = stringResource(R.string.player_repeat_all)
@@ -548,7 +555,14 @@ fun NowPlayingOverlay(
                                         RepeatModeSetting.ALL -> repeatOneLabel
                                         RepeatModeSetting.ONE -> repeatOffLabel
                                     }
-                                    android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
+                                    playerSnackbarHostState.currentSnackbarData?.dismiss()
+                                    scope.launch {
+                                        playerSnackbarHostState.showSnackbar(label, duration = SnackbarDuration.Indefinite)
+                                    }
+                                    scope.launch {
+                                        delay(1500)
+                                        playerSnackbarHostState.currentSnackbarData?.dismiss()
+                                    }
                                 },
                                 compact = true,
                             )
@@ -559,7 +573,14 @@ fun NowPlayingOverlay(
                                 onClick = {
                                     onToggleShuffle()
                                     val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
-                                    android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
+                                    playerSnackbarHostState.currentSnackbarData?.dismiss()
+                                    scope.launch {
+                                        playerSnackbarHostState.showSnackbar(label, duration = SnackbarDuration.Indefinite)
+                                    }
+                                    scope.launch {
+                                        delay(1500)
+                                        playerSnackbarHostState.currentSnackbarData?.dismiss()
+                                    }
                                 },
                                 compact = true,
                             )
@@ -833,6 +854,19 @@ fun NowPlayingOverlay(
                         }
                     }
                 }
+            }
+
+            SnackbarHost(
+                hostState = playerSnackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+            ) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    shape = MaterialTheme.shapes.small,
+                    containerColor = MaterialTheme.colorScheme.inverseSurface,
+                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                    modifier = Modifier.padding(horizontal = 48.dp),
+                )
             }
         }
     }

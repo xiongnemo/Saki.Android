@@ -1,5 +1,6 @@
 package org.hdhmc.saki.presentation
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,11 +56,18 @@ fun SakiApp(
     }
 
     LaunchedEffect(viewModel) {
-        viewModel.messages.collectLatest { message ->
-            snackbarHostState.showSnackbar(
-                message = message.asString(context),
-                duration = SnackbarDuration.Short,
+        viewModel.messages.collectLatest { msg ->
+            val result = snackbarHostState.showSnackbar(
+                message = msg.text.asString(context),
+                actionLabel = msg.actionLabel?.asString(context),
+                duration = msg.duration,
             )
+            if (result == SnackbarResult.ActionPerformed && msg.actionLabel != null) {
+                val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                context.startActivity(intent)
+                Runtime.getRuntime().exit(0)
+            }
         }
     }
 
