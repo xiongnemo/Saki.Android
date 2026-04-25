@@ -8,6 +8,6 @@ val SakiShapes = Shapes(
     extraSmall = RoundedCornerShape(10.dp),
     small = RoundedCornerShape(18.dp),
     medium = RoundedCornerShape(22.dp),
-    large = RoundedCornerShape(28.dp),
-    extraLarge = RoundedCornerShape(34.dp),
+    large = RoundedCornerShape(26.dp),
+    extraLarge = RoundedCornerShape(28.dp),
 )
