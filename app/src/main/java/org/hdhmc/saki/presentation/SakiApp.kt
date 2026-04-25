@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -59,14 +58,16 @@ fun SakiApp(
         viewModel.messages.collectLatest { msg ->
             val result = snackbarHostState.showSnackbar(
                 message = msg.text.asString(context),
-                actionLabel = msg.actionLabel?.asString(context),
+                actionLabel = msg.action?.let { context.getString(it.labelRes) },
                 duration = msg.duration,
             )
-            if (result == SnackbarResult.ActionPerformed && msg.actionLabel != null) {
+            if (result == SnackbarResult.ActionPerformed && msg.action == SnackbarAction.RESTART) {
                 val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                context.startActivity(intent)
-                Runtime.getRuntime().exit(0)
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    context.startActivity(intent)
+                    Runtime.getRuntime().exit(0)
+                }
             }
         }
     }

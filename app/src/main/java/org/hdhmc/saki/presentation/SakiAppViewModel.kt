@@ -721,7 +721,7 @@ class SakiAppViewModel @Inject constructor(
                 snackbarMessages.emit(
                     SnackbarMessage(
                         text = UiText.resource(R.string.message_buffer_strategy_set, UiText.resource(strategy.labelRes())),
-                        actionLabel = UiText.resource(R.string.snackbar_restart),
+                        action = SnackbarAction.RESTART,
                     ),
                 )
             }.onFailure { throwable ->
@@ -737,7 +737,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 snackbarMessages.emit(SnackbarMessage(
                     text = UiText.resource(R.string.message_custom_buffer_set, seconds),
-                    actionLabel = UiText.resource(R.string.snackbar_restart),
+                    action = SnackbarAction.RESTART,
                 ))
             }.onFailure { throwable ->
                 snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_custom_buffer)))
@@ -752,7 +752,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 snackbarMessages.emit(SnackbarMessage(
                     text = UiText.resource(R.string.message_cover_art_cache_limit_updated),
-                    actionLabel = UiText.resource(R.string.snackbar_restart),
+                    action = SnackbarAction.RESTART,
                 ))
             }.onFailure { throwable ->
                 snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_cover_art_cache_size)))

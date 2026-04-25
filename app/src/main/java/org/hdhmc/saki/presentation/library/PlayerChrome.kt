@@ -131,6 +131,7 @@ import coil3.request.ImageRequest
 import coil3.toBitmap
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -390,6 +391,19 @@ fun NowPlayingOverlay(
         ) {
             val playerSnackbarHostState = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
+            var snackbarJob by remember { mutableStateOf<Job?>(null) }
+            fun showPlayerSnackbar(message: String) {
+                playerSnackbarHostState.currentSnackbarData?.dismiss()
+                snackbarJob?.cancel()
+                snackbarJob = scope.launch {
+                    playerSnackbarHostState.showSnackbar(message, duration = SnackbarDuration.Indefinite)
+                }
+                scope.launch {
+                    delay(1500)
+                    snackbarJob?.cancel()
+                    playerSnackbarHostState.currentSnackbarData?.dismiss()
+                }
+            }
             val combinedMetadata = listOfNotNull(track.artist, track.album).joinToString(" • ")
             val denseTitle = track.title.length >= 24
             val denseMetadata = combinedMetadata.length >= 42
@@ -555,14 +569,7 @@ fun NowPlayingOverlay(
                                         RepeatModeSetting.ALL -> repeatOneLabel
                                         RepeatModeSetting.ONE -> repeatOffLabel
                                     }
-                                    playerSnackbarHostState.currentSnackbarData?.dismiss()
-                                    scope.launch {
-                                        playerSnackbarHostState.showSnackbar(label, duration = SnackbarDuration.Indefinite)
-                                    }
-                                    scope.launch {
-                                        delay(1500)
-                                        playerSnackbarHostState.currentSnackbarData?.dismiss()
-                                    }
+                                    showPlayerSnackbar(label)
                                 },
                                 compact = true,
                             )
@@ -573,14 +580,7 @@ fun NowPlayingOverlay(
                                 onClick = {
                                     onToggleShuffle()
                                     val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
-                                    playerSnackbarHostState.currentSnackbarData?.dismiss()
-                                    scope.launch {
-                                        playerSnackbarHostState.showSnackbar(label, duration = SnackbarDuration.Indefinite)
-                                    }
-                                    scope.launch {
-                                        delay(1500)
-                                        playerSnackbarHostState.currentSnackbarData?.dismiss()
-                                    }
+                                    showPlayerSnackbar(label)
                                 },
                                 compact = true,
                             )
