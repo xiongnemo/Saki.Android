@@ -58,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -70,6 +71,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.ServerEndpoint
+import com.anzupop.saki.android.presentation.asString
 import com.anzupop.saki.android.ui.theme.SakiAndroidTheme
 import kotlinx.coroutines.flow.collectLatest
 
@@ -81,11 +83,12 @@ fun ServerConfigRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collectLatest { message ->
             snackbarHostState.showSnackbar(
-                message = message,
+                message = message.asString(context),
                 duration = SnackbarDuration.Short,
             )
         }
@@ -528,7 +531,7 @@ private fun ServerEditorSheet(
                     color = MaterialTheme.colorScheme.errorContainer,
                 ) {
                     Text(
-                        text = error,
+                        text = error.asString(),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onErrorContainer,
@@ -813,7 +816,7 @@ private fun ConnectionStateBanner(
                 color = MaterialTheme.colorScheme.errorContainer,
             ) {
                 Text(
-                    text = testState.message,
+                    text = testState.message.asString(),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onErrorContainer,
@@ -866,7 +869,7 @@ private fun ServerConfigScreenPreview() {
                             editorId = 2,
                             label = "WAN",
                             baseUrl = "https://music.example.com",
-                            testState = EndpointConnectionState.Failure("HTTP 401"),
+                            testState = EndpointConnectionState.Failure(com.anzupop.saki.android.presentation.UiText.dynamic("HTTP 401")),
                         ),
                     ),
                 ),

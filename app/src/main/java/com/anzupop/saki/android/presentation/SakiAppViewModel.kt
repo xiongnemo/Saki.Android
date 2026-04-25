@@ -3,6 +3,7 @@ package com.anzupop.saki.android.presentation
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.anzupop.saki.android.R
 import com.anzupop.saki.android.data.remote.EndpointSelector
 import com.anzupop.saki.android.data.repository.ConfigBackupManager
 import com.anzupop.saki.android.data.repository.ImportResult
@@ -70,7 +71,7 @@ class SakiAppViewModel @Inject constructor(
     private val configBackupManager: ConfigBackupManager,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SakiAppUiState())
-    private val snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    private val snackbarMessages = MutableSharedFlow<UiText>(extraBufferCapacity = 1)
     private val openNowPlayingRequestsFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val searchQueryFlow = MutableStateFlow("")
     private var lastLoadedServerId: Long? = null
@@ -236,9 +237,11 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 appPreferencesRepository.updateTextScale(textScale)
             }.onSuccess {
-                snackbarMessages.emit("Text size set to ${textScale.label}.")
+                snackbarMessages.emit(
+                    UiText.resource(R.string.message_text_size_set, UiText.resource(textScale.labelRes())),
+                )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to update text size.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_text_size))
             }
         }
     }
@@ -336,7 +339,7 @@ class SakiAppViewModel @Inject constructor(
                 mutableUiState.update { state ->
                     state.copy(
                         isArtistLoading = false,
-                        artistError = throwable.message ?: "Unable to load artist details.",
+                        artistError = throwable.localizedOr(R.string.error_load_artist_details),
                     )
                 }
             }
@@ -381,7 +384,7 @@ class SakiAppViewModel @Inject constructor(
                 mutableUiState.update { state ->
                     state.copy(
                         isAlbumLoading = false,
-                        albumError = throwable.message ?: "Unable to load album details.",
+                        albumError = throwable.localizedOr(R.string.error_load_album_details),
                     )
                 }
             }
@@ -423,7 +426,7 @@ class SakiAppViewModel @Inject constructor(
                 mutableUiState.update { state ->
                     state.copy(
                         isPlaylistLoading = false,
-                        playlistError = throwable.message ?: "Unable to load playlist.",
+                        playlistError = throwable.localizedOr(R.string.error_load_playlist),
                     )
                 }
             }
@@ -447,7 +450,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 openNowPlayingRequestsFlow.emit(Unit)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to start playback.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_start_playback))
             }
         }
     }
@@ -464,7 +467,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 openNowPlayingRequestsFlow.emit(Unit)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to start playback.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_start_playback))
             }
         }
     }
@@ -475,9 +478,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackManager.addToQueue(serverId, listOf(song))
             }.onSuccess {
-                snackbarMessages.emit("Added ${song.title} to the queue.")
+                snackbarMessages.emit(UiText.resource(R.string.message_added_to_queue, song.title))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to queue the song.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_queue_song))
             }
         }
     }
@@ -488,9 +491,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackManager.playNext(serverId, song)
             }.onSuccess {
-                snackbarMessages.emit("${song.title} will play next.")
+                snackbarMessages.emit(UiText.resource(R.string.message_play_next, song.title))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to reorder the queue.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_reorder_queue))
             }
         }
     }
@@ -517,9 +520,15 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 cachedSongRepository.cacheSong(serverId, song)
             }.onSuccess { cachedSong ->
-                snackbarMessages.emit("Saved ${cachedSong.title} for offline playback at ${cachedSong.quality.label}.")
+                snackbarMessages.emit(
+                    UiText.resource(
+                        R.string.message_saved_offline,
+                        cachedSong.title,
+                        UiText.resource(cachedSong.quality.labelRes()),
+                    ),
+                )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to cache the song.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_cache_song))
             }
             mutableUiState.update { state ->
                 state.copy(downloadingSongIds = state.downloadingSongIds - song.id)
@@ -534,7 +543,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 openNowPlayingRequestsFlow.emit(Unit)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to play the cached song.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_play_cached_song))
             }
         }
     }
@@ -550,7 +559,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 openNowPlayingRequestsFlow.emit(Unit)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to start offline playback.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_start_offline_playback))
             }
         }
     }
@@ -560,9 +569,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 cachedSongRepository.deleteCachedSong(cacheId)
             }.onSuccess {
-                snackbarMessages.emit("Removed cached file.")
+                snackbarMessages.emit(UiText.resource(R.string.message_removed_cached_file))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to remove the cached file.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_remove_cached_file))
             }
         }
     }
@@ -574,12 +583,15 @@ class SakiAppViewModel @Inject constructor(
                 cachedSongRepository.clearCachedSongs(targetServerId)
             }.onSuccess { removed ->
                 snackbarMessages.emit(
-                    if (removed > 0) "Cleared $removed download${if (removed != 1) "s" else ""}."
-                    else "No downloads to clear.",
+                    if (removed > 0) {
+                        UiText.plural(R.plurals.message_cleared_download_count, removed, removed)
+                    } else {
+                        UiText.resource(R.string.message_no_downloads_to_clear)
+                    },
                 )
                 refreshCacheStorageSummary(targetServerId)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to clear downloads.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_clear_downloads))
             }
         }
     }
@@ -591,12 +603,15 @@ class SakiAppViewModel @Inject constructor(
                 streamCacheRepository.clearStreamCache(targetServerId)
             }.onSuccess { removed ->
                 snackbarMessages.emit(
-                    if (removed > 0) "Cleared $removed stream cache entr${if (removed == 1) "y" else "ies"}."
-                    else "No stream cache to clear.",
+                    if (removed > 0) {
+                        UiText.plural(R.plurals.message_cleared_stream_cache_entry_count, removed, removed)
+                    } else {
+                        UiText.resource(R.string.message_no_stream_cache_to_clear)
+                    },
                 )
                 refreshCacheStorageSummary(targetServerId)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to clear stream cache.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_clear_stream_cache))
             }
         }
     }
@@ -610,10 +625,10 @@ class SakiAppViewModel @Inject constructor(
                     dir.mkdirs()
                 }
             }.onSuccess {
-                snackbarMessages.emit("Cover art cache cleared.")
+                snackbarMessages.emit(UiText.resource(R.string.message_cover_art_cache_cleared))
                 refreshCacheStorageSummary(uiState.value.selectedServerId)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to clear cover art cache.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_clear_cover_art_cache))
             }
         }
     }
@@ -623,9 +638,11 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateStreamQuality(quality)
             }.onSuccess {
-                snackbarMessages.emit("Streaming quality set to ${quality.label}.")
+                snackbarMessages.emit(
+                    UiText.resource(R.string.message_stream_quality_set, UiText.resource(quality.labelRes())),
+                )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to update stream quality.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_stream_quality))
             }
         }
     }
@@ -653,9 +670,11 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateSoundBalancing(mode)
             }.onSuccess {
-                snackbarMessages.emit("Sound balancing set to ${mode.label}.")
+                snackbarMessages.emit(
+                    UiText.resource(R.string.message_sound_balancing_set, UiText.resource(mode.labelRes())),
+                )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to update sound balancing.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_sound_balancing))
             }
         }
     }
@@ -665,9 +684,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateStreamCacheSizeMb(sizeMb)
             }.onSuccess {
-                snackbarMessages.emit("Stream cache limit updated.")
+                snackbarMessages.emit(UiText.resource(R.string.message_stream_cache_limit_updated))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to update stream cache size.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_stream_cache_size))
             }
         }
     }
@@ -677,7 +696,7 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateBluetoothLyrics(enabled)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to update Bluetooth lyrics.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_bluetooth_lyrics))
             }
         }
     }
@@ -687,9 +706,11 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateBufferStrategy(strategy)
             }.onSuccess {
-                snackbarMessages.emit("Buffer strategy set to ${strategy.label}. Restart app to apply.")
+                snackbarMessages.emit(
+                    UiText.resource(R.string.message_buffer_strategy_set, UiText.resource(strategy.labelRes())),
+                )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to update buffer strategy.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_buffer_strategy))
             }
         }
     }
@@ -699,9 +720,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateCustomBufferSeconds(seconds)
             }.onSuccess {
-                snackbarMessages.emit("Custom buffer set to $seconds s. Restart app to apply.")
+                snackbarMessages.emit(UiText.resource(R.string.message_custom_buffer_set, seconds))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to update custom buffer.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_custom_buffer))
             }
         }
     }
@@ -711,9 +732,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateImageCacheSizeMb(sizeMb)
             }.onSuccess {
-                snackbarMessages.emit("Cover art cache limit updated. Restart app to apply.")
+                snackbarMessages.emit(UiText.resource(R.string.message_cover_art_cache_limit_updated))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.message ?: "Unable to update cover art cache size.")
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_cover_art_cache_size))
             }
         }
     }
@@ -949,7 +970,9 @@ class SakiAppViewModel @Inject constructor(
                 runCatching { libraryCacheRepository.saveArtists(serverId, indexes) }
                     .onFailure { Log.w("SakiApp", "Failed to cache artists", it) }
             }.onFailure { throwable ->
-                mutableUiState.update { it.copy(isArtistsLoading = false, artistsError = throwable.message ?: "Unable to load artists.") }
+                mutableUiState.update {
+                    it.copy(isArtistsLoading = false, artistsError = throwable.localizedOr(R.string.error_load_artists))
+                }
             }
         }
     }
@@ -982,7 +1005,9 @@ class SakiAppViewModel @Inject constructor(
                 runCatching { libraryCacheRepository.saveAlbums(serverId, type, albums) }
                     .onFailure { Log.w("SakiApp", "Failed to cache albums", it) }
             }.onFailure { throwable ->
-                mutableUiState.update { it.copy(isAlbumsLoading = false, albumsError = throwable.message ?: "Unable to load albums.") }
+                mutableUiState.update {
+                    it.copy(isAlbumsLoading = false, albumsError = throwable.localizedOr(R.string.error_load_albums))
+                }
             }
         }
     }
@@ -1012,7 +1037,9 @@ class SakiAppViewModel @Inject constructor(
                 runCatching { libraryCacheRepository.savePlaylists(serverId, playlists) }
                     .onFailure { Log.w("SakiApp", "Failed to cache playlists", it) }
             }.onFailure { throwable ->
-                mutableUiState.update { it.copy(isPlaylistsLoading = false, playlistsError = throwable.message ?: "Unable to load playlists.") }
+                mutableUiState.update {
+                    it.copy(isPlaylistsLoading = false, playlistsError = throwable.localizedOr(R.string.error_load_playlists))
+                }
             }
         }
     }
@@ -1045,7 +1072,9 @@ class SakiAppViewModel @Inject constructor(
                     .onFailure { Log.w("SakiApp", "Failed to cache songs", it) }
             }.onFailure { throwable ->
                 if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { it.copy(isSongsLoading = false, songsError = throwable.message ?: "Unable to load songs.") }
+                    mutableUiState.update {
+                        it.copy(isSongsLoading = false, songsError = throwable.localizedOr(R.string.error_load_songs))
+                    }
                 }
             }
         }
@@ -1149,7 +1178,7 @@ class SakiAppViewModel @Inject constructor(
                     state.copy(
                         searchResults = SearchResults(),
                         isSearchLoading = false,
-                        searchError = throwable.message ?: "Unable to search this server.",
+                        searchError = throwable.localizedOr(R.string.error_search_server),
                     )
                 }
             }
@@ -1221,10 +1250,12 @@ class SakiAppViewModel @Inject constructor(
                 appContext.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
                     ?: error("Cannot open output stream")
             }
-                .onSuccess { snackbarMessages.tryEmit("Backup exported") }
+                .onSuccess { snackbarMessages.tryEmit(UiText.resource(R.string.message_backup_exported)) }
                 .onFailure { e ->
                     if (e is CancellationException) throw e
-                    snackbarMessages.tryEmit("Export failed: ${e.message}")
+                    snackbarMessages.tryEmit(
+                        UiText.resource(R.string.message_export_failed, e.message.orEmpty()),
+                    )
                 }
         }
     }
@@ -1235,25 +1266,35 @@ class SakiAppViewModel @Inject constructor(
                 val json = withContext(kotlinx.coroutines.Dispatchers.IO) {
                     appContext.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
                 } ?: run {
-                    snackbarMessages.tryEmit("Cannot read backup file")
+                    snackbarMessages.tryEmit(UiText.resource(R.string.message_cannot_read_backup))
                     return@launch
                 }
                 when (val result = configBackupManager.importFromJson(json)) {
                     is ImportResult.Success -> {
-                        val msg = buildString {
-                            append("Imported ${result.serversImported} server(s)")
-                            if (result.settingsRestored) append(", settings restored")
+                        val settingsSuffix = if (result.settingsRestored) {
+                            UiText.resource(R.string.message_import_settings_suffix)
+                        } else {
+                            ""
                         }
-                        snackbarMessages.tryEmit(msg)
+                        snackbarMessages.tryEmit(
+                            UiText.plural(
+                                R.plurals.message_import_success,
+                                result.serversImported,
+                                result.serversImported,
+                                settingsSuffix,
+                            ),
+                        )
                         onSuccess?.invoke()
                     }
-                    is ImportResult.InvalidFormat -> snackbarMessages.tryEmit("Invalid backup file")
-                    is ImportResult.UnsupportedVersion -> snackbarMessages.tryEmit("Unsupported backup version ${result.version}")
+                    is ImportResult.InvalidFormat -> snackbarMessages.tryEmit(UiText.resource(R.string.message_invalid_backup))
+                    is ImportResult.UnsupportedVersion -> snackbarMessages.tryEmit(
+                        UiText.resource(R.string.message_unsupported_backup_version, result.version),
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                snackbarMessages.tryEmit("Import failed: ${e.message}")
+                snackbarMessages.tryEmit(UiText.resource(R.string.message_import_failed, e.message.orEmpty()))
             }
         }
     }
@@ -1292,31 +1333,31 @@ data class SakiAppUiState(
     val selectedAlbumFeed: AlbumListType = AlbumListType.NEWEST,
     val libraryIndexes: LibraryIndexes? = null,
     val isArtistsLoading: Boolean = false,
-    val artistsError: String? = null,
+    val artistsError: UiText? = null,
     val selectedArtist: Artist? = null,
     val selectedArtistTopSongs: List<Song> = emptyList(),
     val isArtistLoading: Boolean = false,
-    val artistError: String? = null,
+    val artistError: UiText? = null,
     val albums: List<AlbumSummary> = emptyList(),
     val isAlbumsLoading: Boolean = false,
-    val albumsError: String? = null,
+    val albumsError: UiText? = null,
     val selectedAlbum: Album? = null,
     val isAlbumLoading: Boolean = false,
-    val albumError: String? = null,
+    val albumError: UiText? = null,
     val playlists: List<PlaylistSummary> = emptyList(),
     val isPlaylistsLoading: Boolean = false,
-    val playlistsError: String? = null,
+    val playlistsError: UiText? = null,
     val selectedPlaylist: Playlist? = null,
     val isPlaylistLoading: Boolean = false,
-    val playlistError: String? = null,
+    val playlistError: UiText? = null,
     val songs: List<Song> = emptyList(),
     val isSongsLoading: Boolean = false,
-    val songsError: String? = null,
+    val songsError: UiText? = null,
     val isSearchActive: Boolean = false,
     val searchQuery: String = "",
     val searchResults: SearchResults = SearchResults(),
     val isSearchLoading: Boolean = false,
-    val searchError: String? = null,
+    val searchError: UiText? = null,
     val cachedSongs: List<CachedSong> = emptyList(),
     val cacheStorageSummary: CacheStorageSummary = CacheStorageSummary(),
     val streamCachedSongIds: Set<String> = emptySet(),

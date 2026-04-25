@@ -247,6 +247,66 @@
     <string name="player_retest_endpoints">Re-test endpoints</string>
     <string name="common_on">On</string>
     <string name="common_off">Off</string>
+    <string name="message_text_size_set">Text size set to %1$s.</string>
+    <string name="error_update_text_size">Unable to update text size.</string>
+    <string name="error_load_artist_details">Unable to load artist details.</string>
+    <string name="error_load_album_details">Unable to load album details.</string>
+    <string name="error_load_playlist">Unable to load playlist.</string>
+    <string name="error_start_playback">Unable to start playback.</string>
+    <string name="message_added_to_queue">Added %1$s to the queue.</string>
+    <string name="error_queue_song">Unable to queue the song.</string>
+    <string name="message_play_next">%1$s will play next.</string>
+    <string name="error_reorder_queue">Unable to reorder the queue.</string>
+    <string name="message_saved_offline">Saved %1$s for offline playback at %2$s.</string>
+    <string name="error_cache_song">Unable to cache the song.</string>
+    <string name="error_play_cached_song">Unable to play the cached song.</string>
+    <string name="error_start_offline_playback">Unable to start offline playback.</string>
+    <string name="message_removed_cached_file">Removed cached file.</string>
+    <string name="error_remove_cached_file">Unable to remove the cached file.</string>
+    <string name="message_no_downloads_to_clear">No downloads to clear.</string>
+    <string name="error_clear_downloads">Unable to clear downloads.</string>
+    <string name="message_no_stream_cache_to_clear">No stream cache to clear.</string>
+    <string name="error_clear_stream_cache">Unable to clear stream cache.</string>
+    <string name="message_cover_art_cache_cleared">Cover art cache cleared.</string>
+    <string name="error_clear_cover_art_cache">Unable to clear cover art cache.</string>
+    <string name="message_stream_quality_set">Streaming quality set to %1$s.</string>
+    <string name="error_update_stream_quality">Unable to update stream quality.</string>
+    <string name="message_sound_balancing_set">Sound balancing set to %1$s.</string>
+    <string name="error_update_sound_balancing">Unable to update sound balancing.</string>
+    <string name="message_stream_cache_limit_updated">Stream cache limit updated.</string>
+    <string name="error_update_stream_cache_size">Unable to update stream cache size.</string>
+    <string name="error_update_bluetooth_lyrics">Unable to update Bluetooth lyrics.</string>
+    <string name="message_buffer_strategy_set">Buffer strategy set to %1$s. Restart app to apply.</string>
+    <string name="error_update_buffer_strategy">Unable to update buffer strategy.</string>
+    <string name="message_custom_buffer_set">Custom buffer set to %1$d s. Restart app to apply.</string>
+    <string name="error_update_custom_buffer">Unable to update custom buffer.</string>
+    <string name="message_cover_art_cache_limit_updated">Cover art cache limit updated. Restart app to apply.</string>
+    <string name="error_update_cover_art_cache_size">Unable to update cover art cache size.</string>
+    <string name="error_load_artists">Unable to load artists.</string>
+    <string name="error_load_albums">Unable to load albums.</string>
+    <string name="error_load_playlists">Unable to load playlists.</string>
+    <string name="error_load_songs">Unable to load songs.</string>
+    <string name="error_search_server">Unable to search this server.</string>
+    <string name="message_backup_exported">Backup exported</string>
+    <string name="message_export_failed">Export failed: %1$s</string>
+    <string name="message_cannot_read_backup">Cannot read backup file</string>
+    <string name="message_import_settings_suffix"> and settings</string>
+    <string name="message_invalid_backup">Invalid backup file</string>
+    <string name="message_unsupported_backup_version">Unsupported backup version %1$d</string>
+    <string name="message_import_failed">Import failed: %1$s</string>
+    <string name="server_config_connected_to">Connected to %1$s</string>
+    <string name="server_config_server_saved">Server saved</string>
+    <string name="server_config_server_updated">Server updated</string>
+    <string name="server_config_server_removed">Server removed</string>
+    <string name="server_config_error_save">Unable to save the server right now.</string>
+    <string name="server_config_error_enter_name">Enter a server name.</string>
+    <string name="server_config_error_enter_username">Enter a Subsonic username.</string>
+    <string name="server_config_error_enter_password">Enter the server password.</string>
+    <string name="server_config_error_add_endpoint">Add at least one endpoint.</string>
+    <string name="server_config_error_endpoint_url">Each endpoint needs a URL.</string>
+    <string name="server_config_error_test_username">Enter a username before testing.</string>
+    <string name="server_config_error_test_password">Enter a password before testing.</string>
+    <string name="server_config_error_test_endpoint_url">Enter an endpoint URL before testing.</string>
 
     <plurals name="settings_endpoint_count">
         <item quantity="one">%1$d endpoint</item>
@@ -287,5 +347,17 @@
     <plurals name="browse_match_count">
         <item quantity="one">%1$d match</item>
         <item quantity="other">%1$d matches</item>
+    </plurals>
+    <plurals name="message_cleared_download_count">
+        <item quantity="one">Cleared %1$d download.</item>
+        <item quantity="other">Cleared %1$d downloads.</item>
+    </plurals>
+    <plurals name="message_cleared_stream_cache_entry_count">
+        <item quantity="one">Cleared %1$d stream cache entry.</item>
+        <item quantity="other">Cleared %1$d stream cache entries.</item>
+    </plurals>
+    <plurals name="message_import_success">
+        <item quantity="one">Imported %1$d server%2$s</item>
+        <item quantity="other">Imported %1$d servers%2$s</item>
     </plurals>
 </resources>

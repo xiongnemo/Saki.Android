@@ -78,6 +78,7 @@ import com.anzupop.saki.android.domain.model.Song
 import com.anzupop.saki.android.presentation.BrowseSection
 import com.anzupop.saki.android.presentation.rememberBrowseBackgroundBrush
 import com.anzupop.saki.android.presentation.SakiAppUiState
+import com.anzupop.saki.android.presentation.asString
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filter
@@ -175,7 +176,7 @@ fun BrowseScreen(
                         streamCachedSongIds = uiState.streamCachedSongIds,
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isAlbumLoading,
-                        error = uiState.albumError,
+                        error = uiState.albumError?.asString(),
                         onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
                     )
@@ -188,7 +189,7 @@ fun BrowseScreen(
                         streamCachedSongIds = uiState.streamCachedSongIds,
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isArtistLoading,
-                        error = uiState.artistError,
+                        error = uiState.artistError?.asString(),
                         onOpenAlbum = onOpenAlbum,
                         onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
@@ -201,7 +202,7 @@ fun BrowseScreen(
                         streamCachedSongIds = uiState.streamCachedSongIds,
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isPlaylistLoading,
-                        error = uiState.playlistError,
+                        error = uiState.playlistError?.asString(),
                         onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
                     )
@@ -325,7 +326,7 @@ private fun BrowsePager(
                 query = uiState.searchQuery,
                 results = uiState.searchResults,
                 isLoading = uiState.isSearchLoading,
-                error = uiState.searchError,
+                error = uiState.searchError?.asString(),
                 cachedSongsBySongId = cachedSongsBySongId,
                 streamCachedSongIds = uiState.streamCachedSongIds,
                 downloadingSongIds = uiState.downloadingSongIds,
@@ -382,7 +383,7 @@ private fun BrowsePager(
                                 indexes = uiState.libraryIndexes,
                                 server = currentServer,
                                 isLoading = uiState.isArtistsLoading,
-                                error = uiState.artistsError,
+                                error = uiState.artistsError?.asString(),
                                 onOpenArtist = onOpenArtist,
                             )
 
@@ -391,7 +392,7 @@ private fun BrowsePager(
                                 server = currentServer,
                                 selectedFeed = uiState.selectedAlbumFeed,
                                 isLoading = uiState.isAlbumsLoading,
-                                error = uiState.albumsError,
+                                error = uiState.albumsError?.asString(),
                                 onSelectFeed = onSelectAlbumFeed,
                                 onOpenAlbum = onOpenAlbum,
                             )
@@ -400,7 +401,7 @@ private fun BrowsePager(
                                 playlists = uiState.playlists,
                                 server = currentServer,
                                 isLoading = uiState.isPlaylistsLoading,
-                                error = uiState.playlistsError,
+                                error = uiState.playlistsError?.asString(),
                                 onOpenPlaylist = onOpenPlaylist,
                             )
 
@@ -411,7 +412,7 @@ private fun BrowsePager(
                                 streamCachedSongIds = uiState.streamCachedSongIds,
                                 downloadingSongIds = uiState.downloadingSongIds,
                                 isLoading = uiState.isSongsLoading,
-                                error = uiState.songsError,
+                                error = uiState.songsError?.asString(),
                                 onPlaySongs = onPlaySongs,
                                 onShowSongActions = onShowSongActions,
                             )
