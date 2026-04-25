@@ -53,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.anzupop.saki.android.R
+import com.anzupop.saki.android.domain.model.AppLanguage
 import com.anzupop.saki.android.domain.model.CachedSong
 import com.anzupop.saki.android.domain.model.MAX_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.MIN_STREAM_CACHE_SIZE_MB
@@ -93,6 +94,7 @@ fun SettingsScreen(
     onClearImageCache: () -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
+    onUpdateLanguage: (AppLanguage) -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
     onUpdateBufferStrategy: (BufferStrategy) -> Unit,
     onUpdateCustomBufferSeconds: (Int) -> Unit,
@@ -362,6 +364,39 @@ fun SettingsScreen(
                             },
                         )
                     }
+                }
+            }
+        }
+
+        item {
+            SettingsSectionCard(
+                title = stringResource(R.string.settings_language_title),
+                body = stringResource(R.string.settings_language_body),
+                action = null,
+            ) {
+                val currentLanguage = uiState.appPreferences.language
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    LanguageChip(
+                        label = stringResource(R.string.settings_language_system),
+                        selected = currentLanguage == AppLanguage.SYSTEM,
+                        coverage = null,
+                        onClick = { onUpdateLanguage(AppLanguage.SYSTEM) },
+                    )
+                    LanguageChip(
+                        label = stringResource(R.string.settings_language_english),
+                        selected = currentLanguage == AppLanguage.ENGLISH,
+                        coverage = null,
+                        onClick = { onUpdateLanguage(AppLanguage.ENGLISH) },
+                    )
+                    LanguageChip(
+                        label = stringResource(R.string.settings_language_chinese),
+                        selected = currentLanguage == AppLanguage.CHINESE,
+                        coverage = translationCoverage("zh"),
+                        onClick = { onUpdateLanguage(AppLanguage.CHINESE) },
+                    )
                 }
             }
         }
@@ -800,6 +835,52 @@ private fun BufferStrategy.localizedLabel(): String = stringResource(labelRes())
 
 @Composable
 private fun TextScale.localizedLabel(): String = stringResource(labelRes())
+
+@Composable
+private fun LanguageChip(
+    label: String,
+    selected: Boolean,
+    coverage: Int?,
+    onClick: () -> Unit,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            if (coverage != null) {
+                Text("$label (${stringResource(R.string.settings_language_coverage, coverage)})")
+            } else {
+                Text(label)
+            }
+        },
+    )
+}
+
+@Composable
+private fun translationCoverage(locale: String): Int {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    return remember(locale) {
+        val res = context.resources
+        val enConfig = android.content.res.Configuration(res.configuration).apply {
+            setLocale(java.util.Locale.ENGLISH)
+        }
+        val enRes = context.createConfigurationContext(enConfig).resources
+        val localeConfig = android.content.res.Configuration(res.configuration).apply {
+            setLocale(java.util.Locale.forLanguageTag(locale))
+        }
+        val localizedRes = context.createConfigurationContext(localeConfig).resources
+
+        val fields = R.string::class.java.fields
+        var total = 0
+        var translated = 0
+        for (field in fields) {
+            val id = field.getInt(null)
+            if (enRes.getString(id) != localizedRes.getString(id)) translated++
+            total++
+        }
+        if (total > 0) (translated * 100) / total else 0
+    }
+}
 
 private fun formatStorageSize(bytes: Long): String {
     if (bytes <= 0L) return "0 B"

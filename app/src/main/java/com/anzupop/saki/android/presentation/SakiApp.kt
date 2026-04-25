@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Density
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.anzupop.saki.android.domain.model.AppLanguage
 import com.anzupop.saki.android.presentation.library.BrowseScreen
 import com.anzupop.saki.android.presentation.library.NowPlayingOverlay
 import com.anzupop.saki.android.presentation.library.NowPlayingCapsule
@@ -132,6 +133,7 @@ fun SakiApp(
                         onClearImageCache = viewModel::clearImageCache,
                         onUpdateTextScale = viewModel::updateTextScale,
                         onReplayOnboarding = viewModel::replayOnboarding,
+                        onUpdateLanguage = viewModel::updateLanguage,
                         onUpdateBluetoothLyrics = viewModel::updateBluetoothLyrics,
                         onUpdateBufferStrategy = viewModel::updateBufferStrategy,
                         onUpdateCustomBufferSeconds = viewModel::updateCustomBufferSeconds,
@@ -204,6 +206,7 @@ private fun RootShell(
     onClearImageCache: () -> Unit,
     onUpdateTextScale: (com.anzupop.saki.android.domain.model.TextScale) -> Unit,
     onReplayOnboarding: () -> Unit,
+    onUpdateLanguage: (com.anzupop.saki.android.domain.model.AppLanguage) -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
     onUpdateBufferStrategy: (com.anzupop.saki.android.domain.model.BufferStrategy) -> Unit,
     onUpdateCustomBufferSeconds: (Int) -> Unit,
@@ -271,6 +274,7 @@ private fun RootShell(
                             onClearImageCache = onClearImageCache,
                             onUpdateTextScale = onUpdateTextScale,
                             onReplayOnboarding = onReplayOnboarding,
+                            onUpdateLanguage = onUpdateLanguage,
                             onUpdateBluetoothLyrics = onUpdateBluetoothLyrics,
                             onUpdateBufferStrategy = onUpdateBufferStrategy,
                             onUpdateCustomBufferSeconds = onUpdateCustomBufferSeconds,

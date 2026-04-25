@@ -57,6 +57,12 @@
     <string name="settings_onboarding_title">Onboarding</string>
     <string name="settings_onboarding_body">Run the first-time setup flow again if you want to revisit the intro and setup steps.</string>
     <string name="settings_run_onboarding_again">Run onboarding again</string>
+    <string name="settings_language_title">Language</string>
+    <string name="settings_language_body">Choose the display language for the app.</string>
+    <string name="settings_language_system">System default</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_chinese">中文</string>
+    <string name="settings_language_coverage">%1$d%%</string>
     <string name="settings_play_from_here">Play from here</string>
     <string name="settings_remove_download">Remove download</string>
 

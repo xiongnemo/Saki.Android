@@ -459,7 +459,7 @@ fun NowPlayingOverlay(
                                     track.isCached -> stringResource(R.string.player_offline)
                                     playbackState.isStreamCached -> stringResource(R.string.player_cached)
                                     else -> stringResource(R.string.player_streaming)
-                                } + " • ${track.qualityLabel}",
+                                } + " • ${localizeQualityLabel(track.qualityLabel)}",
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -797,7 +797,7 @@ fun NowPlayingOverlay(
                 ) {
                     item { DetailLine(stringResource(R.string.detail_artist), track.artist) }
                     item { DetailLine(stringResource(R.string.detail_album), track.album) }
-                    item { DetailLine(stringResource(R.string.detail_quality), track.qualityLabel) }
+                    item { DetailLine(stringResource(R.string.detail_quality), localizeQualityLabel(track.qualityLabel)) }
                     item { DetailLine(stringResource(R.string.detail_server), currentServer?.name) }
                     item {
                         DetailLine(
@@ -1081,6 +1081,21 @@ private fun QueueRow(
             }
         }
     }
+}
+
+@Composable
+private fun localizeQualityLabel(label: String): String {
+    val resId = when (label) {
+        "Original" -> R.string.stream_quality_original
+        "320 kbps" -> R.string.stream_quality_320_kbps
+        "256 kbps" -> R.string.stream_quality_256_kbps
+        "192 kbps" -> R.string.stream_quality_192_kbps
+        "160 kbps" -> R.string.stream_quality_160_kbps
+        "128 kbps" -> R.string.stream_quality_128_kbps
+        "96 kbps" -> R.string.stream_quality_96_kbps
+        else -> return label
+    }
+    return stringResource(resId)
 }
 
 @Composable

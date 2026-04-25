@@ -3,6 +3,7 @@ package com.anzupop.saki.android.data.repository
 import com.anzupop.saki.android.data.local.dao.AppPreferencesDao
 import com.anzupop.saki.android.data.local.entity.AppPreferencesEntity
 import com.anzupop.saki.android.di.IoDispatcher
+import com.anzupop.saki.android.domain.model.AppLanguage
 import com.anzupop.saki.android.domain.model.AppPreferences
 import com.anzupop.saki.android.domain.model.TextScale
 import com.anzupop.saki.android.domain.repository.AppPreferencesRepository
@@ -39,6 +40,10 @@ class DefaultAppPreferencesRepository @Inject constructor(
             onboardingCompleted = false,
         )
         appPreferencesDao.upsertPreferences(current.copy(textScaleKey = textScale.storageKey))
+    }
+
+    override suspend fun updateLanguage(language: AppLanguage) {
+        // Language preference is only supported via DataStore; no-op here
     }
 }
 
