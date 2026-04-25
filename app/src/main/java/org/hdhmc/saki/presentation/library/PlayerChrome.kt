@@ -16,7 +16,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,12 +23,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,9 +39,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -58,6 +58,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -89,7 +90,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -376,7 +376,7 @@ fun NowPlayingOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .background(background)
-                .safeDrawingPadding()
+                .statusBarsPadding()
                 .imePadding(),
         ) {
             val combinedMetadata = listOfNotNull(track.artist, track.album).joinToString(" • ")
@@ -403,14 +403,7 @@ fun NowPlayingOverlay(
                 lineHeight = if (denseMetadata || shortScreen) 20.sp else 22.sp,
             )
             val horizontalPadding = if (shortScreen) 16.dp else 20.dp
-            val verticalSpacing = if (shortScreen) 12.dp else 16.dp
-            val artworkTargetSize = when {
-                maxHeight < 620.dp -> 220.dp
-                maxHeight < 700.dp -> 248.dp
-                maxHeight < 820.dp -> 296.dp
-                else -> 368.dp
-            }
-            val artworkSize = artworkTargetSize.coerceAtMost(maxWidth - (horizontalPadding * 2))
+            val verticalSpacing = if (shortScreen) 8.dp else 12.dp
             val showQueueAffordance = playbackState.queue.size > 1
 
             // Queue bottom sheet state
@@ -418,29 +411,13 @@ fun NowPlayingOverlay(
             var showQueueSheet by remember { mutableStateOf(false) }
 
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
-                val scrollState = rememberScrollState()
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = horizontalPadding)
-                        .verticalScroll(scrollState)
-                        .pointerInput(showQueueAffordance) {
-                            if (!showQueueAffordance) return@pointerInput
-                            val thresholdPx = 80.dp.toPx()
-                            var totalDrag = 0f
-                            detectVerticalDragGestures(
-                                onDragStart = { totalDrag = 0f },
-                                onVerticalDrag = { _, dragAmount ->
-                                    totalDrag += dragAmount
-                                    if (totalDrag < -thresholdPx && scrollState.value == 0) {
-                                        showQueueSheet = true
-                                    }
-                                },
-                            )
-                        },
+                        .padding(horizontal = horizontalPadding),
                     verticalArrangement = Arrangement.spacedBy(verticalSpacing),
                 ) {
-                    Spacer(Modifier.heightIn(min = 14.dp))
+                    Spacer(Modifier.heightIn(min = 4.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -467,9 +444,11 @@ fun NowPlayingOverlay(
                             )
                         }
                     }
+                    // Cover art — fills remaining vertical space
                     val hasLyrics = lyrics != null && lyrics.lines.isNotEmpty()
                     Box(
                         modifier = Modifier
+                            .weight(1f)
                             .fillMaxWidth()
                             .clickable {
                                 if (showLyrics) showLyrics = false
@@ -480,20 +459,22 @@ fun NowPlayingOverlay(
                         HorizontalPager(
                             state = artworkPagerState,
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .fillMaxSize()
                                 .clip(RoundedCornerShape(34.dp)),
                             pageSpacing = 16.dp,
                             beyondViewportPageCount = 1,
                         ) { page ->
                             Box(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 val queueItem = stableQueue.getOrNull(page)
                                 ArtworkCard(
                                     model = queueItem?.queueArtworkModel(queueItem.serverId?.let { serversById[it] }),
                                     contentDescription = queueItem?.title,
-                                    modifier = Modifier.size(artworkSize),
+                                    modifier = Modifier
+                                        .aspectRatio(1f)
+                                        .fillMaxHeight(),
                                     cornerRadiusDp = 34,
                                 )
                             }
@@ -506,21 +487,22 @@ fun NowPlayingOverlay(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(artworkSize)
+                                    .aspectRatio(1f)
+                                    .fillMaxHeight()
                                     .clip(RoundedCornerShape(34.dp))
                                     .background(Color.Black.copy(alpha = 0.65f)),
                             ) {
                                 if (lyrics != null && lyrics.lines.isNotEmpty()) {
                                     SyncedLyricsView(
                                         lyrics = lyrics,
-                                    positionMs = playbackState.positionMs,
-                                    isPlaying = playbackState.isPlaying,
-                                    onSeekTo = onSeekTo,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 40.dp),
-                                    textColor = Color.White,
-                                )
+                                        positionMs = playbackState.positionMs,
+                                        isPlaying = playbackState.isPlaying,
+                                        onSeekTo = onSeekTo,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 40.dp),
+                                        textColor = Color.White,
+                                    )
                                 }
                                 IconButton(
                                     onClick = { showLyrics = false },
@@ -551,7 +533,7 @@ fun NowPlayingOverlay(
                         val shuffleDescription = stringResource(R.string.player_shuffle)
                         val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
                         val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
-                        Row {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             ToggleIconButton(
                                 icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                                 active = playbackState.repeatMode != RepeatModeSetting.OFF,
@@ -565,6 +547,7 @@ fun NowPlayingOverlay(
                                     }
                                     android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
                                 },
+                                compact = true,
                             )
                             ToggleIconButton(
                                 icon = Icons.Rounded.Shuffle,
@@ -575,10 +558,17 @@ fun NowPlayingOverlay(
                                     val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
                                     android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
                                 },
+                                compact = true,
                             )
                         }
                         Box {
-                            PlayerActionButton(Icons.Rounded.MoreVert, stringResource(R.string.player_more), { showMenu = true }, compactControls)
+                            ToggleIconButton(
+                                icon = Icons.Rounded.MoreVert,
+                                active = false,
+                                contentDescription = stringResource(R.string.player_more),
+                                onClick = { showMenu = true },
+                                compact = true,
+                            )
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.player_song_details)) },
@@ -739,8 +729,20 @@ fun NowPlayingOverlay(
                     }
                     // Tech info bar
                     val runtimeInfo = playbackState.runtimeInfo
-                    val codec = runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
-                    val sampleRate = runtimeInfo?.sampleRate?.let { "${it / 1_000} kHz" }
+                    val codec = runtimeInfo?.sampleMimeType?.let { mime ->
+                        when {
+                            "flac" in mime -> "FLAC"
+                            "opus" in mime -> "Opus"
+                            "vorbis" in mime -> "Vorbis"
+                            "mp4a" in mime || "aac" in mime -> "AAC"
+                            "mp3" in mime || "mpeg" in mime -> "MP3"
+                            "wav" in mime || "raw" in mime -> "WAV"
+                            else -> mime.substringAfter("/")
+                        }
+                    } ?: runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
+                    val sampleRate = runtimeInfo?.sampleRate?.let {
+                        if (it >= 1_000) "${it / 1_000} kHz" else "$it Hz"
+                    }
                     val bitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
                         ?: track.bitRateKbps?.let { "$it kbps" }
                     val techParts = listOfNotNull(codec, sampleRate, bitrate)
@@ -755,17 +757,25 @@ fun NowPlayingOverlay(
                     }
                     // Queue toggle
                     if (showQueueAffordance) {
-                        IconButton(
-                            onClick = { showQueueSheet = true },
-                            modifier = Modifier.align(Alignment.CenterHorizontally),
-                        ) {
-                            Icon(
-                                Icons.Rounded.KeyboardArrowUp,
-                                contentDescription = stringResource(R.string.player_show_queue),
+                        Column {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 32.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                             )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                IconButton(onClick = { showQueueSheet = true }) {
+                                    Icon(
+                                        Icons.Rounded.KeyboardArrowUp,
+                                        contentDescription = stringResource(R.string.player_show_queue),
+                                    )
+                                }
+                            }
                         }
                     }
-                    Spacer(Modifier.heightIn(min = 16.dp))
+                    Spacer(Modifier.height(4.dp))
                 }
             }
 
@@ -968,6 +978,7 @@ private fun ToggleIconButton(
     active: Boolean,
     contentDescription: String,
     onClick: () -> Unit,
+    compact: Boolean = false,
 ) {
     val onText = stringResource(R.string.common_on)
     val offText = stringResource(R.string.common_off)
@@ -978,16 +989,19 @@ private fun ToggleIconButton(
     ) {
         IconButton(
             onClick = onClick,
-            modifier = Modifier.semantics {
-                role = Role.Switch
-                stateDescription = "$contentDescription: ${if (active) onText else offText}"
-            },
+            modifier = Modifier
+                .size(if (compact) 36.dp else 48.dp)
+                .semantics {
+                    role = Role.Switch
+                    stateDescription = "$contentDescription: ${if (active) onText else offText}"
+                },
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
                 tint = if (active) MaterialTheme.colorScheme.onPrimaryContainer
                 else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = if (compact) Modifier.size(20.dp) else Modifier,
             )
         }
     }
