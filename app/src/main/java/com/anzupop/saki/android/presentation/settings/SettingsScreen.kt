@@ -175,7 +175,7 @@ fun SettingsScreen(
                         )
                     }
                 }
-                FilledTonalButton(onClick = onManageServers) {
+                FilledTonalButton(onClick = onManageServers, shape = MaterialTheme.shapes.small) {
                     Icon(Icons.Rounded.WifiTethering, contentDescription = null)
                     Text(stringResource(R.string.settings_open_server_manager), modifier = Modifier.padding(start = 8.dp))
                 }
@@ -472,6 +472,7 @@ fun SettingsScreen(
                 OutlinedButton(
                     onClick = onClearStreamCache,
                     enabled = storageSummary.streamCacheBytes > 0L,
+                    shape = MaterialTheme.shapes.small,
                 ) {
                     Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
                     Text(stringResource(R.string.settings_clear_stream_cache), modifier = Modifier.padding(start = 8.dp))
@@ -541,6 +542,7 @@ fun SettingsScreen(
                 OutlinedButton(
                     onClick = onClearImageCache,
                     enabled = storageSummary.imageCacheBytes > 0L,
+                    shape = MaterialTheme.shapes.small,
                 ) {
                     Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
                     Text(stringResource(R.string.settings_clear_cover_art_cache), modifier = Modifier.padding(start = 8.dp))
@@ -571,7 +573,7 @@ fun SettingsScreen(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (visibleCachedSongs.isNotEmpty()) {
-                        OutlinedButton(onClick = { onPlayCachedQueue(visibleCachedSongs, 0) }) {
+                        OutlinedButton(onClick = { onPlayCachedQueue(visibleCachedSongs, 0) }, shape = MaterialTheme.shapes.small) {
                             Icon(Icons.Rounded.PlayArrow, contentDescription = null)
                             Text(stringResource(R.string.settings_play_all), modifier = Modifier.padding(start = 8.dp))
                         }
@@ -579,6 +581,7 @@ fun SettingsScreen(
                     OutlinedButton(
                         onClick = onClearCachedSongs,
                         enabled = visibleCachedSongs.isNotEmpty(),
+                        shape = MaterialTheme.shapes.small,
                     ) {
                         Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
                         Text(stringResource(R.string.settings_clear_all), modifier = Modifier.padding(start = 8.dp))
@@ -655,11 +658,11 @@ fun SettingsScreen(
                 action = null,
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { exportLauncher.launch("saki-backup.json") }) {
+                    Button(onClick = { exportLauncher.launch("saki-backup.json") }, shape = MaterialTheme.shapes.small) {
                         Icon(Icons.Rounded.Upload, contentDescription = null)
                         Text(stringResource(R.string.settings_export), modifier = Modifier.padding(start = 8.dp))
                     }
-                    OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }) {
+                    OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }, shape = MaterialTheme.shapes.small) {
                         Icon(Icons.Rounded.Download, contentDescription = null)
                         Text(stringResource(R.string.settings_import), modifier = Modifier.padding(start = 8.dp))
                     }

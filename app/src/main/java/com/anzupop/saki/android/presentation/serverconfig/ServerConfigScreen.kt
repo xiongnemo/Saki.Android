@@ -357,7 +357,7 @@ private fun EmptyStateCard(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = onAddServer) {
+            Button(onClick = onAddServer, shape = MaterialTheme.shapes.small) {
                 Text(stringResource(R.string.server_config_create_server))
             }
         }
@@ -436,10 +436,10 @@ private fun ServerCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(onClick = onEditServer) {
+                Button(onClick = onEditServer, shape = MaterialTheme.shapes.small) {
                     Text(stringResource(R.string.server_config_manage))
                 }
-                TextButton(onClick = onDeleteServer) {
+                TextButton(onClick = onDeleteServer, shape = MaterialTheme.shapes.small) {
                     Text(stringResource(R.string.server_config_delete))
                 }
             }
@@ -520,7 +520,7 @@ private fun ServerEditorSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = onDismissEditor) {
+                TextButton(onClick = onDismissEditor, shape = MaterialTheme.shapes.small) {
                     Text(stringResource(R.string.server_config_close))
                 }
             }
@@ -613,7 +613,7 @@ private fun ServerEditorSheet(
                 )
             }
 
-            TextButton(onClick = onAddEndpoint) {
+            TextButton(onClick = onAddEndpoint, shape = MaterialTheme.shapes.small) {
                 Text(stringResource(R.string.server_config_add_endpoint))
             }
 
@@ -627,6 +627,7 @@ private fun ServerEditorSheet(
                 Button(
                     onClick = onSaveServer,
                     enabled = !isSaving,
+                    shape = MaterialTheme.shapes.small,
                 ) {
                     if (isSaving) {
                         CircularProgressIndicator(
@@ -647,6 +648,7 @@ private fun ServerEditorSheet(
                 TextButton(
                     onClick = onDismissEditor,
                     enabled = !isSaving,
+                    shape = MaterialTheme.shapes.small,
                 ) {
                     Text(stringResource(R.string.server_config_cancel))
                 }
@@ -718,6 +720,7 @@ private fun EndpointEditorCard(
                 Button(
                     onClick = onTest,
                     enabled = endpoint.testState !is EndpointConnectionState.Testing,
+                    shape = MaterialTheme.shapes.small,
                 ) {
                     if (endpoint.testState is EndpointConnectionState.Testing) {
                         CircularProgressIndicator(
@@ -733,7 +736,7 @@ private fun EndpointEditorCard(
                 }
 
                 if (canRemove) {
-                    TextButton(onClick = onRemove) {
+                    TextButton(onClick = onRemove, shape = MaterialTheme.shapes.small) {
                         Text(stringResource(R.string.server_config_remove))
                     }
                 }
