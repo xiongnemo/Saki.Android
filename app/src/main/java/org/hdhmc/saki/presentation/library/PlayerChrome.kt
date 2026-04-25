@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -377,6 +378,7 @@ fun NowPlayingOverlay(
                 .fillMaxSize()
                 .background(background)
                 .statusBarsPadding()
+                .navigationBarsPadding()
                 .imePadding(),
         ) {
             val combinedMetadata = listOfNotNull(track.artist, track.album).joinToString(" • ")
@@ -541,9 +543,9 @@ fun NowPlayingOverlay(
                                 onClick = {
                                     onCycleRepeatMode()
                                     val label = when (playbackState.repeatMode) {
-                                        RepeatModeSetting.OFF -> repeatOneLabel
-                                        RepeatModeSetting.ONE -> repeatAllLabel
-                                        RepeatModeSetting.ALL -> repeatOffLabel
+                                        RepeatModeSetting.OFF -> repeatAllLabel
+                                        RepeatModeSetting.ALL -> repeatOneLabel
+                                        RepeatModeSetting.ONE -> repeatOffLabel
                                     }
                                     android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
                                 },
@@ -562,13 +564,7 @@ fun NowPlayingOverlay(
                             )
                         }
                         Box {
-                            ToggleIconButton(
-                                icon = Icons.Rounded.MoreVert,
-                                active = false,
-                                contentDescription = stringResource(R.string.player_more),
-                                onClick = { showMenu = true },
-                                compact = true,
-                            )
+                            PlayerActionButton(Icons.Rounded.MoreVert, stringResource(R.string.player_more), { showMenu = true }, true)
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.player_song_details)) },
@@ -741,7 +737,10 @@ fun NowPlayingOverlay(
                         }
                     } ?: runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
                     val sampleRate = runtimeInfo?.sampleRate?.let {
-                        if (it >= 1_000) "${it / 1_000} kHz" else "$it Hz"
+                        if (it >= 1_000) {
+                            val khz = it / 1_000.0
+                            if (it % 1_000 == 0) "${it / 1_000} kHz" else "${"%.1f".format(khz)} kHz"
+                        } else "$it Hz"
                     }
                     val bitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
                         ?: track.bitRateKbps?.let { "$it kbps" }
@@ -990,7 +989,6 @@ private fun ToggleIconButton(
         IconButton(
             onClick = onClick,
             modifier = Modifier
-                .size(if (compact) 36.dp else 48.dp)
                 .semantics {
                     role = Role.Switch
                     stateDescription = "$contentDescription: ${if (active) onText else offText}"
