@@ -30,7 +30,6 @@ import com.anzupop.saki.android.domain.model.AppLanguage
 import com.anzupop.saki.android.presentation.library.BrowseScreen
 import com.anzupop.saki.android.presentation.library.NowPlayingOverlay
 import com.anzupop.saki.android.presentation.library.NowPlayingCapsule
-import com.anzupop.saki.android.presentation.onboarding.OnboardingScreen
 import com.anzupop.saki.android.presentation.serverconfig.ServerConfigRoute
 import com.anzupop.saki.android.presentation.settings.SettingsScreen
 import kotlinx.coroutines.flow.collectLatest
@@ -77,19 +76,6 @@ fun SakiApp(
                     Surface(modifier = Modifier.fillMaxSize()) {}
                 }
 
-                !uiState.hasCompletedOnboarding -> {
-                    OnboardingScreen(
-                        onContinue = viewModel::completeOnboarding,
-                        onSetUpNow = {
-                            viewModel.completeOnboarding()
-                            showServerManager = true
-                        },
-                        onImportConfig = { uri ->
-                            viewModel.importConfig(uri) { viewModel.completeOnboarding() }
-                        },
-                    )
-                }
-
                 else -> {
                     RootShell(
                         uiState = uiState,
@@ -132,7 +118,6 @@ fun SakiApp(
                         onUpdateImageCacheSizeMb = viewModel::updateImageCacheSizeMb,
                         onClearImageCache = viewModel::clearImageCache,
                         onUpdateTextScale = viewModel::updateTextScale,
-                        onReplayOnboarding = viewModel::replayOnboarding,
                         onUpdateLanguage = viewModel::updateLanguage,
                         onUpdateBluetoothLyrics = viewModel::updateBluetoothLyrics,
                         onUpdateBufferStrategy = viewModel::updateBufferStrategy,
@@ -205,7 +190,6 @@ private fun RootShell(
     onUpdateImageCacheSizeMb: (Int) -> Unit,
     onClearImageCache: () -> Unit,
     onUpdateTextScale: (com.anzupop.saki.android.domain.model.TextScale) -> Unit,
-    onReplayOnboarding: () -> Unit,
     onUpdateLanguage: (com.anzupop.saki.android.domain.model.AppLanguage) -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
     onUpdateBufferStrategy: (com.anzupop.saki.android.domain.model.BufferStrategy) -> Unit,
@@ -273,7 +257,6 @@ private fun RootShell(
                             onUpdateImageCacheSizeMb = onUpdateImageCacheSizeMb,
                             onClearImageCache = onClearImageCache,
                             onUpdateTextScale = onUpdateTextScale,
-                            onReplayOnboarding = onReplayOnboarding,
                             onUpdateLanguage = onUpdateLanguage,
                             onUpdateBluetoothLyrics = onUpdateBluetoothLyrics,
                             onUpdateBufferStrategy = onUpdateBufferStrategy,
@@ -306,6 +289,7 @@ private fun RootShell(
                             onPlaySongNext = onPlaySongNext,
                             onToggleSongDownload = onToggleSongDownload,
                             onOpenSettings = { showSettings = true },
+                            onImportConfig = onImportConfig,
                         )
                     }
 

@@ -2,7 +2,6 @@ package com.anzupop.saki.android.data.repository
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -34,10 +33,6 @@ class DataStoreAppPreferencesRepository @Inject constructor(
             .first()
             .toAppPreferences()
 
-    override suspend fun setOnboardingCompleted(completed: Boolean) {
-        dataStore.edit { it[KEY_ONBOARDING_COMPLETED] = completed }
-    }
-
     override suspend fun updateTextScale(textScale: TextScale) {
         dataStore.edit { it[KEY_TEXT_SCALE] = textScale.storageKey }
     }
@@ -47,14 +42,12 @@ class DataStoreAppPreferencesRepository @Inject constructor(
     }
 
     companion object {
-        val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val KEY_TEXT_SCALE = stringPreferencesKey("text_scale")
         val KEY_LANGUAGE = stringPreferencesKey("app_language")
     }
 }
 
 private fun Preferences.toAppPreferences() = AppPreferences(
-    hasCompletedOnboarding = this[DataStoreAppPreferencesRepository.KEY_ONBOARDING_COMPLETED] ?: false,
     textScale = TextScale.fromStorageKey(this[DataStoreAppPreferencesRepository.KEY_TEXT_SCALE]),
     language = AppLanguage.fromTag(this[DataStoreAppPreferencesRepository.KEY_LANGUAGE]),
 )

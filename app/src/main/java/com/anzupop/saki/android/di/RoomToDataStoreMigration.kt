@@ -55,7 +55,6 @@ class RoomToDataStoreMigration(
 
     private suspend fun migrateAppPreferences(db: SakiDatabase, ds: MutablePreferences) {
         val entity = db.appPreferencesDao().getPreferences() ?: return
-        ds[DataStoreAppPreferencesRepository.KEY_ONBOARDING_COMPLETED] = entity.onboardingCompleted
         ds[DataStoreAppPreferencesRepository.KEY_TEXT_SCALE] = entity.textScaleKey
     }
 

@@ -28,13 +28,6 @@ class DefaultAppPreferencesRepository @Inject constructor(
         appPreferencesDao.getPreferences()?.toDomain() ?: AppPreferences()
     }
 
-    override suspend fun setOnboardingCompleted(completed: Boolean): Unit = withContext(ioDispatcher) {
-        val current = appPreferencesDao.getPreferences() ?: AppPreferencesEntity(
-            onboardingCompleted = false,
-        )
-        appPreferencesDao.upsertPreferences(current.copy(onboardingCompleted = completed))
-    }
-
     override suspend fun updateTextScale(textScale: TextScale): Unit = withContext(ioDispatcher) {
         val current = appPreferencesDao.getPreferences() ?: AppPreferencesEntity(
             onboardingCompleted = false,
@@ -49,7 +42,6 @@ class DefaultAppPreferencesRepository @Inject constructor(
 
 private fun AppPreferencesEntity.toDomain(): AppPreferences {
     return AppPreferences(
-        hasCompletedOnboarding = onboardingCompleted,
         textScale = TextScale.fromStorageKey(textScaleKey),
     )
 }

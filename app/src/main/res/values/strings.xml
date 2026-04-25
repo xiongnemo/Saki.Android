@@ -1,16 +1,6 @@
 <resources>
     <string name="app_name">Saki.Android</string>
 
-    <string name="onboarding_tagline">A Subsonic client built around expressive shapes, resilient streaming, and offline playback.</string>
-    <string name="onboarding_feature_endpoints_title">One server, multiple endpoints</string>
-    <string name="onboarding_feature_endpoints_body">Keep LAN and WAN URLs under one profile and let the client fail over when the network path changes.</string>
-    <string name="onboarding_feature_offline_title">Offline-first listening</string>
-    <string name="onboarding_feature_offline_body">Cache tracks for offline playback and keep a visible downloaded state throughout the library.</string>
-    <string name="onboarding_feature_playback_title">Focused playback</string>
-    <string name="onboarding_feature_playback_body">Browse artists, albums, playlists, and songs with a persistent player and a dedicated now-playing view.</string>
-    <string name="onboarding_set_up_library">Set up my library</string>
-    <string name="onboarding_import_backup">Import backup</string>
-    <string name="onboarding_continue_without_setup">Continue without setup</string>
 
     <string name="settings_title">Settings</string>
     <string name="settings_intro">Manage servers, text size, streaming quality, sound balancing, offline downloads, and onboarding.</string>
@@ -54,9 +44,6 @@
     <string name="settings_backup_restore_body">Export or import server configuration and settings. Warning: exported files contain server passwords in plaintext.</string>
     <string name="settings_export">Export</string>
     <string name="settings_import">Import</string>
-    <string name="settings_onboarding_title">Onboarding</string>
-    <string name="settings_onboarding_body">Run the first-time setup flow again if you want to revisit the intro and setup steps.</string>
-    <string name="settings_run_onboarding_again">Run onboarding again</string>
     <string name="settings_language_title">Language</string>
     <string name="settings_language_body">Choose the display language for the app.</string>
     <string name="settings_language_system">System default</string>
@@ -182,6 +169,7 @@
     <string name="browse_needs_server">Browse needs a server profile</string>
     <string name="browse_needs_server_body">Add a Subsonic server first, then swipe through artists, albums, playlists, and songs.</string>
     <string name="browse_add_server">Add server</string>
+    <string name="browse_import_backup">Import backup</string>
     <string name="browse_search_placeholder">Search %1$s</string>
     <string name="browse_close_search">Close search</string>
     <string name="browse_search_server">Search this server</string>

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -563,7 +564,7 @@ fun SongDetailsDialog(song: Song, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun NoServerBrowseState(modifier: Modifier, onManageServers: () -> Unit) {
+fun NoServerBrowseState(modifier: Modifier, onManageServers: () -> Unit, onImportBackup: () -> Unit) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Card(
             shape = MaterialTheme.shapes.extraLarge,
@@ -578,6 +579,7 @@ fun NoServerBrowseState(modifier: Modifier, onManageServers: () -> Unit) {
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = onManageServers) { Text(stringResource(R.string.browse_add_server)) }
+                    OutlinedButton(onClick = onImportBackup) { Text(stringResource(R.string.browse_import_backup)) }
                 }
             }
         }

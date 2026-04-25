@@ -94,7 +94,6 @@ class SakiAppViewModel @Inject constructor(
                 mutableUiState.update { state ->
                     state.copy(
                         isAppReady = true,
-                        hasCompletedOnboarding = preferences.hasCompletedOnboarding,
                         textScale = preferences.textScale,
                         appPreferences = preferences,
                     )
@@ -198,18 +197,6 @@ class SakiAppViewModel @Inject constructor(
             BrowseSection.ALBUMS -> if (uiState.value.albums.isEmpty()) loadAlbums(serverId, uiState.value.selectedAlbumFeed)
             BrowseSection.PLAYLISTS -> if (uiState.value.playlists.isEmpty()) loadPlaylists(serverId)
             BrowseSection.SONGS -> if (uiState.value.songs.isEmpty()) loadSongs(serverId)
-        }
-    }
-
-    fun completeOnboarding() {
-        viewModelScope.launch {
-            appPreferencesRepository.setOnboardingCompleted(true)
-        }
-    }
-
-    fun replayOnboarding() {
-        viewModelScope.launch {
-            appPreferencesRepository.setOnboardingCompleted(false)
         }
     }
 
@@ -1350,7 +1337,6 @@ enum class BrowseSection {
 
 data class SakiAppUiState(
     val isAppReady: Boolean = false,
-    val hasCompletedOnboarding: Boolean = false,
     val textScale: TextScale = TextScale.DEFAULT,
     val appPreferences: AppPreferences = AppPreferences(),
     val selectedBrowseSection: BrowseSection = BrowseSection.ARTISTS,
