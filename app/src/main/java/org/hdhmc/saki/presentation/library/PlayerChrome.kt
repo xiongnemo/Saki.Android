@@ -24,12 +24,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,9 +40,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -58,6 +59,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -89,12 +91,12 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -106,6 +108,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -375,7 +378,8 @@ fun NowPlayingOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .background(background)
-                .safeDrawingPadding()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .imePadding(),
         ) {
             val combinedMetadata = listOfNotNull(track.artist, track.album).joinToString(" • ")
@@ -402,14 +406,7 @@ fun NowPlayingOverlay(
                 lineHeight = if (denseMetadata || shortScreen) 20.sp else 22.sp,
             )
             val horizontalPadding = if (shortScreen) 16.dp else 20.dp
-            val verticalSpacing = if (shortScreen) 12.dp else 16.dp
-            val artworkTargetSize = when {
-                maxHeight < 620.dp -> 220.dp
-                maxHeight < 700.dp -> 248.dp
-                maxHeight < 820.dp -> 296.dp
-                else -> 368.dp
-            }
-            val artworkSize = artworkTargetSize.coerceAtMost(maxWidth - (horizontalPadding * 2))
+            val verticalSpacing = if (shortScreen) 8.dp else 12.dp
             val showQueueAffordance = playbackState.queue.size > 1
 
             // Queue bottom sheet state
@@ -417,29 +414,13 @@ fun NowPlayingOverlay(
             var showQueueSheet by remember { mutableStateOf(false) }
 
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
-                val scrollState = rememberScrollState()
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = horizontalPadding)
-                        .verticalScroll(scrollState)
-                        .pointerInput(showQueueAffordance) {
-                            if (!showQueueAffordance) return@pointerInput
-                            val thresholdPx = 80.dp.toPx()
-                            var totalDrag = 0f
-                            detectVerticalDragGestures(
-                                onDragStart = { totalDrag = 0f },
-                                onVerticalDrag = { _, dragAmount ->
-                                    totalDrag += dragAmount
-                                    if (totalDrag < -thresholdPx && scrollState.value == 0) {
-                                        showQueueSheet = true
-                                    }
-                                },
-                            )
-                        },
+                        .padding(horizontal = horizontalPadding),
                     verticalArrangement = Arrangement.spacedBy(verticalSpacing),
                 ) {
-                    Spacer(Modifier.heightIn(min = 14.dp))
+                    Spacer(Modifier.heightIn(min = 4.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -466,9 +447,11 @@ fun NowPlayingOverlay(
                             )
                         }
                     }
+                    // Cover art — fills remaining vertical space
                     val hasLyrics = lyrics != null && lyrics.lines.isNotEmpty()
                     Box(
                         modifier = Modifier
+                            .weight(1f)
                             .fillMaxWidth()
                             .clickable {
                                 if (showLyrics) showLyrics = false
@@ -479,20 +462,22 @@ fun NowPlayingOverlay(
                         HorizontalPager(
                             state = artworkPagerState,
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .fillMaxSize()
                                 .clip(RoundedCornerShape(34.dp)),
                             pageSpacing = 16.dp,
                             beyondViewportPageCount = 1,
                         ) { page ->
                             Box(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 val queueItem = stableQueue.getOrNull(page)
                                 ArtworkCard(
                                     model = queueItem?.queueArtworkModel(queueItem.serverId?.let { serversById[it] }),
                                     contentDescription = queueItem?.title,
-                                    modifier = Modifier.size(artworkSize),
+                                    modifier = Modifier
+                                        .aspectRatio(1f)
+                                        .fillMaxHeight(),
                                     cornerRadiusDp = 34,
                                 )
                             }
@@ -505,21 +490,22 @@ fun NowPlayingOverlay(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(artworkSize)
+                                    .aspectRatio(1f)
+                                    .fillMaxHeight()
                                     .clip(RoundedCornerShape(34.dp))
                                     .background(Color.Black.copy(alpha = 0.65f)),
                             ) {
                                 if (lyrics != null && lyrics.lines.isNotEmpty()) {
                                     SyncedLyricsView(
                                         lyrics = lyrics,
-                                    positionMs = playbackState.positionMs,
-                                    isPlaying = playbackState.isPlaying,
-                                    onSeekTo = onSeekTo,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 40.dp),
-                                    textColor = Color.White,
-                                )
+                                        positionMs = playbackState.positionMs,
+                                        isPlaying = playbackState.isPlaying,
+                                        onSeekTo = onSeekTo,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 40.dp),
+                                        textColor = Color.White,
+                                    )
                                 }
                                 IconButton(
                                     onClick = { showLyrics = false },
@@ -533,6 +519,68 @@ fun NowPlayingOverlay(
                                         tint = Color.White.copy(alpha = 0.7f),
                                     )
                                 }
+                            }
+                        }
+                    }
+                    // Repeat / Shuffle / More row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val toastContext = LocalContext.current
+                        val repeatDescription = stringResource(R.string.player_repeat)
+                        val repeatOneLabel = stringResource(R.string.player_repeat_one)
+                        val repeatAllLabel = stringResource(R.string.player_repeat_all)
+                        val repeatOffLabel = stringResource(R.string.player_repeat_off)
+                        val shuffleDescription = stringResource(R.string.player_shuffle)
+                        val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
+                        val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ToggleIconButton(
+                                icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                                active = playbackState.repeatMode != RepeatModeSetting.OFF,
+                                contentDescription = repeatDescription,
+                                onClick = {
+                                    onCycleRepeatMode()
+                                    val label = when (playbackState.repeatMode) {
+                                        RepeatModeSetting.OFF -> repeatAllLabel
+                                        RepeatModeSetting.ALL -> repeatOneLabel
+                                        RepeatModeSetting.ONE -> repeatOffLabel
+                                    }
+                                    android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                compact = true,
+                            )
+                            ToggleIconButton(
+                                icon = Icons.Rounded.Shuffle,
+                                active = playbackState.shuffleEnabled,
+                                contentDescription = shuffleDescription,
+                                onClick = {
+                                    onToggleShuffle()
+                                    val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
+                                    android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                compact = true,
+                            )
+                        }
+                        Box {
+                            PlayerActionButton(Icons.Rounded.MoreVert, stringResource(R.string.player_more), { showMenu = true }, true)
+                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.player_song_details)) },
+                                    onClick = {
+                                        showMenu = false
+                                        showDetails = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
+                                    onClick = {
+                                        showMenu = false
+                                        showEndpointStatus = true
+                                    },
+                                )
                             }
                         }
                     }
@@ -616,132 +664,140 @@ fun NowPlayingOverlay(
                             }
                         } else Modifier,
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(text = formatDuration(sliderValue.roundToLong()), color = MaterialTheme.colorScheme.onBackground)
-                        Text(text = formatDuration(playbackState.durationMs), color = MaterialTheme.colorScheme.onBackground)
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        PlayerActionButton(
-                            Icons.Rounded.SkipPrevious,
-                            stringResource(R.string.player_previous),
-                            onSkipToPrevious,
-                            compactControls,
-                        )
-                        Spacer(Modifier.width(14.dp))
-                        Surface(
-                            modifier = Modifier.size(
-                                width = if (compactControls) 132.dp else 148.dp,
-                                height = if (compactControls) 64.dp else 72.dp,
-                            ),
-                            shape = MaterialTheme.shapes.medium,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clickable(onClick = onPlayPause)
-                                    .padding(horizontal = 22.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    imageVector = if (playbackState.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                                Text(
-                                    text = if (playbackState.isPlaying) {
-                                        stringResource(R.string.player_pause)
+                    Column(
+                        modifier = Modifier.pointerInput(showQueueAffordance) {
+                            if (!showQueueAffordance) return@pointerInput
+                            val thresholdPx = 80.dp.toPx()
+                            var accumulated = 0f
+                            detectVerticalDragGestures(
+                                onDragStart = { accumulated = 0f },
+                                onVerticalDrag = { _, dragAmount ->
+                                    if (dragAmount < 0f) {
+                                        accumulated -= dragAmount
+                                        if (accumulated >= thresholdPx) {
+                                            accumulated = 0f
+                                            showQueueSheet = true
+                                        }
                                     } else {
-                                        stringResource(R.string.player_play)
-                                    },
-                                    modifier = Modifier.padding(start = 10.dp),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(14.dp))
-                        PlayerActionButton(
-                            Icons.Rounded.SkipNext,
-                            stringResource(R.string.player_next),
-                            onSkipToNext,
-                            compactControls,
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically,
+                                        accumulated = 0f
+                                    }
+                                },
+                            )
+                        },
+                        verticalArrangement = Arrangement.spacedBy(verticalSpacing),
                     ) {
-                        val toastContext = LocalContext.current
-                        val repeatDescription = stringResource(R.string.player_repeat)
-                        val repeatOneLabel = stringResource(R.string.player_repeat_one)
-                        val repeatAllLabel = stringResource(R.string.player_repeat_all)
-                        val repeatOffLabel = stringResource(R.string.player_repeat_off)
-                        val shuffleDescription = stringResource(R.string.player_shuffle)
-                        val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
-                        val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
-                        ToggleIconButton(
-                            icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                            active = playbackState.repeatMode != RepeatModeSetting.OFF,
-                            contentDescription = repeatDescription,
-                            onClick = {
-                                onCycleRepeatMode()
-                                val label = when (playbackState.repeatMode) {
-                                    RepeatModeSetting.OFF -> repeatOneLabel
-                                    RepeatModeSetting.ONE -> repeatAllLabel
-                                    RepeatModeSetting.ALL -> repeatOffLabel
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(text = formatDuration(sliderValue.roundToLong()), color = MaterialTheme.colorScheme.onBackground)
+                            Text(text = formatDuration(playbackState.durationMs), color = MaterialTheme.colorScheme.onBackground)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            PlayerActionButton(
+                                Icons.Rounded.SkipPrevious,
+                                stringResource(R.string.player_previous),
+                                onSkipToPrevious,
+                                compactControls,
+                            )
+                            Spacer(Modifier.width(14.dp))
+                            Surface(
+                                modifier = Modifier.size(
+                                    width = if (compactControls) 132.dp else 148.dp,
+                                    height = if (compactControls) 64.dp else 72.dp,
+                                ),
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable(onClick = onPlayPause)
+                                        .padding(horizontal = 22.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = if (playbackState.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                    Text(
+                                        text = if (playbackState.isPlaying) {
+                                            stringResource(R.string.player_pause)
+                                        } else {
+                                            stringResource(R.string.player_play)
+                                        },
+                                        modifier = Modifier.padding(start = 10.dp),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
                                 }
-                                android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
-                            },
-                        )
-                        ToggleIconButton(
-                            icon = Icons.Rounded.Shuffle,
-                            active = playbackState.shuffleEnabled,
-                            contentDescription = shuffleDescription,
-                            onClick = {
-                                onToggleShuffle()
-                                val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
-                                android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
-                            },
-                        )
-                        if (showQueueAffordance) {
-                            ToggleIconButton(
-                                icon = Icons.Rounded.KeyboardArrowUp,
-                                active = false,
-                                contentDescription = stringResource(R.string.player_show_queue),
-                                onClick = { showQueueSheet = true },
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            PlayerActionButton(
+                                Icons.Rounded.SkipNext,
+                                stringResource(R.string.player_next),
+                                onSkipToNext,
+                                compactControls,
                             )
                         }
-                        Box {
-                            PlayerActionButton(Icons.Rounded.MoreVert, stringResource(R.string.player_more), { showMenu = true }, compactControls)
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.player_song_details)) },
-                                    onClick = {
-                                        showMenu = false
-                                        showDetails = true
-                                    },
+                        // Tech info bar
+                        val runtimeInfo = playbackState.runtimeInfo
+                        val codec = runtimeInfo?.sampleMimeType?.let { mime ->
+                            when {
+                                "flac" in mime -> "FLAC"
+                                "opus" in mime -> "Opus"
+                                "vorbis" in mime -> "Vorbis"
+                                "mp4a" in mime || "aac" in mime -> "AAC"
+                                "mp3" in mime || "mpeg" in mime -> "MP3"
+                                "wav" in mime || "raw" in mime -> "WAV"
+                                else -> mime.substringAfter("/")
+                            }
+                        } ?: runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
+                        val sampleRate = runtimeInfo?.sampleRate?.let {
+                            if (it >= 1_000) {
+                                val khz = it / 1_000.0
+                                if (it % 1_000 == 0) "${it / 1_000} kHz" else "${"%.1f".format(khz)} kHz"
+                            } else "$it Hz"
+                        }
+                        val bitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
+                            ?: track.bitRateKbps?.let { "$it kbps" }
+                        val techParts = listOfNotNull(codec, sampleRate, bitrate)
+                        if (techParts.isNotEmpty()) {
+                            Text(
+                                text = techParts.joinToString(" | "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                        // Queue toggle
+                        if (showQueueAffordance) {
+                            Column {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 32.dp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                                 )
-                                DropdownMenuItem(
-                                    text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
-                                    onClick = {
-                                        showMenu = false
-                                        showEndpointStatus = true
-                                    },
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                ) {
+                                    IconButton(onClick = { showQueueSheet = true }) {
+                                        Icon(
+                                            Icons.Rounded.KeyboardArrowUp,
+                                            contentDescription = stringResource(R.string.player_show_queue),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
-                    Spacer(Modifier.heightIn(min = 16.dp))
                 }
             }
 
@@ -944,6 +1000,7 @@ private fun ToggleIconButton(
     active: Boolean,
     contentDescription: String,
     onClick: () -> Unit,
+    compact: Boolean = false,
 ) {
     val onText = stringResource(R.string.common_on)
     val offText = stringResource(R.string.common_off)
@@ -954,16 +1011,18 @@ private fun ToggleIconButton(
     ) {
         IconButton(
             onClick = onClick,
-            modifier = Modifier.semantics {
-                role = Role.Switch
-                stateDescription = "$contentDescription: ${if (active) onText else offText}"
-            },
+            modifier = Modifier
+                .semantics {
+                    role = Role.Switch
+                    stateDescription = "$contentDescription: ${if (active) onText else offText}"
+                },
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
                 tint = if (active) MaterialTheme.colorScheme.onPrimaryContainer
                 else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = if (compact) Modifier.size(20.dp) else Modifier,
             )
         }
     }

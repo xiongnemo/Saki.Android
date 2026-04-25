@@ -19,3 +19,6 @@ local.properties
 scripts/setup-env.sh
 scripts/deploy.sh
 deploy.sh
+
+# Kiro AI workspace config
+.kiro/
