@@ -3,7 +3,9 @@ package org.hdhmc.saki.presentation
 import android.content.Context
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.runtime.Composable
+import org.hdhmc.saki.R
 import androidx.compose.ui.platform.LocalContext
 
 sealed interface UiText {
@@ -59,3 +61,13 @@ fun Throwable.localizedOr(@StringRes fallback: Int): UiText {
     val detail = message?.takeIf { it.isNotBlank() }
     return if (detail != null) UiText.Dynamic(detail) else UiText.Resource(fallback)
 }
+
+enum class SnackbarAction(@StringRes val labelRes: Int) {
+    RESTART(R.string.snackbar_restart),
+}
+
+data class SnackbarMessage(
+    val text: UiText,
+    val action: SnackbarAction? = null,
+    val duration: SnackbarDuration = SnackbarDuration.Short,
+)

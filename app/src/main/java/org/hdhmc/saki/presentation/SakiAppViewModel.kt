@@ -73,7 +73,7 @@ class SakiAppViewModel @Inject constructor(
     private val configBackupManager: ConfigBackupManager,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SakiAppUiState())
-    private val snackbarMessages = MutableSharedFlow<UiText>(extraBufferCapacity = 1)
+    private val snackbarMessages = MutableSharedFlow<SnackbarMessage>(extraBufferCapacity = 1)
     private val openNowPlayingRequestsFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val searchQueryFlow = MutableStateFlow("")
     private var lastLoadedServerId: Long? = null
@@ -236,10 +236,10 @@ class SakiAppViewModel @Inject constructor(
                 appPreferencesRepository.updateTextScale(textScale)
             }.onSuccess {
                 snackbarMessages.emit(
-                    UiText.resource(R.string.message_text_size_set, UiText.resource(textScale.labelRes())),
+                    SnackbarMessage(UiText.resource(R.string.message_text_size_set, UiText.resource(textScale.labelRes()))),
                 )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_text_size))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_text_size)))
             }
         }
     }
@@ -462,7 +462,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 openNowPlayingRequestsFlow.emit(Unit)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_start_playback))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_start_playback)))
             }
         }
     }
@@ -479,7 +479,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 openNowPlayingRequestsFlow.emit(Unit)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_start_playback))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_start_playback)))
             }
         }
     }
@@ -490,9 +490,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackManager.addToQueue(serverId, listOf(song))
             }.onSuccess {
-                snackbarMessages.emit(UiText.resource(R.string.message_added_to_queue, song.title))
+                snackbarMessages.emit(SnackbarMessage(UiText.resource(R.string.message_added_to_queue, song.title)))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_queue_song))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_queue_song)))
             }
         }
     }
@@ -503,9 +503,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackManager.playNext(serverId, song)
             }.onSuccess {
-                snackbarMessages.emit(UiText.resource(R.string.message_play_next, song.title))
+                snackbarMessages.emit(SnackbarMessage(UiText.resource(R.string.message_play_next, song.title)))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_reorder_queue))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_reorder_queue)))
             }
         }
     }
@@ -533,14 +533,14 @@ class SakiAppViewModel @Inject constructor(
                 cachedSongRepository.cacheSong(serverId, song)
             }.onSuccess { cachedSong ->
                 snackbarMessages.emit(
-                    UiText.resource(
+                    SnackbarMessage(UiText.resource(
                         R.string.message_saved_offline,
                         cachedSong.title,
                         UiText.resource(cachedSong.quality.labelRes()),
-                    ),
+                    )),
                 )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_cache_song))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_cache_song)))
             }
             mutableUiState.update { state ->
                 state.copy(downloadingSongIds = state.downloadingSongIds - song.id)
@@ -555,7 +555,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 openNowPlayingRequestsFlow.emit(Unit)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_play_cached_song))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_play_cached_song)))
             }
         }
     }
@@ -571,7 +571,7 @@ class SakiAppViewModel @Inject constructor(
             }.onSuccess {
                 openNowPlayingRequestsFlow.emit(Unit)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_start_offline_playback))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_start_offline_playback)))
             }
         }
     }
@@ -581,9 +581,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 cachedSongRepository.deleteCachedSong(cacheId)
             }.onSuccess {
-                snackbarMessages.emit(UiText.resource(R.string.message_removed_cached_file))
+                snackbarMessages.emit(SnackbarMessage(UiText.resource(R.string.message_removed_cached_file)))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_remove_cached_file))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_remove_cached_file)))
             }
         }
     }
@@ -595,15 +595,15 @@ class SakiAppViewModel @Inject constructor(
                 cachedSongRepository.clearCachedSongs(targetServerId)
             }.onSuccess { removed ->
                 snackbarMessages.emit(
-                    if (removed > 0) {
+                    SnackbarMessage(if (removed > 0) {
                         UiText.plural(R.plurals.message_cleared_download_count, removed, removed)
                     } else {
                         UiText.resource(R.string.message_no_downloads_to_clear)
-                    },
+                    }),
                 )
                 refreshCacheStorageSummary(targetServerId)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_clear_downloads))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_clear_downloads)))
             }
         }
     }
@@ -615,15 +615,15 @@ class SakiAppViewModel @Inject constructor(
                 streamCacheRepository.clearStreamCache(targetServerId)
             }.onSuccess { removed ->
                 snackbarMessages.emit(
-                    if (removed > 0) {
+                    SnackbarMessage(if (removed > 0) {
                         UiText.plural(R.plurals.message_cleared_stream_cache_entry_count, removed, removed)
                     } else {
                         UiText.resource(R.string.message_no_stream_cache_to_clear)
-                    },
+                    }),
                 )
                 refreshCacheStorageSummary(targetServerId)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_clear_stream_cache))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_clear_stream_cache)))
             }
         }
     }
@@ -637,10 +637,10 @@ class SakiAppViewModel @Inject constructor(
                     dir.mkdirs()
                 }
             }.onSuccess {
-                snackbarMessages.emit(UiText.resource(R.string.message_cover_art_cache_cleared))
+                snackbarMessages.emit(SnackbarMessage(UiText.resource(R.string.message_cover_art_cache_cleared)))
                 refreshCacheStorageSummary(uiState.value.selectedServerId)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_clear_cover_art_cache))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_clear_cover_art_cache)))
             }
         }
     }
@@ -651,10 +651,10 @@ class SakiAppViewModel @Inject constructor(
                 playbackPreferencesRepository.updateStreamQuality(quality)
             }.onSuccess {
                 snackbarMessages.emit(
-                    UiText.resource(R.string.message_stream_quality_set, UiText.resource(quality.labelRes())),
+                    SnackbarMessage(UiText.resource(R.string.message_stream_quality_set, UiText.resource(quality.labelRes()))),
                 )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_stream_quality))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_stream_quality)))
             }
         }
     }
@@ -683,10 +683,10 @@ class SakiAppViewModel @Inject constructor(
                 playbackPreferencesRepository.updateSoundBalancing(mode)
             }.onSuccess {
                 snackbarMessages.emit(
-                    UiText.resource(R.string.message_sound_balancing_set, UiText.resource(mode.labelRes())),
+                    SnackbarMessage(UiText.resource(R.string.message_sound_balancing_set, UiText.resource(mode.labelRes()))),
                 )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_sound_balancing))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_sound_balancing)))
             }
         }
     }
@@ -696,9 +696,9 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateStreamCacheSizeMb(sizeMb)
             }.onSuccess {
-                snackbarMessages.emit(UiText.resource(R.string.message_stream_cache_limit_updated))
+                snackbarMessages.emit(SnackbarMessage(UiText.resource(R.string.message_stream_cache_limit_updated)))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_stream_cache_size))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_stream_cache_size)))
             }
         }
     }
@@ -708,7 +708,7 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateBluetoothLyrics(enabled)
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_bluetooth_lyrics))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_bluetooth_lyrics)))
             }
         }
     }
@@ -719,10 +719,13 @@ class SakiAppViewModel @Inject constructor(
                 playbackPreferencesRepository.updateBufferStrategy(strategy)
             }.onSuccess {
                 snackbarMessages.emit(
-                    UiText.resource(R.string.message_buffer_strategy_set, UiText.resource(strategy.labelRes())),
+                    SnackbarMessage(
+                        text = UiText.resource(R.string.message_buffer_strategy_set, UiText.resource(strategy.labelRes())),
+                        action = SnackbarAction.RESTART,
+                    ),
                 )
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_buffer_strategy))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_buffer_strategy)))
             }
         }
     }
@@ -732,9 +735,12 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateCustomBufferSeconds(seconds)
             }.onSuccess {
-                snackbarMessages.emit(UiText.resource(R.string.message_custom_buffer_set, seconds))
+                snackbarMessages.emit(SnackbarMessage(
+                    text = UiText.resource(R.string.message_custom_buffer_set, seconds),
+                    action = SnackbarAction.RESTART,
+                ))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_custom_buffer))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_custom_buffer)))
             }
         }
     }
@@ -744,9 +750,12 @@ class SakiAppViewModel @Inject constructor(
             runCatching {
                 playbackPreferencesRepository.updateImageCacheSizeMb(sizeMb)
             }.onSuccess {
-                snackbarMessages.emit(UiText.resource(R.string.message_cover_art_cache_limit_updated))
+                snackbarMessages.emit(SnackbarMessage(
+                    text = UiText.resource(R.string.message_cover_art_cache_limit_updated),
+                    action = SnackbarAction.RESTART,
+                ))
             }.onFailure { throwable ->
-                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_cover_art_cache_size))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_cover_art_cache_size)))
             }
         }
     }
@@ -1262,11 +1271,11 @@ class SakiAppViewModel @Inject constructor(
                 appContext.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
                     ?: error("Cannot open output stream")
             }
-                .onSuccess { snackbarMessages.tryEmit(UiText.resource(R.string.message_backup_exported)) }
+                .onSuccess { snackbarMessages.tryEmit(SnackbarMessage(UiText.resource(R.string.message_backup_exported))) }
                 .onFailure { e ->
                     if (e is CancellationException) throw e
                     snackbarMessages.tryEmit(
-                        UiText.resource(R.string.message_export_failed, e.message.orEmpty()),
+                        SnackbarMessage(UiText.resource(R.string.message_export_failed, e.message.orEmpty())),
                     )
                 }
         }
@@ -1278,7 +1287,7 @@ class SakiAppViewModel @Inject constructor(
                 val json = withContext(kotlinx.coroutines.Dispatchers.IO) {
                     appContext.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
                 } ?: run {
-                    snackbarMessages.tryEmit(UiText.resource(R.string.message_cannot_read_backup))
+                    snackbarMessages.tryEmit(SnackbarMessage(UiText.resource(R.string.message_cannot_read_backup)))
                     return@launch
                 }
                 when (val result = configBackupManager.importFromJson(json)) {
@@ -1289,24 +1298,24 @@ class SakiAppViewModel @Inject constructor(
                             ""
                         }
                         snackbarMessages.tryEmit(
-                            UiText.plural(
+                            SnackbarMessage(UiText.plural(
                                 R.plurals.message_import_success,
                                 result.serversImported,
                                 result.serversImported,
                                 settingsSuffix,
-                            ),
+                            )),
                         )
                         onSuccess?.invoke()
                     }
-                    is ImportResult.InvalidFormat -> snackbarMessages.tryEmit(UiText.resource(R.string.message_invalid_backup))
+                    is ImportResult.InvalidFormat -> snackbarMessages.tryEmit(SnackbarMessage(UiText.resource(R.string.message_invalid_backup)))
                     is ImportResult.UnsupportedVersion -> snackbarMessages.tryEmit(
-                        UiText.resource(R.string.message_unsupported_backup_version, result.version),
+                        SnackbarMessage(UiText.resource(R.string.message_unsupported_backup_version, result.version)),
                     )
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                snackbarMessages.tryEmit(UiText.resource(R.string.message_import_failed, e.message.orEmpty()))
+                snackbarMessages.tryEmit(SnackbarMessage(UiText.resource(R.string.message_import_failed, e.message.orEmpty())))
             }
         }
     }
