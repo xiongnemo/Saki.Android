@@ -16,6 +16,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -96,6 +97,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -663,113 +665,136 @@ fun NowPlayingOverlay(
                             }
                         } else Modifier,
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(text = formatDuration(sliderValue.roundToLong()), color = MaterialTheme.colorScheme.onBackground)
-                        Text(text = formatDuration(playbackState.durationMs), color = MaterialTheme.colorScheme.onBackground)
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        PlayerActionButton(
-                            Icons.Rounded.SkipPrevious,
-                            stringResource(R.string.player_previous),
-                            onSkipToPrevious,
-                            compactControls,
-                        )
-                        Spacer(Modifier.width(14.dp))
-                        Surface(
-                            modifier = Modifier.size(
-                                width = if (compactControls) 132.dp else 148.dp,
-                                height = if (compactControls) 64.dp else 72.dp,
-                            ),
-                            shape = MaterialTheme.shapes.medium,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clickable(onClick = onPlayPause)
-                                    .padding(horizontal = 22.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    imageVector = if (playbackState.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                                Text(
-                                    text = if (playbackState.isPlaying) {
-                                        stringResource(R.string.player_pause)
+                    Column(
+                        modifier = Modifier.pointerInput(showQueueAffordance) {
+                            if (!showQueueAffordance) return@pointerInput
+                            val thresholdPx = 80.dp.toPx()
+                            var accumulated = 0f
+                            detectVerticalDragGestures(
+                                onDragStart = { accumulated = 0f },
+                                onVerticalDrag = { _, dragAmount ->
+                                    if (dragAmount < 0f) {
+                                        accumulated -= dragAmount
+                                        if (accumulated >= thresholdPx) {
+                                            accumulated = 0f
+                                            showQueueSheet = true
+                                        }
                                     } else {
-                                        stringResource(R.string.player_play)
-                                    },
-                                    modifier = Modifier.padding(start = 10.dp),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(14.dp))
-                        PlayerActionButton(
-                            Icons.Rounded.SkipNext,
-                            stringResource(R.string.player_next),
-                            onSkipToNext,
-                            compactControls,
-                        )
-                    }
-                    // Tech info bar
-                    val runtimeInfo = playbackState.runtimeInfo
-                    val codec = runtimeInfo?.sampleMimeType?.let { mime ->
-                        when {
-                            "flac" in mime -> "FLAC"
-                            "opus" in mime -> "Opus"
-                            "vorbis" in mime -> "Vorbis"
-                            "mp4a" in mime || "aac" in mime -> "AAC"
-                            "mp3" in mime || "mpeg" in mime -> "MP3"
-                            "wav" in mime || "raw" in mime -> "WAV"
-                            else -> mime.substringAfter("/")
-                        }
-                    } ?: runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
-                    val sampleRate = runtimeInfo?.sampleRate?.let {
-                        if (it >= 1_000) {
-                            val khz = it / 1_000.0
-                            if (it % 1_000 == 0) "${it / 1_000} kHz" else "${"%.1f".format(khz)} kHz"
-                        } else "$it Hz"
-                    }
-                    val bitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
-                        ?: track.bitRateKbps?.let { "$it kbps" }
-                    val techParts = listOfNotNull(codec, sampleRate, bitrate)
-                    if (techParts.isNotEmpty()) {
-                        Text(
-                            text = techParts.joinToString(" | "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                    // Queue toggle
-                    if (showQueueAffordance) {
-                        Column {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 32.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                                        accumulated = 0f
+                                    }
+                                },
                             )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
+                        },
+                        verticalArrangement = Arrangement.spacedBy(verticalSpacing),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(text = formatDuration(sliderValue.roundToLong()), color = MaterialTheme.colorScheme.onBackground)
+                            Text(text = formatDuration(playbackState.durationMs), color = MaterialTheme.colorScheme.onBackground)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            PlayerActionButton(
+                                Icons.Rounded.SkipPrevious,
+                                stringResource(R.string.player_previous),
+                                onSkipToPrevious,
+                                compactControls,
+                            )
+                            Spacer(Modifier.width(14.dp))
+                            Surface(
+                                modifier = Modifier.size(
+                                    width = if (compactControls) 132.dp else 148.dp,
+                                    height = if (compactControls) 64.dp else 72.dp,
+                                ),
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.primaryContainer,
                             ) {
-                                IconButton(onClick = { showQueueSheet = true }) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable(onClick = onPlayPause)
+                                        .padding(horizontal = 22.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
                                     Icon(
-                                        Icons.Rounded.KeyboardArrowUp,
-                                        contentDescription = stringResource(R.string.player_show_queue),
+                                        imageVector = if (playbackState.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     )
+                                    Text(
+                                        text = if (playbackState.isPlaying) {
+                                            stringResource(R.string.player_pause)
+                                        } else {
+                                            stringResource(R.string.player_play)
+                                        },
+                                        modifier = Modifier.padding(start = 10.dp),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            PlayerActionButton(
+                                Icons.Rounded.SkipNext,
+                                stringResource(R.string.player_next),
+                                onSkipToNext,
+                                compactControls,
+                            )
+                        }
+                        // Tech info bar
+                        val runtimeInfo = playbackState.runtimeInfo
+                        val codec = runtimeInfo?.sampleMimeType?.let { mime ->
+                            when {
+                                "flac" in mime -> "FLAC"
+                                "opus" in mime -> "Opus"
+                                "vorbis" in mime -> "Vorbis"
+                                "mp4a" in mime || "aac" in mime -> "AAC"
+                                "mp3" in mime || "mpeg" in mime -> "MP3"
+                                "wav" in mime || "raw" in mime -> "WAV"
+                                else -> mime.substringAfter("/")
+                            }
+                        } ?: runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
+                        val sampleRate = runtimeInfo?.sampleRate?.let {
+                            if (it >= 1_000) {
+                                val khz = it / 1_000.0
+                                if (it % 1_000 == 0) "${it / 1_000} kHz" else "${"%.1f".format(khz)} kHz"
+                            } else "$it Hz"
+                        }
+                        val bitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
+                            ?: track.bitRateKbps?.let { "$it kbps" }
+                        val techParts = listOfNotNull(codec, sampleRate, bitrate)
+                        if (techParts.isNotEmpty()) {
+                            Text(
+                                text = techParts.joinToString(" | "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                        // Queue toggle
+                        if (showQueueAffordance) {
+                            Column {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 32.dp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                ) {
+                                    IconButton(onClick = { showQueueSheet = true }) {
+                                        Icon(
+                                            Icons.Rounded.KeyboardArrowUp,
+                                            contentDescription = stringResource(R.string.player_show_queue),
+                                        )
+                                    }
                                 }
                             }
                         }
