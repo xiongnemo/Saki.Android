@@ -3,7 +3,7 @@
 
 
     <string name="settings_title">Settings</string>
-    <string name="settings_intro">Manage servers, text size, streaming quality, sound balancing, offline downloads, and onboarding.</string>
+    <string name="settings_intro">Manage servers, text size, streaming quality, sound balancing, and offline downloads.</string>
     <string name="settings_server_profiles_title">Server profiles</string>
     <string name="settings_server_profiles_body">Pick the active server and open the full profile editor when you need it.</string>
     <string name="settings_no_servers">No servers configured yet.</string>

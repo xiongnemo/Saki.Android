@@ -1,7 +1,7 @@
 <resources>
 
     <string name="settings_title">设置</string>
-    <string name="settings_intro">管理服务器、字体大小、串流质量、音量均衡、离线下载和引导流程。</string>
+    <string name="settings_intro">管理服务器、字体大小、串流质量、音量均衡和离线下载。</string>
     <string name="settings_server_profiles_title">服务器配置</string>
     <string name="settings_server_profiles_body">选择当前服务器，或打开完整的配置编辑器。</string>
     <string name="settings_no_servers">尚未配置服务器。</string>
