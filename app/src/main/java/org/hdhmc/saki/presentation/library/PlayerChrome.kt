@@ -774,7 +774,6 @@ fun NowPlayingOverlay(
                             }
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
                 }
             }
 
