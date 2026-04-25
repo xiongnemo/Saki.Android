@@ -1,0 +1,1389 @@
+package org.hdhmc.saki.presentation
+
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import org.hdhmc.saki.R
+import org.hdhmc.saki.data.remote.EndpointSelector
+import org.hdhmc.saki.data.repository.ConfigBackupManager
+import org.hdhmc.saki.data.repository.ImportResult
+import org.hdhmc.saki.domain.model.Album
+import org.hdhmc.saki.domain.model.AlbumListType
+import org.hdhmc.saki.domain.model.AppLanguage
+import org.hdhmc.saki.domain.model.AppPreferences
+import org.hdhmc.saki.domain.model.AlbumSummary
+import org.hdhmc.saki.domain.model.Artist
+import org.hdhmc.saki.domain.model.CacheStorageSummary
+import org.hdhmc.saki.domain.model.CachedSong
+import org.hdhmc.saki.domain.model.LibraryIndexes
+import org.hdhmc.saki.domain.model.regroupByLocale
+import org.hdhmc.saki.domain.model.PlaybackSessionState
+import org.hdhmc.saki.domain.model.Playlist
+import org.hdhmc.saki.domain.model.PlaylistSummary
+import org.hdhmc.saki.domain.model.SearchResults
+import org.hdhmc.saki.domain.model.ServerConfig
+import org.hdhmc.saki.domain.model.Song
+import org.hdhmc.saki.domain.model.SongLyrics
+import org.hdhmc.saki.domain.model.SoundBalancingMode
+import org.hdhmc.saki.domain.model.StreamQuality
+import org.hdhmc.saki.domain.model.TextScale
+import org.hdhmc.saki.domain.repository.AppPreferencesRepository
+import org.hdhmc.saki.domain.repository.CachedSongRepository
+import org.hdhmc.saki.domain.repository.LibraryCacheRepository
+import org.hdhmc.saki.domain.repository.PlaybackManager
+import org.hdhmc.saki.playback.LyricsHolder
+import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
+import org.hdhmc.saki.domain.repository.ServerConfigRepository
+import org.hdhmc.saki.domain.repository.SubsonicRepository
+import org.hdhmc.saki.domain.repository.StreamCacheRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+@HiltViewModel
+@OptIn(FlowPreview::class)
+class SakiAppViewModel @Inject constructor(
+    @param:dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val appPreferencesRepository: AppPreferencesRepository,
+    private val serverConfigRepository: ServerConfigRepository,
+    private val subsonicRepository: SubsonicRepository,
+    private val cachedSongRepository: CachedSongRepository,
+    private val streamCacheRepository: StreamCacheRepository,
+    private val playbackPreferencesRepository: PlaybackPreferencesRepository,
+    private val libraryCacheRepository: LibraryCacheRepository,
+    private val playbackManager: PlaybackManager,
+    private val lyricsHolder: LyricsHolder,
+    private val endpointSelector: EndpointSelector,
+    private val configBackupManager: ConfigBackupManager,
+) : ViewModel() {
+    private val mutableUiState = MutableStateFlow(SakiAppUiState())
+    private val snackbarMessages = MutableSharedFlow<UiText>(extraBufferCapacity = 1)
+    private val openNowPlayingRequestsFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val searchQueryFlow = MutableStateFlow("")
+    private var lastLoadedServerId: Long? = null
+
+    private val mutableEndpointStatus = MutableStateFlow(EndpointStatus())
+    val endpointStatus: StateFlow<EndpointStatus> = mutableEndpointStatus.asStateFlow()
+
+    val uiState = mutableUiState.asStateFlow()
+    val messages = snackbarMessages.asSharedFlow()
+    val openNowPlayingRequests = openNowPlayingRequestsFlow.asSharedFlow()
+
+    init {
+        viewModelScope.launch {
+            endpointSelector.probeVersion.collectLatest { refreshEndpointStatus() }
+        }
+        viewModelScope.launch {
+            appPreferencesRepository.observePreferences().collectLatest { preferences ->
+                mutableUiState.update { state ->
+                    state.copy(
+                        isAppReady = true,
+                        textScale = preferences.textScale,
+                        appPreferences = preferences,
+                    )
+                }
+                // Apply saved locale when preference changes (no-ops if already matching)
+                if (preferences.language != AppLanguage.SYSTEM) {
+                    val locales = androidx.core.os.LocaleListCompat.forLanguageTags(preferences.language.tag)
+                    val current = androidx.appcompat.app.AppCompatDelegate.getApplicationLocales()
+                    if (current != locales) {
+                        androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(locales)
+                    }
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            serverConfigRepository.observeServerConfigs().collectLatest { servers ->
+                handleServerConfigsChanged(servers)
+            }
+        }
+
+        viewModelScope.launch {
+            cachedSongRepository.observeCachedSongs().collectLatest { songs ->
+                mutableUiState.update { state ->
+                    state.copy(cachedSongs = songs)
+                }
+                refreshCacheStorageSummary(uiState.value.selectedServerId)
+            }
+        }
+
+        viewModelScope.launch {
+            streamCacheRepository.observeCacheVersion().collectLatest {
+                refreshCacheStorageSummary(uiState.value.selectedServerId)
+            }
+        }
+
+        viewModelScope.launch {
+            playbackManager.playbackState.collectLatest { playbackState ->
+                mutableUiState.update { state ->
+                    state.copy(playbackState = playbackState)
+                }
+            }
+        }
+
+        // Fetch lyrics when current track changes
+        viewModelScope.launch {
+            playbackManager.playbackState
+                .map { state ->
+                    state.currentItem?.let {
+                        val sid = it.serverId ?: return@let null
+                        sid to it.songId
+                    }
+                }
+                .distinctUntilChanged()
+                .collectLatest { pair ->
+                    if (pair == null) {
+                        mutableUiState.update { it.copy(currentLyrics = null) }
+                        lyricsHolder.update(null)
+                        return@collectLatest
+                    }
+                    val (serverId, songId) = pair
+                    mutableUiState.update { it.copy(currentLyrics = null) }
+                    lyricsHolder.update(null)
+                    try {
+                        val lyrics = subsonicRepository.getLyrics(serverId, songId).data
+                        mutableUiState.update { it.copy(currentLyrics = lyrics) }
+                        lyricsHolder.update(lyrics)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // Lyrics not available — silently ignore
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            playbackPreferencesRepository.observePreferences()
+                .map { preferences -> preferences.streamQuality }
+                .distinctUntilChanged()
+                .collectLatest {
+                    refreshCacheStorageSummary(uiState.value.selectedServerId)
+                }
+        }
+
+        viewModelScope.launch {
+            searchQueryFlow
+                .debounce(350)
+                .map(String::trim)
+                .distinctUntilChanged()
+                .collectLatest(::performSearch)
+        }
+    }
+
+    fun selectBrowseSection(section: BrowseSection) {
+        mutableUiState.update { state ->
+            state.copy(selectedBrowseSection = section)
+        }
+        val serverId = uiState.value.selectedServerId ?: return
+        when (section) {
+            BrowseSection.ARTISTS -> if (uiState.value.libraryIndexes == null) loadArtists(serverId)
+            BrowseSection.ALBUMS -> if (uiState.value.albums.isEmpty()) loadAlbums(serverId, uiState.value.selectedAlbumFeed)
+            BrowseSection.PLAYLISTS -> if (uiState.value.playlists.isEmpty()) loadPlaylists(serverId)
+            BrowseSection.SONGS -> if (uiState.value.songs.isEmpty()) loadSongs(serverId)
+        }
+    }
+
+    fun setSearchActive(active: Boolean) {
+        if (active) {
+            mutableUiState.update { state ->
+                state.copy(isSearchActive = true)
+            }
+            return
+        }
+
+        searchQueryFlow.value = ""
+        mutableUiState.update { state ->
+            state.copy(
+                isSearchActive = false,
+                searchQuery = "",
+                searchResults = SearchResults(),
+                isSearchLoading = false,
+                searchError = null,
+            )
+        }
+    }
+
+    fun updateSearchQuery(query: String) {
+        mutableUiState.update { state ->
+            state.copy(
+                isSearchActive = true,
+                searchQuery = query,
+            )
+        }
+        searchQueryFlow.value = query
+    }
+
+    fun updateTextScale(textScale: TextScale) {
+        viewModelScope.launch {
+            runCatching {
+                appPreferencesRepository.updateTextScale(textScale)
+            }.onSuccess {
+                snackbarMessages.emit(
+                    UiText.resource(R.string.message_text_size_set, UiText.resource(textScale.labelRes())),
+                )
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_text_size))
+            }
+        }
+    }
+
+    fun updateLanguage(language: AppLanguage) {
+        viewModelScope.launch {
+            runCatching {
+                appPreferencesRepository.updateLanguage(language)
+            }.onSuccess {
+                val locales = when (language) {
+                    AppLanguage.SYSTEM -> androidx.core.os.LocaleListCompat.getEmptyLocaleList()
+                    else -> androidx.core.os.LocaleListCompat.forLanguageTags(language.tag)
+                }
+                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(locales)
+            }
+        }
+    }
+
+    fun openArtistFromPlayback(
+        serverId: Long?,
+        artistId: String?,
+    ) {
+        if (serverId == null || artistId.isNullOrBlank()) return
+
+        if (uiState.value.selectedServerId != serverId) {
+            selectServer(serverId)
+        }
+        openArtist(artistId)
+    }
+
+    fun openAlbumFromPlayback(
+        serverId: Long?,
+        albumId: String?,
+    ) {
+        if (serverId == null || albumId.isNullOrBlank()) return
+
+        if (uiState.value.selectedServerId != serverId) {
+            selectServer(serverId)
+        }
+        openAlbum(albumId)
+    }
+
+    fun selectServer(serverId: Long) {
+        val previousServerId = uiState.value.selectedServerId
+        if (previousServerId == serverId) return
+
+        clearSearchState()
+        mutableUiState.update { state ->
+            state.copy(
+                selectedServerId = serverId,
+                selectedArtist = null,
+                selectedArtistTopSongs = emptyList(),
+                selectedAlbum = null,
+                selectedPlaylist = null,
+            )
+        }
+        viewModelScope.launch {
+            refreshCacheStorageSummary(serverId)
+        }
+        loadServerContent(serverId, forceRefresh = true)
+    }
+
+    fun selectAlbumFeed(type: AlbumListType) {
+        val serverId = uiState.value.selectedServerId ?: return
+        mutableUiState.update { state ->
+            state.copy(selectedAlbumFeed = type)
+        }
+        loadAlbums(serverId, type, forceRefresh = true)
+    }
+
+    fun refreshCurrentTab() {
+        val serverId = uiState.value.selectedServerId ?: return
+        when (uiState.value.selectedBrowseSection) {
+            BrowseSection.ARTISTS -> loadArtists(serverId, forceRefresh = true)
+            BrowseSection.ALBUMS -> loadAlbums(serverId, uiState.value.selectedAlbumFeed, forceRefresh = true)
+            BrowseSection.PLAYLISTS -> loadPlaylists(serverId, forceRefresh = true)
+            BrowseSection.SONGS -> loadSongs(serverId, forceRefresh = true)
+        }
+    }
+
+    fun openArtist(artistId: String) {
+        val serverId = uiState.value.selectedServerId ?: return
+        mutableUiState.update { state ->
+            state.copy(
+                selectedArtist = null,
+                selectedArtistTopSongs = emptyList(),
+                isArtistLoading = true,
+                artistError = null,
+                selectedAlbum = null,
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                val artist = subsonicRepository.getArtist(serverId, artistId).data
+                artist to buildArtistTopSongs(serverId, artist)
+            }.onSuccess { (artist, topSongs) ->
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { state ->
+                        state.copy(
+                            selectedArtist = artist,
+                            selectedArtistTopSongs = topSongs,
+                            isArtistLoading = false,
+                            artistError = null,
+                        )
+                    }
+                }
+            }.onFailure { throwable ->
+                mutableUiState.update { state ->
+                    state.copy(
+                        isArtistLoading = false,
+                        artistError = throwable.localizedOr(R.string.error_load_artist_details),
+                    )
+                }
+            }
+        }
+    }
+
+    fun closeArtist() {
+        mutableUiState.update { state ->
+            state.copy(
+                selectedArtist = null,
+                selectedArtistTopSongs = emptyList(),
+                selectedAlbum = null,
+                artistError = null,
+                albumError = null,
+            )
+        }
+    }
+
+    fun openAlbum(albumId: String) {
+        val serverId = uiState.value.selectedServerId ?: return
+        mutableUiState.update { state ->
+            state.copy(
+                isAlbumLoading = true,
+                albumError = null,
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                subsonicRepository.getAlbum(serverId, albumId).data
+            }.onSuccess { album ->
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { state ->
+                        state.copy(
+                            selectedAlbum = album,
+                            isAlbumLoading = false,
+                            albumError = null,
+                        )
+                    }
+                }
+            }.onFailure { throwable ->
+                mutableUiState.update { state ->
+                    state.copy(
+                        isAlbumLoading = false,
+                        albumError = throwable.localizedOr(R.string.error_load_album_details),
+                    )
+                }
+            }
+        }
+    }
+
+    fun closeAlbum() {
+        mutableUiState.update { state ->
+            state.copy(
+                selectedAlbum = null,
+                albumError = null,
+            )
+        }
+    }
+
+    fun openPlaylist(playlistId: String) {
+        val serverId = uiState.value.selectedServerId ?: return
+        mutableUiState.update { state ->
+            state.copy(
+                isPlaylistLoading = true,
+                playlistError = null,
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                subsonicRepository.getPlaylist(serverId, playlistId).data
+            }.onSuccess { playlist ->
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { state ->
+                        state.copy(
+                            selectedPlaylist = playlist,
+                            isPlaylistLoading = false,
+                            playlistError = null,
+                        )
+                    }
+                }
+            }.onFailure { throwable ->
+                mutableUiState.update { state ->
+                    state.copy(
+                        isPlaylistLoading = false,
+                        playlistError = throwable.localizedOr(R.string.error_load_playlist),
+                    )
+                }
+            }
+        }
+    }
+
+    fun closePlaylist() {
+        mutableUiState.update { state ->
+            state.copy(
+                selectedPlaylist = null,
+                playlistError = null,
+            )
+        }
+    }
+
+    fun playSong(song: Song) {
+        val serverId = uiState.value.selectedServerId ?: return
+        viewModelScope.launch {
+            runCatching {
+                playbackManager.playSong(serverId, song)
+            }.onSuccess {
+                openNowPlayingRequestsFlow.emit(Unit)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_start_playback))
+            }
+        }
+    }
+
+    fun playSongs(
+        songs: List<Song>,
+        startIndex: Int = 0,
+    ) {
+        val serverId = uiState.value.selectedServerId ?: return
+        if (songs.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                playbackManager.playQueue(serverId, songs, startIndex)
+            }.onSuccess {
+                openNowPlayingRequestsFlow.emit(Unit)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_start_playback))
+            }
+        }
+    }
+
+    fun queueSong(song: Song) {
+        val serverId = uiState.value.selectedServerId ?: return
+        viewModelScope.launch {
+            runCatching {
+                playbackManager.addToQueue(serverId, listOf(song))
+            }.onSuccess {
+                snackbarMessages.emit(UiText.resource(R.string.message_added_to_queue, song.title))
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_queue_song))
+            }
+        }
+    }
+
+    fun playSongNext(song: Song) {
+        val serverId = uiState.value.selectedServerId ?: return
+        viewModelScope.launch {
+            runCatching {
+                playbackManager.playNext(serverId, song)
+            }.onSuccess {
+                snackbarMessages.emit(UiText.resource(R.string.message_play_next, song.title))
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_reorder_queue))
+            }
+        }
+    }
+
+    fun toggleSongDownload(song: Song) {
+        val selectedServerId = uiState.value.selectedServerId ?: return
+        val cachedSong = uiState.value.cachedSongs.firstOrNull { cached ->
+            cached.serverId == selectedServerId && cached.songId == song.id
+        }
+        if (cachedSong != null) {
+            deleteCachedSong(cachedSong.cacheId)
+            return
+        }
+        downloadSong(song)
+    }
+
+    fun downloadSong(song: Song) {
+        val serverId = uiState.value.selectedServerId ?: return
+        mutableUiState.update { state ->
+            state.copy(downloadingSongIds = state.downloadingSongIds + song.id)
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                cachedSongRepository.cacheSong(serverId, song)
+            }.onSuccess { cachedSong ->
+                snackbarMessages.emit(
+                    UiText.resource(
+                        R.string.message_saved_offline,
+                        cachedSong.title,
+                        UiText.resource(cachedSong.quality.labelRes()),
+                    ),
+                )
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_cache_song))
+            }
+            mutableUiState.update { state ->
+                state.copy(downloadingSongIds = state.downloadingSongIds - song.id)
+            }
+        }
+    }
+
+    fun playCachedSong(song: CachedSong) {
+        viewModelScope.launch {
+            runCatching {
+                playbackManager.playCachedSong(song)
+            }.onSuccess {
+                openNowPlayingRequestsFlow.emit(Unit)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_play_cached_song))
+            }
+        }
+    }
+
+    fun playCachedQueue(
+        songs: List<CachedSong>,
+        startIndex: Int = 0,
+    ) {
+        if (songs.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                playbackManager.playCachedQueue(songs, startIndex)
+            }.onSuccess {
+                openNowPlayingRequestsFlow.emit(Unit)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_start_offline_playback))
+            }
+        }
+    }
+
+    fun deleteCachedSong(cacheId: String) {
+        viewModelScope.launch {
+            runCatching {
+                cachedSongRepository.deleteCachedSong(cacheId)
+            }.onSuccess {
+                snackbarMessages.emit(UiText.resource(R.string.message_removed_cached_file))
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_remove_cached_file))
+            }
+        }
+    }
+
+    fun clearCachedSongs() {
+        val targetServerId = uiState.value.selectedServerId
+        viewModelScope.launch {
+            runCatching {
+                cachedSongRepository.clearCachedSongs(targetServerId)
+            }.onSuccess { removed ->
+                snackbarMessages.emit(
+                    if (removed > 0) {
+                        UiText.plural(R.plurals.message_cleared_download_count, removed, removed)
+                    } else {
+                        UiText.resource(R.string.message_no_downloads_to_clear)
+                    },
+                )
+                refreshCacheStorageSummary(targetServerId)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_clear_downloads))
+            }
+        }
+    }
+
+    fun clearStreamCache() {
+        val targetServerId = uiState.value.selectedServerId
+        viewModelScope.launch {
+            runCatching {
+                streamCacheRepository.clearStreamCache(targetServerId)
+            }.onSuccess { removed ->
+                snackbarMessages.emit(
+                    if (removed > 0) {
+                        UiText.plural(R.plurals.message_cleared_stream_cache_entry_count, removed, removed)
+                    } else {
+                        UiText.resource(R.string.message_no_stream_cache_to_clear)
+                    },
+                )
+                refreshCacheStorageSummary(targetServerId)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_clear_stream_cache))
+            }
+        }
+    }
+
+    fun clearImageCache() {
+        viewModelScope.launch {
+            runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val dir = appContext.cacheDir.resolve("image_cache")
+                    dir.deleteRecursively()
+                    dir.mkdirs()
+                }
+            }.onSuccess {
+                snackbarMessages.emit(UiText.resource(R.string.message_cover_art_cache_cleared))
+                refreshCacheStorageSummary(uiState.value.selectedServerId)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_clear_cover_art_cache))
+            }
+        }
+    }
+
+    fun updateStreamQuality(quality: StreamQuality) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateStreamQuality(quality)
+            }.onSuccess {
+                snackbarMessages.emit(
+                    UiText.resource(R.string.message_stream_quality_set, UiText.resource(quality.labelRes())),
+                )
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_stream_quality))
+            }
+        }
+    }
+
+    fun updateAdaptiveQuality(enabled: Boolean) {
+        viewModelScope.launch {
+            playbackPreferencesRepository.updateAdaptiveQuality(enabled)
+        }
+    }
+
+    fun updateWifiStreamQuality(quality: StreamQuality) {
+        viewModelScope.launch {
+            playbackPreferencesRepository.updateWifiStreamQuality(quality)
+        }
+    }
+
+    fun updateMobileStreamQuality(quality: StreamQuality) {
+        viewModelScope.launch {
+            playbackPreferencesRepository.updateMobileStreamQuality(quality)
+        }
+    }
+
+    fun updateSoundBalancing(mode: SoundBalancingMode) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateSoundBalancing(mode)
+            }.onSuccess {
+                snackbarMessages.emit(
+                    UiText.resource(R.string.message_sound_balancing_set, UiText.resource(mode.labelRes())),
+                )
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_sound_balancing))
+            }
+        }
+    }
+
+    fun updateStreamCacheSizeMb(sizeMb: Int) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateStreamCacheSizeMb(sizeMb)
+            }.onSuccess {
+                snackbarMessages.emit(UiText.resource(R.string.message_stream_cache_limit_updated))
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_stream_cache_size))
+            }
+        }
+    }
+
+    fun updateBluetoothLyrics(enabled: Boolean) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateBluetoothLyrics(enabled)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_bluetooth_lyrics))
+            }
+        }
+    }
+
+    fun updateBufferStrategy(strategy: org.hdhmc.saki.domain.model.BufferStrategy) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateBufferStrategy(strategy)
+            }.onSuccess {
+                snackbarMessages.emit(
+                    UiText.resource(R.string.message_buffer_strategy_set, UiText.resource(strategy.labelRes())),
+                )
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_buffer_strategy))
+            }
+        }
+    }
+
+    fun updateCustomBufferSeconds(seconds: Int) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateCustomBufferSeconds(seconds)
+            }.onSuccess {
+                snackbarMessages.emit(UiText.resource(R.string.message_custom_buffer_set, seconds))
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_custom_buffer))
+            }
+        }
+    }
+
+    fun updateImageCacheSizeMb(sizeMb: Int) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateImageCacheSizeMb(sizeMb)
+            }.onSuccess {
+                snackbarMessages.emit(UiText.resource(R.string.message_cover_art_cache_limit_updated))
+            }.onFailure { throwable ->
+                snackbarMessages.emit(throwable.localizedOr(R.string.error_update_cover_art_cache_size))
+            }
+        }
+    }
+
+    fun pausePlayback() {
+        viewModelScope.launch {
+            playbackManager.pause()
+        }
+    }
+
+    fun resumePlayback() {
+        viewModelScope.launch {
+            playbackManager.resume()
+        }
+    }
+
+    fun skipToNext() {
+        viewModelScope.launch {
+            playbackManager.skipToNext()
+        }
+    }
+
+    fun skipToPrevious() {
+        viewModelScope.launch {
+            playbackManager.skipToPrevious()
+        }
+    }
+
+    fun seekTo(positionMs: Long) {
+        viewModelScope.launch {
+            playbackManager.seekTo(positionMs)
+        }
+    }
+
+    fun cycleRepeatMode() {
+        viewModelScope.launch {
+            playbackManager.cycleRepeatMode()
+        }
+    }
+
+    fun toggleShuffle() {
+        viewModelScope.launch {
+            playbackManager.toggleShuffle()
+        }
+    }
+
+    fun skipToQueueItem(index: Int) {
+        viewModelScope.launch {
+            playbackManager.skipToQueueItem(index)
+        }
+    }
+
+    fun removeQueueItem(index: Int) {
+        viewModelScope.launch {
+            playbackManager.removeQueueItem(index)
+        }
+    }
+
+    private fun handleServerConfigsChanged(servers: List<ServerConfig>) {
+        val previousServerId = uiState.value.selectedServerId
+        val selectedServerId = when {
+            servers.isEmpty() -> null
+            previousServerId != null && servers.any { it.id == previousServerId } -> previousServerId
+            else -> servers.first().id
+        }
+        val serverChanged = previousServerId != selectedServerId
+
+        if (serverChanged) {
+            clearSearchState()
+        }
+        mutableUiState.update { state ->
+            state.copy(
+                servers = servers,
+                selectedServerId = selectedServerId,
+                selectedArtist = if (serverChanged) null else state.selectedArtist,
+                selectedArtistTopSongs = if (serverChanged) emptyList() else state.selectedArtistTopSongs,
+                selectedAlbum = if (serverChanged) null else state.selectedAlbum,
+                selectedPlaylist = if (serverChanged) null else state.selectedPlaylist,
+            )
+        }
+
+        viewModelScope.launch {
+            refreshCacheStorageSummary(selectedServerId)
+        }
+
+        if (selectedServerId != null && (serverChanged || lastLoadedServerId != selectedServerId)) {
+            // Show cached content immediately, then probe + network refresh
+            loadCachedContent(selectedServerId)
+            viewModelScope.launch {
+                servers.find { it.id == selectedServerId }?.let { server ->
+                    endpointSelector.probe(selectedServerId, server)
+                    refreshEndpointStatus()
+                }
+                if (endpointSelector.getActiveEndpointId(selectedServerId) != null) {
+                    if (uiState.value.playbackState.currentItem == null) {
+                        restorePlayQueue(selectedServerId)
+                    }
+                    refreshServerContent(selectedServerId, forceRefresh = serverChanged)
+                }
+            }
+        } else if (selectedServerId != null) {
+            // Server didn't change but config may have (e.g. endpoints added/removed) — re-probe
+            viewModelScope.launch {
+                servers.find { it.id == selectedServerId }?.let { server ->
+                    endpointSelector.registerServer(server)
+                    endpointSelector.probe(selectedServerId, server)
+                }
+            }
+        }
+    }
+
+    private suspend fun refreshCacheStorageSummary(serverId: Long?) {
+        val downloadSummary = cachedSongRepository.getCacheStorageSummary(serverId)
+        val fullStreamSummary = streamCacheRepository.getStreamCacheSummary(serverId)
+        val playableStreamSummary = streamCacheRepository.getStreamCacheSummary(
+            serverId = serverId,
+            quality = uiState.value.playbackState.preferences.streamQuality,
+        )
+        val imageCacheDir = appContext.cacheDir.resolve("image_cache")
+        val imageCacheBytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            imageCacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        }
+        mutableUiState.update { state ->
+            if (state.selectedServerId == serverId) {
+                state.copy(
+                    cacheStorageSummary = downloadSummary.copy(
+                        streamCachedSongCount = fullStreamSummary.cachedSongIds.size,
+                        streamCacheBytes = fullStreamSummary.bytes,
+                        hasStreamingCache = true,
+                        imageCacheBytes = imageCacheBytes,
+                    ),
+                    streamCachedSongIds = playableStreamSummary.cachedSongIds,
+                )
+            } else {
+                state
+            }
+        }
+    }
+
+    private fun restorePlayQueue(serverId: Long) {
+        viewModelScope.launch {
+            runCatching {
+                subsonicRepository.getPlayQueue(serverId).data
+            }.onSuccess { savedQueue ->
+                if (savedQueue.songs.isEmpty()) return@onSuccess
+                if (uiState.value.playbackState.queue.isNotEmpty()) return@onSuccess
+                val startIndex = if (savedQueue.currentSongId != null) {
+                    savedQueue.songs.indexOfFirst { it.id == savedQueue.currentSongId }.coerceAtLeast(0)
+                } else {
+                    0
+                }
+                playbackManager.restoreQueue(
+                    serverId = serverId,
+                    songs = savedQueue.songs,
+                    startIndex = startIndex,
+                    positionMs = savedQueue.positionMs,
+                )
+            }.onFailure { e ->
+                if (e is CancellationException) throw e
+            }
+        }
+    }
+
+    private fun loadCachedContent(serverId: Long) {
+        lastLoadedServerId = serverId
+        viewModelScope.launch {
+            suspend fun <T> loadCachedOrNull(block: suspend () -> T): T? = try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+
+            val artists = loadCachedOrNull { libraryCacheRepository.getArtists(serverId) }
+            if (artists != null && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(libraryIndexes = artists.regroupByLocale()) }
+            }
+            val selectedAlbumFeed = uiState.value.selectedAlbumFeed
+            val albums = loadCachedOrNull { libraryCacheRepository.getAlbums(serverId, selectedAlbumFeed) }
+            if (!albums.isNullOrEmpty() && uiState.value.selectedServerId == serverId &&
+                uiState.value.selectedAlbumFeed == selectedAlbumFeed) {
+                mutableUiState.update { it.copy(albums = albums) }
+            }
+            val playlists = loadCachedOrNull { libraryCacheRepository.getPlaylists(serverId) }
+            if (!playlists.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(playlists = playlists) }
+            }
+            val songs = loadCachedOrNull { libraryCacheRepository.getSongs(serverId) }
+            if (!songs.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(songs = songs) }
+            }
+        }
+    }
+
+    private fun refreshServerContent(serverId: Long, forceRefresh: Boolean = false) {
+        loadServerContent(serverId, forceRefresh)
+    }
+
+    private fun loadServerContent(
+        serverId: Long,
+        forceRefresh: Boolean = false,
+    ) {
+        lastLoadedServerId = serverId
+        loadArtists(serverId, forceRefresh)
+        loadAlbums(serverId, uiState.value.selectedAlbumFeed, forceRefresh)
+        loadPlaylists(serverId, forceRefresh)
+        loadSongs(serverId, forceRefresh)
+    }
+
+    private fun loadArtists(
+        serverId: Long,
+        forceRefresh: Boolean = false,
+    ) {
+        if (!forceRefresh && uiState.value.libraryIndexes != null) return
+
+        viewModelScope.launch {
+            mutableUiState.update { it.copy(isArtistsLoading = true, artistsError = null) }
+
+            if (!forceRefresh) {
+                val cached = runCatching { libraryCacheRepository.getArtists(serverId) }.getOrNull()
+                if (cached != null && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(libraryIndexes = cached.regroupByLocale()) }
+                }
+            }
+
+            runCatching {
+                subsonicRepository.getIndexes(serverId).data
+            }.onSuccess { indexes ->
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(libraryIndexes = indexes.regroupByLocale(), isArtistsLoading = false, artistsError = null) }
+                }
+                runCatching { libraryCacheRepository.saveArtists(serverId, indexes) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache artists", it) }
+            }.onFailure { throwable ->
+                mutableUiState.update {
+                    it.copy(isArtistsLoading = false, artistsError = throwable.localizedOr(R.string.error_load_artists))
+                }
+            }
+        }
+    }
+
+    private fun loadAlbums(
+        serverId: Long,
+        type: AlbumListType,
+        forceRefresh: Boolean = false,
+    ) {
+        if (!forceRefresh && uiState.value.albums.isNotEmpty() && uiState.value.selectedAlbumFeed == type) {
+            return
+        }
+
+        viewModelScope.launch {
+            if (!forceRefresh) {
+                val cached = runCatching { libraryCacheRepository.getAlbums(serverId, type) }.getOrNull()
+                if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(albums = cached) }
+                }
+            }
+
+            mutableUiState.update { it.copy(isAlbumsLoading = true, albumsError = null) }
+
+            runCatching {
+                subsonicRepository.getAlbumList(serverId = serverId, type = type, size = 36).data
+            }.onSuccess { albums ->
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(albums = albums, isAlbumsLoading = false, albumsError = null) }
+                }
+                runCatching { libraryCacheRepository.saveAlbums(serverId, type, albums) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache albums", it) }
+            }.onFailure { throwable ->
+                mutableUiState.update {
+                    it.copy(isAlbumsLoading = false, albumsError = throwable.localizedOr(R.string.error_load_albums))
+                }
+            }
+        }
+    }
+
+    private fun loadPlaylists(
+        serverId: Long,
+        forceRefresh: Boolean = false,
+    ) {
+        if (!forceRefresh && uiState.value.playlists.isNotEmpty()) return
+
+        viewModelScope.launch {
+            if (!forceRefresh) {
+                val cached = runCatching { libraryCacheRepository.getPlaylists(serverId) }.getOrNull()
+                if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(playlists = cached) }
+                }
+            }
+
+            mutableUiState.update { it.copy(isPlaylistsLoading = true, playlistsError = null) }
+
+            runCatching {
+                subsonicRepository.getPlaylists(serverId).data
+            }.onSuccess { playlists ->
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(playlists = playlists, isPlaylistsLoading = false, playlistsError = null) }
+                }
+                runCatching { libraryCacheRepository.savePlaylists(serverId, playlists) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache playlists", it) }
+            }.onFailure { throwable ->
+                mutableUiState.update {
+                    it.copy(isPlaylistsLoading = false, playlistsError = throwable.localizedOr(R.string.error_load_playlists))
+                }
+            }
+        }
+    }
+
+    private fun loadSongs(
+        serverId: Long,
+        forceRefresh: Boolean = false,
+    ) {
+        if (!forceRefresh && uiState.value.songs.isNotEmpty()) return
+
+        viewModelScope.launch {
+            if (!forceRefresh) {
+                val cached = runCatching { libraryCacheRepository.getSongs(serverId) }.getOrNull()
+                if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(songs = cached) }
+                }
+            }
+
+            if (uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(isSongsLoading = true, songsError = null) }
+            }
+
+            runCatching {
+                fetchAllSongs(serverId)
+            }.onSuccess { songs ->
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { it.copy(songs = songs, isSongsLoading = false, songsError = null) }
+                }
+                runCatching { libraryCacheRepository.saveSongs(serverId, songs) }
+                    .onFailure { Log.w("SakiApp", "Failed to cache songs", it) }
+            }.onFailure { throwable ->
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update {
+                        it.copy(isSongsLoading = false, songsError = throwable.localizedOr(R.string.error_load_songs))
+                    }
+                }
+            }
+        }
+    }
+
+    // Navidrome supports empty query in search3 to return all songs.
+    // This is not standard Subsonic behavior and may not work on other servers.
+    private suspend fun fetchAllSongs(serverId: Long): List<Song> = withContext(Dispatchers.IO) {
+        val pageSize = 500
+        val maxPages = 100
+        val allSongs = mutableListOf<Song>()
+        var offset = 0
+        var page = 0
+        while (page < maxPages) {
+            val results = subsonicRepository.search(
+                serverId = serverId,
+                query = "",
+                artistCount = 0,
+                albumCount = 0,
+                songCount = pageSize,
+                songOffset = offset,
+            ).data
+            allSongs.addAll(results.songs)
+            if (results.songs.isEmpty() || results.songs.size < pageSize) break
+            offset += pageSize
+            page++
+        }
+        allSongs.sortBy { it.title.lowercase() }
+        allSongs
+    }
+
+    private suspend fun buildArtistTopSongs(
+        serverId: Long,
+        artist: Artist,
+    ): List<Song> = coroutineScope {
+        artist.albums.take(4)
+            .map { album ->
+                async {
+                    subsonicRepository.getAlbum(serverId, album.id).data
+                }
+            }
+            .map { deferred -> deferred.await() }
+            .flatMap { album ->
+                album.songs.map { song ->
+                    song.withFallbackAlbumMetadata(album)
+                }
+            }
+            .distinctBy(Song::id)
+            .take(8)
+    }
+
+    private suspend fun performSearch(query: String) {
+        val serverId = uiState.value.selectedServerId
+        if (!uiState.value.isSearchActive || serverId == null || query.isBlank()) {
+            mutableUiState.update { state ->
+                state.copy(
+                    searchResults = SearchResults(),
+                    isSearchLoading = false,
+                    searchError = null,
+                )
+            }
+            return
+        }
+
+        mutableUiState.update { state ->
+            state.copy(
+                isSearchLoading = true,
+                searchError = null,
+            )
+        }
+
+        runCatching {
+            subsonicRepository.search(
+                serverId = serverId,
+                query = query,
+                artistCount = 8,
+                albumCount = 10,
+                songCount = 20,
+            ).data
+        }.onSuccess { results ->
+            if (
+                uiState.value.selectedServerId == serverId &&
+                uiState.value.isSearchActive &&
+                uiState.value.searchQuery.trim() == query
+            ) {
+                mutableUiState.update { state ->
+                    state.copy(
+                        searchResults = results,
+                        isSearchLoading = false,
+                        searchError = null,
+                    )
+                }
+            }
+        }.onFailure { throwable ->
+            if (
+                uiState.value.selectedServerId == serverId &&
+                uiState.value.isSearchActive &&
+                uiState.value.searchQuery.trim() == query
+            ) {
+                mutableUiState.update { state ->
+                    state.copy(
+                        searchResults = SearchResults(),
+                        isSearchLoading = false,
+                        searchError = throwable.localizedOr(R.string.error_search_server),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun clearSearchState() {
+        searchQueryFlow.value = ""
+        mutableUiState.update { state ->
+            state.copy(
+                isSearchActive = false,
+                searchQuery = "",
+                searchResults = SearchResults(),
+                isSearchLoading = false,
+                searchError = null,
+            )
+        }
+    }
+
+    fun refreshEndpointStatus() {
+        val serverId = uiState.value.selectedServerId ?: return
+        val results = endpointSelector.getLastProbeResults(serverId)
+        val activeId = endpointSelector.getActiveEndpointId(serverId)
+        mutableEndpointStatus.update { current ->
+            current.copy(
+                activeEndpointLabel = results.find { it.endpoint.id == activeId }?.endpoint?.label,
+                activeEndpointId = activeId,
+                isForced = endpointSelector.isForced(serverId),
+                probeResults = results.map { r ->
+                    EndpointProbeInfo(
+                        id = r.endpoint.id,
+                        label = r.endpoint.label,
+                        baseUrl = r.endpoint.baseUrl,
+                        latencyMs = r.latencyMs,
+                        reachable = r.reachable,
+                    )
+                },
+            )
+        }
+    }
+
+    fun forceEndpoint(endpointId: Long) {
+        val serverId = uiState.value.selectedServerId ?: return
+        if (endpointSelector.getActiveEndpointId(serverId) == endpointId && endpointSelector.isForced(serverId)) {
+            endpointSelector.clearForce(serverId)
+        } else {
+            endpointSelector.forceEndpoint(serverId, endpointId)
+        }
+    }
+
+    fun reprobeEndpoints() {
+        val serverId = uiState.value.selectedServerId ?: return
+        val server = uiState.value.servers.find { it.id == serverId } ?: return
+        mutableEndpointStatus.update { it.copy(isProbing = true) }
+        viewModelScope.launch {
+            try {
+                endpointSelector.probe(serverId, server)
+                refreshEndpointStatus()
+            } finally {
+                mutableEndpointStatus.update { it.copy(isProbing = false) }
+            }
+        }
+    }
+
+    fun exportConfig(uri: android.net.Uri) {
+        viewModelScope.launch {
+            runCatching {
+                val json = configBackupManager.exportToJson()
+                appContext.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
+                    ?: error("Cannot open output stream")
+            }
+                .onSuccess { snackbarMessages.tryEmit(UiText.resource(R.string.message_backup_exported)) }
+                .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    snackbarMessages.tryEmit(
+                        UiText.resource(R.string.message_export_failed, e.message.orEmpty()),
+                    )
+                }
+        }
+    }
+
+    fun importConfig(uri: android.net.Uri, onSuccess: (() -> Unit)? = null) {
+        viewModelScope.launch {
+            try {
+                val json = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    appContext.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                } ?: run {
+                    snackbarMessages.tryEmit(UiText.resource(R.string.message_cannot_read_backup))
+                    return@launch
+                }
+                when (val result = configBackupManager.importFromJson(json)) {
+                    is ImportResult.Success -> {
+                        val settingsSuffix = if (result.settingsRestored) {
+                            UiText.resource(R.string.message_import_settings_suffix)
+                        } else {
+                            ""
+                        }
+                        snackbarMessages.tryEmit(
+                            UiText.plural(
+                                R.plurals.message_import_success,
+                                result.serversImported,
+                                result.serversImported,
+                                settingsSuffix,
+                            ),
+                        )
+                        onSuccess?.invoke()
+                    }
+                    is ImportResult.InvalidFormat -> snackbarMessages.tryEmit(UiText.resource(R.string.message_invalid_backup))
+                    is ImportResult.UnsupportedVersion -> snackbarMessages.tryEmit(
+                        UiText.resource(R.string.message_unsupported_backup_version, result.version),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snackbarMessages.tryEmit(UiText.resource(R.string.message_import_failed, e.message.orEmpty()))
+            }
+        }
+    }
+}
+
+data class EndpointStatus(
+    val activeEndpointLabel: String? = null,
+    val activeEndpointId: Long? = null,
+    val isForced: Boolean = false,
+    val probeResults: List<EndpointProbeInfo> = emptyList(),
+    val isProbing: Boolean = false,
+)
+
+data class EndpointProbeInfo(
+    val id: Long,
+    val label: String,
+    val baseUrl: String,
+    val latencyMs: Long?,
+    val reachable: Boolean,
+)
+
+enum class BrowseSection {
+    ARTISTS,
+    ALBUMS,
+    PLAYLISTS,
+    SONGS,
+}
+
+data class SakiAppUiState(
+    val isAppReady: Boolean = false,
+    val textScale: TextScale = TextScale.DEFAULT,
+    val appPreferences: AppPreferences = AppPreferences(),
+    val selectedBrowseSection: BrowseSection = BrowseSection.ARTISTS,
+    val servers: List<ServerConfig> = emptyList(),
+    val selectedServerId: Long? = null,
+    val selectedAlbumFeed: AlbumListType = AlbumListType.NEWEST,
+    val libraryIndexes: LibraryIndexes? = null,
+    val isArtistsLoading: Boolean = false,
+    val artistsError: UiText? = null,
+    val selectedArtist: Artist? = null,
+    val selectedArtistTopSongs: List<Song> = emptyList(),
+    val isArtistLoading: Boolean = false,
+    val artistError: UiText? = null,
+    val albums: List<AlbumSummary> = emptyList(),
+    val isAlbumsLoading: Boolean = false,
+    val albumsError: UiText? = null,
+    val selectedAlbum: Album? = null,
+    val isAlbumLoading: Boolean = false,
+    val albumError: UiText? = null,
+    val playlists: List<PlaylistSummary> = emptyList(),
+    val isPlaylistsLoading: Boolean = false,
+    val playlistsError: UiText? = null,
+    val selectedPlaylist: Playlist? = null,
+    val isPlaylistLoading: Boolean = false,
+    val playlistError: UiText? = null,
+    val songs: List<Song> = emptyList(),
+    val isSongsLoading: Boolean = false,
+    val songsError: UiText? = null,
+    val isSearchActive: Boolean = false,
+    val searchQuery: String = "",
+    val searchResults: SearchResults = SearchResults(),
+    val isSearchLoading: Boolean = false,
+    val searchError: UiText? = null,
+    val cachedSongs: List<CachedSong> = emptyList(),
+    val cacheStorageSummary: CacheStorageSummary = CacheStorageSummary(),
+    val streamCachedSongIds: Set<String> = emptySet(),
+    val downloadingSongIds: Set<String> = emptySet(),
+    val playbackState: PlaybackSessionState = PlaybackSessionState(),
+    val currentLyrics: SongLyrics? = null,
+)
+
+private fun Song.withFallbackAlbumMetadata(album: Album): Song {
+    return copy(
+        album = this.album ?: album.name,
+        albumId = albumId ?: album.id,
+        artist = artist ?: album.artist,
+        artistId = artistId ?: album.artistId,
+        coverArtId = coverArtId ?: album.coverArtId,
+    )
+}
