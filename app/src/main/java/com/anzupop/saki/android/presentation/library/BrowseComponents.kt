@@ -544,7 +544,7 @@ fun SongDetailsDialog(song: Song, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shape = MaterialTheme.shapes.small) {
                 Text(stringResource(R.string.common_close))
             }
         },
@@ -578,8 +578,8 @@ fun NoServerBrowseState(modifier: Modifier, onManageServers: () -> Unit, onImpor
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onManageServers) { Text(stringResource(R.string.browse_add_server)) }
-                    OutlinedButton(onClick = onImportBackup) { Text(stringResource(R.string.browse_import_backup)) }
+                    Button(onClick = onManageServers, shape = MaterialTheme.shapes.small) { Text(stringResource(R.string.browse_add_server)) }
+                    OutlinedButton(onClick = onImportBackup, shape = MaterialTheme.shapes.small) { Text(stringResource(R.string.browse_import_backup)) }
                 }
             }
         }
@@ -601,7 +601,7 @@ fun SectionTitle(
         ) {
             Text(text = title, style = MaterialTheme.typography.headlineSmall)
             if (actionLabel != null && onAction != null) {
-                Button(onClick = onAction) {
+                Button(onClick = onAction, shape = MaterialTheme.shapes.small) {
                     Icon(Icons.Rounded.PlayArrow, contentDescription = null)
                     Text(actionLabel, modifier = Modifier.padding(start = 8.dp))
                 }

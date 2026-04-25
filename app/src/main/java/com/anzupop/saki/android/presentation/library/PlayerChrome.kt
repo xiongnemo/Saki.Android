@@ -640,7 +640,7 @@ fun NowPlayingOverlay(
                                 width = if (compactControls) 132.dp else 148.dp,
                                 height = if (compactControls) 64.dp else 72.dp,
                             ),
-                            shape = RoundedCornerShape(30.dp),
+                            shape = MaterialTheme.shapes.medium,
                             color = MaterialTheme.colorScheme.primaryContainer,
                         ) {
                             Row(
@@ -785,7 +785,7 @@ fun NowPlayingOverlay(
         AlertDialog(
             onDismissRequest = { showDetails = false },
             confirmButton = {
-                TextButton(onClick = { showDetails = false }) {
+                TextButton(onClick = { showDetails = false }, shape = MaterialTheme.shapes.small) {
                     Text(stringResource(R.string.common_close))
                 }
             },
@@ -828,7 +828,7 @@ fun NowPlayingOverlay(
         AlertDialog(
             onDismissRequest = { showEndpointStatus = false },
             confirmButton = {
-                TextButton(onClick = { showEndpointStatus = false }) {
+                TextButton(onClick = { showEndpointStatus = false }, shape = MaterialTheme.shapes.small) {
                     Text(stringResource(R.string.common_close))
                 }
             },
@@ -902,6 +902,7 @@ fun NowPlayingOverlay(
                         onClick = onReprobeEndpoints,
                         enabled = !isProbing,
                         modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.small,
                     ) {
                         Text(
                             if (isProbing) {
@@ -1075,7 +1076,7 @@ private fun QueueRow(
                 )
             }
             if (!isCurrent) {
-                TextButton(onClick = onRemove) {
+                TextButton(onClick = onRemove, shape = MaterialTheme.shapes.small) {
                     Text(stringResource(R.string.common_remove))
                 }
             }
