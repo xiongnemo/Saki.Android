@@ -2,6 +2,7 @@ package com.anzupop.saki.android.presentation.serverconfig
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.anzupop.saki.android.R
 import com.anzupop.saki.android.domain.model.ConnectionTestRequest
 import com.anzupop.saki.android.domain.model.ConnectionTestResult
 import com.anzupop.saki.android.domain.model.DEFAULT_SUBSONIC_API_VERSION
@@ -10,6 +11,8 @@ import com.anzupop.saki.android.domain.model.ServerConfig
 import com.anzupop.saki.android.domain.model.ServerEndpoint
 import com.anzupop.saki.android.domain.repository.ServerConfigRepository
 import com.anzupop.saki.android.domain.repository.ServerConnectionTester
+import com.anzupop.saki.android.presentation.UiText
+import com.anzupop.saki.android.presentation.localizedOr
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -29,7 +32,7 @@ class ServerConfigViewModel @Inject constructor(
 ) : ViewModel() {
     private val editorState = MutableStateFlow<ServerEditorState?>(null)
     private val isSaving = MutableStateFlow(false)
-    private val snackbarMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    private val snackbarMessages = MutableSharedFlow<UiText>(extraBufferCapacity = 1)
     private var nextEditorId = 0L
 
     val messages = snackbarMessages.asSharedFlow()
@@ -202,14 +205,14 @@ class ServerConfigViewModel @Inject constructor(
                             ),
                         )
                     }
-                    snackbarMessages.tryEmit("Connected to ${result.endpointUrl}")
+                    snackbarMessages.tryEmit(UiText.resource(R.string.server_config_connected_to, result.endpointUrl))
                 }
 
                 is ConnectionTestResult.Failure -> {
                     updateEndpointState(editorId) {
-                        copy(testState = EndpointConnectionState.Failure(result.message))
+                        copy(testState = EndpointConnectionState.Failure(UiText.dynamic(result.message)))
                     }
-                    snackbarMessages.tryEmit(result.message)
+                    snackbarMessages.tryEmit(UiText.dynamic(result.message))
                 }
             }
         }
@@ -229,12 +232,16 @@ class ServerConfigViewModel @Inject constructor(
                 serverConfigRepository.saveServerConfig(current.toDomain())
             }.onSuccess {
                 snackbarMessages.emit(
-                    if (current.serverId == 0L) "Server saved" else "Server updated",
+                    if (current.serverId == 0L) {
+                        UiText.resource(R.string.server_config_server_saved)
+                    } else {
+                        UiText.resource(R.string.server_config_server_updated)
+                    },
                 )
                 editorState.value = null
             }.onFailure { throwable ->
                 updateEditor {
-                    copy(formError = throwable.message ?: "Unable to save the server right now.")
+                    copy(formError = throwable.localizedOr(R.string.server_config_error_save))
                 }
             }
             isSaving.value = false
@@ -247,26 +254,26 @@ class ServerConfigViewModel @Inject constructor(
             if (editorState.value?.serverId == serverId) {
                 editorState.value = null
             }
-            snackbarMessages.emit("Server removed")
+            snackbarMessages.emit(UiText.resource(R.string.server_config_server_removed))
         }
     }
 
-    private fun validateDraft(draft: ServerEditorState): String? {
-        if (draft.name.isBlank()) return "Enter a server name."
-        if (draft.username.isBlank()) return "Enter a Subsonic username."
-        if (draft.password.isBlank()) return "Enter the server password."
-        if (draft.endpoints.isEmpty()) return "Add at least one endpoint."
-        if (draft.endpoints.any { it.baseUrl.isBlank() }) return "Each endpoint needs a URL."
+    private fun validateDraft(draft: ServerEditorState): UiText? {
+        if (draft.name.isBlank()) return UiText.resource(R.string.server_config_error_enter_name)
+        if (draft.username.isBlank()) return UiText.resource(R.string.server_config_error_enter_username)
+        if (draft.password.isBlank()) return UiText.resource(R.string.server_config_error_enter_password)
+        if (draft.endpoints.isEmpty()) return UiText.resource(R.string.server_config_error_add_endpoint)
+        if (draft.endpoints.any { it.baseUrl.isBlank() }) return UiText.resource(R.string.server_config_error_endpoint_url)
         return null
     }
 
     private fun validateForConnectionTest(
         draft: ServerEditorState,
         endpoint: ServerEndpointEditorState,
-    ): String? {
-        if (draft.username.isBlank()) return "Enter a username before testing."
-        if (draft.password.isBlank()) return "Enter a password before testing."
-        if (endpoint.baseUrl.isBlank()) return "Enter an endpoint URL before testing."
+    ): UiText? {
+        if (draft.username.isBlank()) return UiText.resource(R.string.server_config_error_test_username)
+        if (draft.password.isBlank()) return UiText.resource(R.string.server_config_error_test_password)
+        if (endpoint.baseUrl.isBlank()) return UiText.resource(R.string.server_config_error_test_endpoint_url)
         return null
     }
 
@@ -350,7 +357,7 @@ data class ServerEditorState(
     val clientName: String = DEFAULT_SUBSONIC_CLIENT,
     val apiVersion: String = DEFAULT_SUBSONIC_API_VERSION,
     val endpoints: List<ServerEndpointEditorState> = emptyList(),
-    val formError: String? = null,
+    val formError: UiText? = null,
 )
 
 data class ServerEndpointEditorState(
@@ -372,7 +379,7 @@ sealed interface EndpointConnectionState {
     ) : EndpointConnectionState
 
     data class Failure(
-        val message: String,
+        val message: UiText,
     ) : EndpointConnectionState
 }
 

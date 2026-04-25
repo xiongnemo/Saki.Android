@@ -48,8 +48,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.anzupop.saki.android.R
 import com.anzupop.saki.android.domain.model.CachedSong
 import com.anzupop.saki.android.domain.model.MAX_STREAM_CACHE_SIZE_MB
 import com.anzupop.saki.android.domain.model.MIN_STREAM_CACHE_SIZE_MB
@@ -66,6 +69,7 @@ import com.anzupop.saki.android.domain.model.STREAM_CACHE_SIZE_STEP_MB
 import com.anzupop.saki.android.domain.model.StreamQuality
 import com.anzupop.saki.android.domain.model.TextScale
 import com.anzupop.saki.android.presentation.SakiAppUiState
+import com.anzupop.saki.android.presentation.labelRes
 import com.anzupop.saki.android.presentation.library.ArtworkCard
 import com.anzupop.saki.android.presentation.library.resolveArtworkModel
 import com.anzupop.saki.android.presentation.rememberBrowseBackgroundBrush
@@ -137,11 +141,11 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(text = "Settings", style = MaterialTheme.typography.displaySmall)
+                        Text(text = stringResource(R.string.settings_title), style = MaterialTheme.typography.displaySmall)
                         Icon(Icons.Rounded.Settings, contentDescription = null)
                     }
                     Text(
-                        text = "Manage servers, text size, streaming quality, sound balancing, offline downloads, and onboarding.",
+                        text = stringResource(R.string.settings_intro),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -151,13 +155,13 @@ fun SettingsScreen(
 
         item {
             SettingsSectionCard(
-                title = "Server profiles",
-                body = "Pick the active server and open the full profile editor when you need it.",
+                title = stringResource(R.string.settings_server_profiles_title),
+                body = stringResource(R.string.settings_server_profiles_body),
                 action = null,
             ) {
                 if (uiState.servers.isEmpty()) {
                     Text(
-                        text = "No servers configured yet.",
+                        text = stringResource(R.string.settings_no_servers),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -172,7 +176,7 @@ fun SettingsScreen(
                 }
                 FilledTonalButton(onClick = onManageServers) {
                     Icon(Icons.Rounded.WifiTethering, contentDescription = null)
-                    Text("Open server manager", modifier = Modifier.padding(start = 8.dp))
+                    Text(stringResource(R.string.settings_open_server_manager), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
@@ -180,8 +184,8 @@ fun SettingsScreen(
         item {
             val prefs = uiState.playbackState.preferences
             SettingsSectionCard(
-                title = "Stream quality",
-                body = "Limit streaming bitrate or keep the original source file when possible.",
+                title = stringResource(R.string.settings_stream_quality_title),
+                body = stringResource(R.string.settings_stream_quality_body),
                 action = null,
             ) {
                 if (!prefs.adaptiveQualityEnabled) {
@@ -193,7 +197,7 @@ fun SettingsScreen(
                             FilterChip(
                                 selected = prefs.streamQuality == quality,
                                 onClick = { onUpdateStreamQuality(quality) },
-                                label = { Text(quality.label) },
+                                label = { Text(quality.localizedLabel()) },
                             )
                         }
                     }
@@ -203,14 +207,14 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                 ) {
-                    Text("Adaptive quality", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.settings_adaptive_quality), style = MaterialTheme.typography.bodyLarge)
                     Switch(
                         checked = prefs.adaptiveQualityEnabled,
                         onCheckedChange = onUpdateAdaptiveQuality,
                     )
                 }
                 if (prefs.adaptiveQualityEnabled) {
-                    Text("WiFi", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.settings_wifi), style = MaterialTheme.typography.labelLarge)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -219,11 +223,11 @@ fun SettingsScreen(
                             FilterChip(
                                 selected = prefs.wifiStreamQuality == quality,
                                 onClick = { onUpdateWifiStreamQuality(quality) },
-                                label = { Text(quality.label) },
+                                label = { Text(quality.localizedLabel()) },
                             )
                         }
                     }
-                    Text("Mobile", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.settings_mobile), style = MaterialTheme.typography.labelLarge)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -232,7 +236,7 @@ fun SettingsScreen(
                             FilterChip(
                                 selected = prefs.mobileStreamQuality == quality,
                                 onClick = { onUpdateMobileStreamQuality(quality) },
-                                label = { Text(quality.label) },
+                                label = { Text(quality.localizedLabel()) },
                             )
                         }
                     }
@@ -242,8 +246,8 @@ fun SettingsScreen(
 
         item {
             SettingsSectionCard(
-                title = "Sound balancing",
-                body = "Reduces perceived volume jumps across tracks using Android's audio session effects. Device support and results vary.",
+                title = stringResource(R.string.settings_sound_balancing_title),
+                body = stringResource(R.string.settings_sound_balancing_body),
                 action = null,
             ) {
                 FlowRow(
@@ -254,7 +258,7 @@ fun SettingsScreen(
                         FilterChip(
                             selected = uiState.playbackState.preferences.soundBalancingMode == mode,
                             onClick = { onUpdateSoundBalancing(mode) },
-                            label = { Text(mode.label) },
+                            label = { Text(mode.localizedLabel()) },
                         )
                     }
                 }
@@ -268,8 +272,8 @@ fun SettingsScreen(
                 mutableFloatStateOf(configuredSeconds.toFloat())
             }
             SettingsSectionCard(
-                title = "Buffer strategy",
-                body = "Control how much of the current track is buffered ahead during playback.",
+                title = stringResource(R.string.settings_buffer_strategy_title),
+                body = stringResource(R.string.settings_buffer_strategy_body),
                 action = null,
             ) {
                 FlowRow(
@@ -280,24 +284,24 @@ fun SettingsScreen(
                         FilterChip(
                             selected = prefs.bufferStrategy == strategy,
                             onClick = { onUpdateBufferStrategy(strategy) },
-                            label = { Text(strategy.label) },
+                            label = { Text(strategy.localizedLabel()) },
                         )
                     }
                 }
                 when (prefs.bufferStrategy) {
                     BufferStrategy.NORMAL -> Text(
-                        text = "Default buffering (~50 s ahead). Balances memory use and playback reliability.",
+                        text = stringResource(R.string.settings_buffer_strategy_normal_body),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     BufferStrategy.AGGRESSIVE -> Text(
-                        text = "Buffers the entire current track. Best on stable WiFi for instant seeking.",
+                        text = stringResource(R.string.settings_buffer_strategy_aggressive_body),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     BufferStrategy.CUSTOM -> {
                         Text(
-                            text = "Buffer ${bufferSliderValue.toBufferSeconds()} s ahead",
+                            text = stringResource(R.string.settings_buffer_ahead_seconds, bufferSliderValue.toBufferSeconds()),
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Slider(
@@ -318,12 +322,12 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                text = "${MIN_CUSTOM_BUFFER_SECONDS} s",
+                                text = stringResource(R.string.settings_seconds_short, MIN_CUSTOM_BUFFER_SECONDS),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = "${MAX_CUSTOM_BUFFER_SECONDS} s",
+                                text = stringResource(R.string.settings_seconds_short, MAX_CUSTOM_BUFFER_SECONDS),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -331,7 +335,7 @@ fun SettingsScreen(
                     }
                 }
                 Text(
-                    text = "Changes take effect after restarting the app.",
+                    text = stringResource(R.string.settings_restart_required),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -340,8 +344,8 @@ fun SettingsScreen(
 
         item {
             SettingsSectionCard(
-                title = "Text size",
-                body = "Scale the app typography without changing the rest of the system UI.",
+                title = stringResource(R.string.settings_text_size_title),
+                body = stringResource(R.string.settings_text_size_body),
                 action = null,
             ) {
                 FlowRow(
@@ -352,7 +356,7 @@ fun SettingsScreen(
                         FilterChip(
                             selected = uiState.textScale == textScale,
                             onClick = { onUpdateTextScale(textScale) },
-                            label = { Text(textScale.label) },
+                            label = { Text(textScale.localizedLabel()) },
                             leadingIcon = {
                                 Icon(Icons.Rounded.TextFields, contentDescription = null)
                             },
@@ -363,13 +367,19 @@ fun SettingsScreen(
         }
 
         item {
+            val streamCacheCount = pluralStringResource(
+                R.plurals.settings_stream_cached_track_count,
+                storageSummary.streamCachedSongCount,
+                storageSummary.streamCachedSongCount,
+            )
+            val streamCacheBody = if (selectedServer != null) {
+                stringResource(R.string.settings_cache_count_on_server, streamCacheCount, selectedServer.name)
+            } else {
+                streamCacheCount
+            }
             SettingsSectionCard(
-                title = "Streaming cache",
-                body = buildString {
-                    append("${storageSummary.streamCachedSongCount} stream-cached track")
-                    if (storageSummary.streamCachedSongCount != 1) append("s")
-                    if (selectedServer != null) append(" on ${selectedServer.name}")
-                },
+                title = stringResource(R.string.settings_streaming_cache_title),
+                body = streamCacheBody,
                 action = null,
             ) {
                 Row(
@@ -381,7 +391,10 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = "/ ${formatStorageSize(configuredStreamCacheSizeMb.toLong() * 1024L * 1024L)}",
+                        text = stringResource(
+                            R.string.settings_cache_limit,
+                            formatStorageSize(configuredStreamCacheSizeMb.toLong() * 1024L * 1024L),
+                        ),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -427,15 +440,15 @@ fun SettingsScreen(
                     enabled = storageSummary.streamCacheBytes > 0L,
                 ) {
                     Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
-                    Text("Clear stream cache", modifier = Modifier.padding(start = 8.dp))
+                    Text(stringResource(R.string.settings_clear_stream_cache), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
 
         item {
             SettingsSectionCard(
-                title = "Cover art cache",
-                body = "Album artwork cached across all servers.",
+                title = stringResource(R.string.settings_cover_art_cache_title),
+                body = stringResource(R.string.settings_cover_art_cache_body),
                 action = null,
             ) {
                 Row(
@@ -447,7 +460,10 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = "/ ${formatStorageSize(configuredImageCacheSizeMb.toLong() * 1024L * 1024L)}",
+                        text = stringResource(
+                            R.string.settings_cache_limit,
+                            formatStorageSize(configuredImageCacheSizeMb.toLong() * 1024L * 1024L),
+                        ),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -493,27 +509,37 @@ fun SettingsScreen(
                     enabled = storageSummary.imageCacheBytes > 0L,
                 ) {
                     Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
-                    Text("Clear cover art cache", modifier = Modifier.padding(start = 8.dp))
+                    Text(stringResource(R.string.settings_clear_cover_art_cache), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
 
         item {
+            val downloadCount = pluralStringResource(
+                R.plurals.settings_download_count,
+                storageSummary.downloadedSongCount,
+                storageSummary.downloadedSongCount,
+            )
+            val downloadsBody = stringResource(
+                R.string.settings_downloads_body,
+                downloadCount,
+                formatStorageSize(storageSummary.downloadedBytes),
+            )
+            val downloadsBodyWithServer = if (selectedServer != null) {
+                stringResource(R.string.settings_cache_count_on_server, downloadsBody, selectedServer.name)
+            } else {
+                downloadsBody
+            }
             SettingsSectionCard(
-                title = "Downloads",
-                body = buildString {
-                    append("${storageSummary.downloadedSongCount} download")
-                    if (storageSummary.downloadedSongCount != 1) append("s")
-                    append(" • ${formatStorageSize(storageSummary.downloadedBytes)}")
-                    if (selectedServer != null) append(" on ${selectedServer.name}")
-                },
+                title = stringResource(R.string.settings_downloads_title),
+                body = downloadsBodyWithServer,
                 action = null,
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (visibleCachedSongs.isNotEmpty()) {
                         OutlinedButton(onClick = { onPlayCachedQueue(visibleCachedSongs, 0) }) {
                             Icon(Icons.Rounded.PlayArrow, contentDescription = null)
-                            Text("Play all", modifier = Modifier.padding(start = 8.dp))
+                            Text(stringResource(R.string.settings_play_all), modifier = Modifier.padding(start = 8.dp))
                         }
                     }
                     OutlinedButton(
@@ -521,14 +547,14 @@ fun SettingsScreen(
                         enabled = visibleCachedSongs.isNotEmpty(),
                     ) {
                         Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
-                        Text("Clear all", modifier = Modifier.padding(start = 8.dp))
+                        Text(stringResource(R.string.settings_clear_all), modifier = Modifier.padding(start = 8.dp))
                     }
                 }
                 if (visibleCachedSongs.isEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.CloudDownload, contentDescription = null)
                         Text(
-                            text = "No downloaded tracks yet.",
+                            text = stringResource(R.string.settings_no_downloaded_tracks),
                             modifier = Modifier.padding(start = 10.dp),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -550,8 +576,8 @@ fun SettingsScreen(
 
         item {
             SettingsSectionCard(
-                title = "Experimental",
-                body = "Features that may not work on all devices.",
+                title = stringResource(R.string.settings_experimental_title),
+                body = stringResource(R.string.settings_experimental_body),
                 action = null,
             ) {
                 val checked = uiState.playbackState.preferences.bluetoothLyricsEnabled
@@ -567,9 +593,9 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Bluetooth / notification lyrics", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.settings_bluetooth_lyrics_title), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Show current lyric line in media notification, lock screen, and Bluetooth devices (car stereos, headphones).",
+                            stringResource(R.string.settings_bluetooth_lyrics_body),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -590,18 +616,18 @@ fun SettingsScreen(
                 contract = ActivityResultContracts.OpenDocument(),
             ) { uri -> if (uri != null) onImportConfig(uri) }
             SettingsSectionCard(
-                title = "Backup & Restore",
-                body = "Export or import server configuration and settings. Warning: exported files contain server passwords in plaintext.",
+                title = stringResource(R.string.settings_backup_restore_title),
+                body = stringResource(R.string.settings_backup_restore_body),
                 action = null,
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { exportLauncher.launch("saki-backup.json") }) {
                         Icon(Icons.Rounded.Upload, contentDescription = null)
-                        Text("Export", modifier = Modifier.padding(start = 8.dp))
+                        Text(stringResource(R.string.settings_export), modifier = Modifier.padding(start = 8.dp))
                     }
                     OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }) {
                         Icon(Icons.Rounded.Download, contentDescription = null)
-                        Text("Import", modifier = Modifier.padding(start = 8.dp))
+                        Text(stringResource(R.string.settings_import), modifier = Modifier.padding(start = 8.dp))
                     }
                 }
             }
@@ -609,14 +635,14 @@ fun SettingsScreen(
 
         item {
             SettingsSectionCard(
-                title = "Onboarding",
-                body = "Run the first-time setup flow again if you want to revisit the intro and setup steps.",
+                title = stringResource(R.string.settings_onboarding_title),
+                body = stringResource(R.string.settings_onboarding_body),
                 action = null,
             ) {
                 Row {
                     Button(onClick = onReplayOnboarding) {
                         Icon(Icons.Rounded.Storage, contentDescription = null)
-                        Text("Run onboarding again", modifier = Modifier.padding(start = 8.dp))
+                        Text(stringResource(R.string.settings_run_onboarding_again), modifier = Modifier.padding(start = 8.dp))
                     }
                 }
             }
@@ -703,7 +729,13 @@ private fun ServerRow(
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(text = server.name, style = MaterialTheme.typography.titleLarge)
             Text(
-                text = "${server.username} • ${server.endpoints.size} endpoint${if (server.endpoints.size == 1) "" else "s"}",
+                text = "${server.username} • ${
+                    pluralStringResource(
+                        R.plurals.settings_endpoint_count,
+                        server.endpoints.size,
+                        server.endpoints.size,
+                    )
+                }",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -719,6 +751,8 @@ private fun CachedSongRow(
     onDelete: () -> Unit,
     onPlayFromHere: () -> Unit,
 ) {
+    val qualityLabel = song.quality.localizedLabel()
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -739,7 +773,7 @@ private fun CachedSongRow(
         ) {
             Text(text = song.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                text = listOfNotNull(song.artist, song.album).joinToString(" • ").ifBlank { song.quality.label },
+                text = listOfNotNull(song.artist, song.album).joinToString(" • ").ifBlank { qualityLabel },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -747,13 +781,25 @@ private fun CachedSongRow(
             )
         }
         IconButton(onClick = onPlayFromHere) {
-            Icon(Icons.Rounded.PlayArrow, contentDescription = "Play from here")
+            Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(R.string.settings_play_from_here))
         }
         IconButton(onClick = onDelete) {
-            Icon(Icons.Rounded.DeleteOutline, contentDescription = "Remove download")
+            Icon(Icons.Rounded.DeleteOutline, contentDescription = stringResource(R.string.settings_remove_download))
         }
     }
 }
+
+@Composable
+private fun StreamQuality.localizedLabel(): String = stringResource(labelRes())
+
+@Composable
+private fun SoundBalancingMode.localizedLabel(): String = stringResource(labelRes())
+
+@Composable
+private fun BufferStrategy.localizedLabel(): String = stringResource(labelRes())
+
+@Composable
+private fun TextScale.localizedLabel(): String = stringResource(labelRes())
 
 private fun formatStorageSize(bytes: Long): String {
     if (bytes <= 0L) return "0 B"

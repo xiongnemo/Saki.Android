@@ -64,9 +64,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.anzupop.saki.android.R
 import com.anzupop.saki.android.domain.model.AlbumListType
 import com.anzupop.saki.android.domain.model.CachedSong
 import com.anzupop.saki.android.domain.model.SearchResults
@@ -75,6 +78,7 @@ import com.anzupop.saki.android.domain.model.Song
 import com.anzupop.saki.android.presentation.BrowseSection
 import com.anzupop.saki.android.presentation.rememberBrowseBackgroundBrush
 import com.anzupop.saki.android.presentation.SakiAppUiState
+import com.anzupop.saki.android.presentation.asString
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filter
@@ -172,7 +176,7 @@ fun BrowseScreen(
                         streamCachedSongIds = uiState.streamCachedSongIds,
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isAlbumLoading,
-                        error = uiState.albumError,
+                        error = uiState.albumError?.asString(),
                         onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
                     )
@@ -185,7 +189,7 @@ fun BrowseScreen(
                         streamCachedSongIds = uiState.streamCachedSongIds,
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isArtistLoading,
-                        error = uiState.artistError,
+                        error = uiState.artistError?.asString(),
                         onOpenAlbum = onOpenAlbum,
                         onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
@@ -198,7 +202,7 @@ fun BrowseScreen(
                         streamCachedSongIds = uiState.streamCachedSongIds,
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isPlaylistLoading,
-                        error = uiState.playlistError,
+                        error = uiState.playlistError?.asString(),
                         onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
                     )
@@ -322,7 +326,7 @@ private fun BrowsePager(
                 query = uiState.searchQuery,
                 results = uiState.searchResults,
                 isLoading = uiState.isSearchLoading,
-                error = uiState.searchError,
+                error = uiState.searchError?.asString(),
                 cachedSongsBySongId = cachedSongsBySongId,
                 streamCachedSongIds = uiState.streamCachedSongIds,
                 downloadingSongIds = uiState.downloadingSongIds,
@@ -361,7 +365,7 @@ private fun BrowsePager(
                                 onClick = { onSelectBrowseSection(section) },
                                 label = {
                                     Text(
-                                        text = section.label,
+                                        text = section.localizedLabel(),
                                         style = MaterialTheme.typography.labelMedium,
                                         maxLines = 1,
                                     )
@@ -379,7 +383,7 @@ private fun BrowsePager(
                                 indexes = uiState.libraryIndexes,
                                 server = currentServer,
                                 isLoading = uiState.isArtistsLoading,
-                                error = uiState.artistsError,
+                                error = uiState.artistsError?.asString(),
                                 onOpenArtist = onOpenArtist,
                             )
 
@@ -388,7 +392,7 @@ private fun BrowsePager(
                                 server = currentServer,
                                 selectedFeed = uiState.selectedAlbumFeed,
                                 isLoading = uiState.isAlbumsLoading,
-                                error = uiState.albumsError,
+                                error = uiState.albumsError?.asString(),
                                 onSelectFeed = onSelectAlbumFeed,
                                 onOpenAlbum = onOpenAlbum,
                             )
@@ -397,7 +401,7 @@ private fun BrowsePager(
                                 playlists = uiState.playlists,
                                 server = currentServer,
                                 isLoading = uiState.isPlaylistsLoading,
-                                error = uiState.playlistsError,
+                                error = uiState.playlistsError?.asString(),
                                 onOpenPlaylist = onOpenPlaylist,
                             )
 
@@ -408,7 +412,7 @@ private fun BrowsePager(
                                 streamCachedSongIds = uiState.streamCachedSongIds,
                                 downloadingSongIds = uiState.downloadingSongIds,
                                 isLoading = uiState.isSongsLoading,
-                                error = uiState.songsError,
+                                error = uiState.songsError?.asString(),
                                 onPlaySongs = onPlaySongs,
                                 onShowSongActions = onShowSongActions,
                             )
@@ -444,7 +448,7 @@ private fun BrowseHeroCard(
                 textStyle = MaterialTheme.typography.bodyLarge,
                 placeholder = {
                     Text(
-                        text = "Search ${currentServer.name}",
+                        text = stringResource(R.string.browse_search_placeholder, currentServer.name),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -454,7 +458,7 @@ private fun BrowseHeroCard(
                 },
                 trailingIcon = {
                     IconButton(onClick = { onSearchActiveChange(false) }) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Close search")
+                        Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.browse_close_search))
                     }
                 },
                 shape = MaterialTheme.shapes.extraLarge,
@@ -469,10 +473,10 @@ private fun BrowseHeroCard(
             )
             Spacer(modifier = Modifier.width(8.dp))
             IconButton(onClick = { onSearchActiveChange(true) }) {
-                Icon(Icons.Rounded.Search, contentDescription = "Search this server")
+                Icon(Icons.Rounded.Search, contentDescription = stringResource(R.string.browse_search_server))
             }
             IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Rounded.Settings, contentDescription = "Settings")
+                Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.browse_settings))
             }
         }
     }
@@ -498,13 +502,13 @@ private fun SearchResultsPage(
     when {
         trimmedQuery.isBlank() -> Box(modifier = modifier) {
             EmptyStateCard(
-                title = "Search this server",
-                body = "Look up artists, albums, and songs on ${currentServer.name}.",
+                title = stringResource(R.string.browse_search_server),
+                body = stringResource(R.string.browse_search_server_body, currentServer.name),
             )
         }
 
         isLoading -> Box(modifier = modifier) {
-            LoadingStateCard("Searching ${currentServer.name}")
+            LoadingStateCard(stringResource(R.string.browse_searching_server, currentServer.name))
         }
 
         error != null -> Box(modifier = modifier) {
@@ -513,8 +517,8 @@ private fun SearchResultsPage(
 
         results.artists.isEmpty() && results.albums.isEmpty() && results.songs.isEmpty() -> Box(modifier = modifier) {
             EmptyStateCard(
-                title = "No results",
-                body = "Nothing matched \"$trimmedQuery\" on ${currentServer.name}.",
+                title = stringResource(R.string.browse_no_results),
+                body = stringResource(R.string.browse_no_results_body, trimmedQuery, currentServer.name),
             )
         }
 
@@ -525,8 +529,8 @@ private fun SearchResultsPage(
             if (results.artists.isNotEmpty()) {
                 item {
                     SectionTitle(
-                        title = "Artists",
-                        subtitle = "${results.artists.size} match${if (results.artists.size == 1) "" else "es"}",
+                        title = stringResource(R.string.browse_artists),
+                        subtitle = matchCountText(results.artists.size),
                     )
                 }
                 items(results.artists, key = { it.id }) { artist ->
@@ -537,8 +541,8 @@ private fun SearchResultsPage(
             if (results.albums.isNotEmpty()) {
                 item {
                     SectionTitle(
-                        title = "Albums",
-                        subtitle = "${results.albums.size} match${if (results.albums.size == 1) "" else "es"}",
+                        title = stringResource(R.string.library_albums),
+                        subtitle = matchCountText(results.albums.size),
                     )
                 }
                 items(results.albums, key = { it.id }) { album ->
@@ -549,8 +553,8 @@ private fun SearchResultsPage(
             if (results.songs.isNotEmpty()) {
                 item {
                     SectionTitle(
-                        title = "Songs",
-                        subtitle = "${results.songs.size} match${if (results.songs.size == 1) "" else "es"}",
+                        title = stringResource(R.string.browse_songs),
+                        subtitle = matchCountText(results.songs.size),
                     )
                 }
                 itemsIndexed(results.songs, key = { _, s -> s.id }) { index, song ->
@@ -578,7 +582,7 @@ private fun ArtistsPage(
     onOpenArtist: (String) -> Unit,
 ) {
     if (isLoading && indexes == null) {
-        LoadingStateCard("Loading artists")
+        LoadingStateCard(stringResource(R.string.browse_loading_artists))
         return
     }
     if (error != null && indexes == null) {
@@ -586,7 +590,10 @@ private fun ArtistsPage(
         return
     }
     if (indexes == null) {
-        EmptyStateCard("No artists", "The server did not return artist indexes.")
+        EmptyStateCard(
+            stringResource(R.string.browse_no_artists),
+            stringResource(R.string.browse_no_artists_body),
+        )
         return
     }
 
@@ -633,7 +640,12 @@ private fun ArtistsPage(
             contentPadding = PaddingValues(bottom = 24.dp, end = 24.dp),
         ) {
             if (indexes.shortcuts.isNotEmpty()) {
-                item { SectionTitle("Shortcuts", "Pinned artists") }
+                item {
+                    SectionTitle(
+                        stringResource(R.string.browse_shortcuts),
+                        stringResource(R.string.browse_shortcuts_subtitle),
+                    )
+                }
                 item {
                     LazyRow {
                         items(indexes.shortcuts, key = { it.id }) { artist ->
@@ -643,7 +655,7 @@ private fun ArtistsPage(
                 }
             }
             nonEmptySections.forEach { section ->
-                item { SectionTitle(section.name, "${section.artists.size} ${if (section.artists.size == 1) "artist" else "artists"}") }
+                item { SectionTitle(section.name, artistCountText(section.artists.size)) }
                 items(section.artists, key = { it.id }) { artist ->
                     ArtistRow(artist = artist, onOpenArtist = onOpenArtist)
                 }
@@ -701,7 +713,10 @@ private fun AlbumsPage(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
-            SectionTitle("Albums", "Swipe to another tab or switch feed")
+            SectionTitle(
+                stringResource(R.string.library_albums),
+                stringResource(R.string.browse_albums_subtitle),
+            )
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
             LazyRow(contentPadding = PaddingValues(vertical = 10.dp)) {
@@ -709,7 +724,7 @@ private fun AlbumsPage(
                     FilterChip(
                         selected = selectedFeed == feed,
                         onClick = { onSelectFeed(feed) },
-                        label = { Text(feed.displayLabel) },
+                        label = { Text(feed.localizedLabel()) },
                         modifier = Modifier.padding(end = 8.dp),
                     )
                 }
@@ -717,7 +732,7 @@ private fun AlbumsPage(
         }
         when {
             isLoading && albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
-                LoadingStateCard("Loading albums")
+                LoadingStateCard(stringResource(R.string.browse_loading_albums))
             }
 
             error != null && albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
@@ -725,7 +740,10 @@ private fun AlbumsPage(
             }
 
             albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyStateCard("No albums", "Try another album feed.")
+                EmptyStateCard(
+                    stringResource(R.string.browse_no_albums),
+                    stringResource(R.string.browse_no_albums_body),
+                )
             }
 
             else -> items(albums, key = { it.id }) { album ->
@@ -744,7 +762,7 @@ private fun PlaylistsPage(
     onOpenPlaylist: (String) -> Unit,
 ) {
     if (isLoading && playlists.isEmpty()) {
-        LoadingStateCard("Loading playlists")
+        LoadingStateCard(stringResource(R.string.browse_loading_playlists))
         return
     }
     if (error != null && playlists.isEmpty()) {
@@ -752,14 +770,23 @@ private fun PlaylistsPage(
         return
     }
     if (playlists.isEmpty()) {
-        EmptyStateCard("No playlists", "Create a playlist on your server to see it here.", icon = Icons.AutoMirrored.Rounded.QueueMusic)
+        EmptyStateCard(
+            stringResource(R.string.browse_no_playlists),
+            stringResource(R.string.browse_no_playlists_body),
+            icon = Icons.AutoMirrored.Rounded.QueueMusic,
+        )
         return
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { SectionTitle("Playlists", "Open a full playlist page") }
+        item {
+            SectionTitle(
+                stringResource(R.string.browse_playlists),
+                stringResource(R.string.browse_playlists_subtitle),
+            )
+        }
         items(playlists, key = { it.id }) { playlist ->
             PlaylistCard(playlist = playlist, server = server, onOpenPlaylist = onOpenPlaylist)
         }
@@ -779,7 +806,7 @@ private fun SongsPage(
     onShowSongActions: (Song) -> Unit,
 ) {
     if (isLoading && songs.isEmpty()) {
-        LoadingStateCard("Loading songs")
+        LoadingStateCard(stringResource(R.string.browse_loading_songs))
         return
     }
     if (error != null && songs.isEmpty()) {
@@ -787,14 +814,22 @@ private fun SongsPage(
         return
     }
     if (songs.isEmpty()) {
-        EmptyStateCard("No songs", "The current song feed is empty.")
+        EmptyStateCard(
+            stringResource(R.string.browse_no_songs),
+            stringResource(R.string.browse_no_songs_body),
+        )
         return
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { SectionTitle("Songs", "Artwork, metadata, download state, and more actions") }
+        item {
+            SectionTitle(
+                stringResource(R.string.browse_songs),
+                stringResource(R.string.browse_songs_subtitle),
+            )
+        }
         itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
             SongRow(
                 song = song,
@@ -809,35 +844,35 @@ private fun SongsPage(
     }
 }
 
-private val BrowseSection.label: String
-    get() = when (this) {
-        BrowseSection.ARTISTS -> "Artists"
-        BrowseSection.ALBUMS -> "Albums"
-        BrowseSection.PLAYLISTS -> "Playlists"
-        BrowseSection.SONGS -> "Songs"
-    }
+@Composable
+private fun BrowseSection.localizedLabel(): String = when (this) {
+    BrowseSection.ARTISTS -> stringResource(R.string.browse_artists)
+    BrowseSection.ALBUMS -> stringResource(R.string.library_albums)
+    BrowseSection.PLAYLISTS -> stringResource(R.string.browse_playlists)
+    BrowseSection.SONGS -> stringResource(R.string.browse_songs)
+}
 
-private val BrowseSection.headline: String
-    get() = when (this) {
-        BrowseSection.ARTISTS -> "Browse the library"
-        BrowseSection.ALBUMS -> "Flip through releases"
-        BrowseSection.PLAYLISTS -> "Queue curated mixes"
-        BrowseSection.SONGS -> "Scan every song"
-    }
+@Composable
+private fun AlbumListType.localizedLabel(): String = when (this) {
+    AlbumListType.NEWEST -> stringResource(R.string.album_feed_newest)
+    AlbumListType.RECENT -> stringResource(R.string.album_feed_recent)
+    AlbumListType.RANDOM -> stringResource(R.string.album_feed_random)
+    AlbumListType.HIGHEST -> stringResource(R.string.album_feed_top_rated)
+    AlbumListType.FREQUENT -> stringResource(R.string.album_feed_frequent)
+    AlbumListType.ALPHABETICAL_BY_NAME -> stringResource(R.string.album_feed_a_z)
+    AlbumListType.ALPHABETICAL_BY_ARTIST -> stringResource(R.string.album_feed_by_artist)
+    AlbumListType.STARRED -> stringResource(R.string.album_feed_starred)
+    AlbumListType.BY_YEAR -> stringResource(R.string.album_feed_by_year)
+    AlbumListType.BY_GENRE -> stringResource(R.string.album_feed_by_genre)
+}
 
-private val AlbumListType.displayLabel: String
-    get() = when (this) {
-        AlbumListType.NEWEST -> "Newest"
-        AlbumListType.RECENT -> "Recent"
-        AlbumListType.RANDOM -> "Random"
-        AlbumListType.HIGHEST -> "Top rated"
-        AlbumListType.FREQUENT -> "Frequent"
-        AlbumListType.ALPHABETICAL_BY_NAME -> "A-Z"
-        AlbumListType.ALPHABETICAL_BY_ARTIST -> "By artist"
-        AlbumListType.STARRED -> "Starred"
-        AlbumListType.BY_YEAR -> "By year"
-        AlbumListType.BY_GENRE -> "By genre"
-    }
+@Composable
+private fun artistCountText(count: Int): String =
+    pluralStringResource(R.plurals.browse_artist_count, count, count)
+
+@Composable
+private fun matchCountText(count: Int): String =
+    pluralStringResource(R.plurals.browse_match_count, count, count)
 
 @Composable
 private fun AlphabetScrollBar(

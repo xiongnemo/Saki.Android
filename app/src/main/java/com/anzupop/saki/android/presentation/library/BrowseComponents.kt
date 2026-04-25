@@ -46,8 +46,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.anzupop.saki.android.R
 import com.anzupop.saki.android.domain.model.Album
 import com.anzupop.saki.android.domain.model.AlbumSummary
 import com.anzupop.saki.android.domain.model.Artist
@@ -72,17 +75,28 @@ fun ArtistDetailScreen(
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
+    val albumCount = artist.albumCount
+    val subtitle = if (albumCount != null) {
+        albumCountText(albumCount)
+    } else {
+        stringResource(R.string.library_artist_fallback)
+    }
     LibraryDetailScaffold(
         title = artist.name,
-        subtitle = artist.albumCount?.let { "$it ${if (it == 1) "album" else "albums"}" } ?: "Artist",
+        subtitle = subtitle,
         artwork = null,
     ) {
         when {
-            isLoading && topSongs.isEmpty() -> item { LoadingStateCard("Loading artist") }
+            isLoading && topSongs.isEmpty() -> item { LoadingStateCard(stringResource(R.string.library_loading_artist)) }
             error != null && topSongs.isEmpty() -> item { ErrorStateCard(error) }
             else -> {
                 if (topSongs.isNotEmpty()) {
-                    item { SectionTitle("Popular songs", "Quick picks for ${artist.name}") }
+                    item {
+                        SectionTitle(
+                            stringResource(R.string.library_popular_songs),
+                            stringResource(R.string.library_popular_songs_subtitle, artist.name),
+                        )
+                    }
                     itemsIndexed(topSongs, key = { _, s -> s.id }) { index, song ->
                         SongRow(
                             song = song,
@@ -96,7 +110,12 @@ fun ArtistDetailScreen(
                     }
                 }
                 if (artist.albums.isNotEmpty()) {
-                    item { SectionTitle("Albums", "Tap into the full release page") }
+                    item {
+                        SectionTitle(
+                            stringResource(R.string.library_albums),
+                            stringResource(R.string.library_albums_subtitle_full_release),
+                        )
+                    }
                     item {
                         LazyRow {
                             items(artist.albums, key = { it.id }) { album ->
@@ -122,20 +141,26 @@ fun AlbumDetailScreen(
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
+    val songCount = album.songCount
+    val subtitle = listOfNotNull(
+        album.artist,
+        album.year?.toString(),
+        if (songCount != null) songCountText(songCount) else null,
+    ).joinToString(" • ")
     LibraryDetailScaffold(
         title = album.name,
-        subtitle = listOfNotNull(album.artist, album.year?.toString(), album.songCount?.let { "$it ${if (it == 1) "song" else "songs"}" }).joinToString(" • "),
+        subtitle = subtitle,
         artwork = resolveArtworkModel(server, album.coverArtId, null),
     ) {
         when {
-            isLoading && album.songs.isEmpty() -> item { LoadingStateCard("Loading album") }
+            isLoading && album.songs.isEmpty() -> item { LoadingStateCard(stringResource(R.string.library_loading_album)) }
             error != null && album.songs.isEmpty() -> item { ErrorStateCard(error) }
             else -> {
                 item {
                     SectionTitle(
-                        title = "Track list",
-                        subtitle = album.genre ?: "Album details",
-                        actionLabel = "Play album",
+                        title = stringResource(R.string.library_track_list),
+                        subtitle = album.genre ?: stringResource(R.string.library_album_details),
+                        actionLabel = stringResource(R.string.library_play_album),
                         onAction = { if (album.songs.isNotEmpty()) onPlaySongs(album.songs, 0) },
                     )
                 }
@@ -167,20 +192,25 @@ fun PlaylistDetailScreen(
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
+    val songCount = playlist.songCount
+    val subtitle = listOfNotNull(
+        playlist.owner,
+        if (songCount != null) songCountText(songCount) else null,
+    ).joinToString(" • ")
     LibraryDetailScaffold(
         title = playlist.name,
-        subtitle = listOfNotNull(playlist.owner, playlist.songCount?.let { "$it ${if (it == 1) "song" else "songs"}" }).joinToString(" • "),
+        subtitle = subtitle,
         artwork = resolveArtworkModel(server, playlist.coverArtId, null),
     ) {
         when {
-            isLoading && playlist.songs.isEmpty() -> item { LoadingStateCard("Loading playlist") }
+            isLoading && playlist.songs.isEmpty() -> item { LoadingStateCard(stringResource(R.string.library_loading_playlist)) }
             error != null && playlist.songs.isEmpty() -> item { ErrorStateCard(error) }
             else -> {
                 item {
                     SectionTitle(
-                        title = "Tracks",
-                        subtitle = "Playlist sequence",
-                        actionLabel = "Play playlist",
+                        title = stringResource(R.string.library_tracks),
+                        subtitle = stringResource(R.string.library_playlist_sequence),
+                        actionLabel = stringResource(R.string.library_play_playlist),
                         onAction = { if (playlist.songs.isNotEmpty()) onPlaySongs(playlist.songs, 0) },
                     )
                 }
@@ -246,9 +276,15 @@ private fun LibraryDetailScaffold(
 
 @Composable
 fun ArtistRow(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
+    val albumCount = artist.albumCount
+    val subtitle = if (albumCount != null) {
+        albumCountText(albumCount)
+    } else {
+        stringResource(R.string.library_artist_fallback)
+    }
     RowCard(
         title = artist.name,
-        subtitle = artist.albumCount?.let { "$it ${if (it == 1) "album" else "albums"}" } ?: "Artist",
+        subtitle = subtitle,
         artwork = null,
         onClick = { onOpenArtist(artist.id) },
     )
@@ -256,9 +292,14 @@ fun ArtistRow(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
 
 @Composable
 fun PlaylistCard(playlist: PlaylistSummary, server: ServerConfig, onOpenPlaylist: (String) -> Unit) {
+    val songCount = playlist.songCount
+    val subtitle = listOfNotNull(
+        playlist.owner,
+        if (songCount != null) songCountText(songCount) else null,
+    ).joinToString(" • ")
     RowCard(
         title = playlist.name,
-        subtitle = listOfNotNull(playlist.owner, playlist.songCount?.let { "$it ${if (it == 1) "song" else "songs"}" }).joinToString(" • "),
+        subtitle = subtitle,
         artwork = resolveArtworkModel(server, playlist.coverArtId, null),
         onClick = { onOpenPlaylist(playlist.id) },
     )
@@ -266,9 +307,15 @@ fun PlaylistCard(playlist: PlaylistSummary, server: ServerConfig, onOpenPlaylist
 
 @Composable
 fun AlbumRow(album: AlbumSummary, server: ServerConfig, onOpenAlbum: (String) -> Unit) {
+    val songCount = album.songCount
+    val subtitle = listOfNotNull(
+        album.artist,
+        album.year?.toString(),
+        if (songCount != null) songCountText(songCount) else null,
+    ).joinToString(" • ")
     RowCard(
         title = album.name,
-        subtitle = listOfNotNull(album.artist, album.year?.toString(), album.songCount?.let { "$it ${if (it == 1) "song" else "songs"}" }).joinToString(" • "),
+        subtitle = subtitle,
         artwork = resolveArtworkModel(server, album.coverArtId, null),
         onClick = { onOpenAlbum(album.id) },
     )
@@ -276,6 +323,12 @@ fun AlbumRow(album: AlbumSummary, server: ServerConfig, onOpenAlbum: (String) ->
 
 @Composable
 fun ArtistShortcutCard(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
+    val albumCount = artist.albumCount
+    val subtitle = if (albumCount != null) {
+        releaseCountText(albumCount)
+    } else {
+        stringResource(R.string.library_open_artist)
+    }
     Card(
         modifier = Modifier
             .width(190.dp)
@@ -290,7 +343,7 @@ fun ArtistShortcutCard(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
         ) {
             Text(text = artist.name, style = MaterialTheme.typography.titleLarge)
             Text(
-                text = artist.albumCount?.let { "$it releases" } ?: "Open artist",
+                text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -396,7 +449,7 @@ fun SongRow(
                 when {
                     cachedSong != null || isStreamCached -> Icon(
                         Icons.Rounded.DownloadDone,
-                        contentDescription = "Available offline",
+                        contentDescription = stringResource(R.string.library_available_offline),
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
@@ -407,7 +460,8 @@ fun SongRow(
                     )
                 }
                 Text(
-                    text = listOfNotNull(song.artist, song.album).joinToString(" • ").ifBlank { "Unknown artist • Unknown album" },
+                    text = listOfNotNull(song.artist, song.album).joinToString(" • ")
+                        .ifBlank { stringResource(R.string.library_unknown_artist_album) },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -416,7 +470,7 @@ fun SongRow(
             }
         }
         IconButton(onClick = onMore) {
-            Icon(Icons.Rounded.MoreVert, contentDescription = "More actions")
+            Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.library_more_actions))
         }
     }
 }
@@ -446,16 +500,39 @@ fun SongActionsSheet(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            SheetActionRow(icon = Icons.Rounded.SkipNext, title = "Play next", subtitle = "Insert this after the current song", onClick = onPlayNext)
+            SheetActionRow(
+                icon = Icons.Rounded.SkipNext,
+                title = stringResource(R.string.library_play_next),
+                subtitle = stringResource(R.string.library_play_next_subtitle),
+                onClick = onPlayNext,
+            )
             SheetActionRow(
                 icon = if (isDownloaded) Icons.Rounded.DeleteOutline else Icons.Rounded.CloudDownload,
-                title = if (isDownloaded) "Remove download" else if (isDownloading) "Downloading..." else "Download",
-                subtitle = if (isDownloaded) "Delete the cached copy" else "Save this for offline playback",
+                title = when {
+                    isDownloaded -> stringResource(R.string.settings_remove_download)
+                    isDownloading -> stringResource(R.string.library_downloading)
+                    else -> stringResource(R.string.library_download)
+                },
+                subtitle = if (isDownloaded) {
+                    stringResource(R.string.library_delete_cached_copy)
+                } else {
+                    stringResource(R.string.library_save_offline)
+                },
                 enabled = !isDownloading,
                 onClick = onToggleDownload,
             )
-            SheetActionRow(icon = Icons.AutoMirrored.Rounded.QueueMusic, title = "Add to queue", subtitle = "Append this song to the queue", onClick = onQueueSong)
-            SheetActionRow(icon = Icons.Rounded.Info, title = "Details", subtitle = "Show metadata", onClick = onDetails)
+            SheetActionRow(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                title = stringResource(R.string.library_add_to_queue),
+                subtitle = stringResource(R.string.library_add_to_queue_subtitle),
+                onClick = onQueueSong,
+            )
+            SheetActionRow(
+                icon = Icons.Rounded.Info,
+                title = stringResource(R.string.library_details),
+                subtitle = stringResource(R.string.library_show_metadata),
+                onClick = onDetails,
+            )
             Spacer(modifier = Modifier.height(12.dp))
         }
     }
@@ -467,19 +544,19 @@ fun SongDetailsDialog(song: Song, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text(stringResource(R.string.common_close))
             }
         },
         title = { Text(song.title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DetailLine("Artist", song.artist)
-                DetailLine("Album", song.album)
-                DetailLine("Track", song.track?.toString())
-                DetailLine("Disc", song.discNumber?.toString())
-                DetailLine("Genre", song.genre)
-                DetailLine("Bitrate", song.bitRate?.let { "$it kbps" })
-                DetailLine("Duration", song.durationSeconds?.let(::formatDurationSeconds))
+                DetailLine(stringResource(R.string.detail_artist), song.artist)
+                DetailLine(stringResource(R.string.detail_album), song.album)
+                DetailLine(stringResource(R.string.detail_track), song.track?.toString())
+                DetailLine(stringResource(R.string.detail_disc), song.discNumber?.toString())
+                DetailLine(stringResource(R.string.detail_genre), song.genre)
+                DetailLine(stringResource(R.string.detail_bitrate), song.bitRate?.let { "$it kbps" })
+                DetailLine(stringResource(R.string.detail_duration), song.durationSeconds?.let(::formatDurationSeconds))
             }
         },
     )
@@ -493,14 +570,14 @@ fun NoServerBrowseState(modifier: Modifier, onManageServers: () -> Unit) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
         ) {
             Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(text = "Browse needs a server profile", style = MaterialTheme.typography.displaySmall)
+                Text(text = stringResource(R.string.browse_needs_server), style = MaterialTheme.typography.displaySmall)
                 Text(
-                    text = "Add a Subsonic server first, then swipe through artists, albums, playlists, and songs.",
+                    text = stringResource(R.string.browse_needs_server_body),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onManageServers) { Text("Add server") }
+                    Button(onClick = onManageServers) { Text(stringResource(R.string.browse_add_server)) }
                 }
             }
         }
@@ -624,8 +701,28 @@ private fun SheetActionRow(
 
 @Composable
 private fun DetailLine(label: String, value: String?) {
-    Text(text = "$label: ${value.orEmpty().ifBlank { "Unknown" }}", style = MaterialTheme.typography.bodyLarge)
+    val unknown = stringResource(R.string.detail_unknown)
+    Text(
+        text = stringResource(
+            R.string.detail_line_format,
+            label,
+            value.orEmpty().ifBlank { unknown },
+        ),
+        style = MaterialTheme.typography.bodyLarge,
+    )
 }
+
+@Composable
+private fun albumCountText(count: Int): String =
+    pluralStringResource(R.plurals.library_album_count, count, count)
+
+@Composable
+private fun songCountText(count: Int): String =
+    pluralStringResource(R.plurals.library_song_count, count, count)
+
+@Composable
+private fun releaseCountText(count: Int): String =
+    pluralStringResource(R.plurals.library_release_count, count, count)
 
 private fun formatDurationSeconds(durationSeconds: Int): String {
     val minutes = durationSeconds / 60

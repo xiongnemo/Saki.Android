@@ -104,11 +104,13 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
+import com.anzupop.saki.android.R
 import com.anzupop.saki.android.presentation.EndpointProbeInfo
 import com.anzupop.saki.android.domain.model.PlaybackQueueItem
 import com.anzupop.saki.android.domain.model.PlaybackSessionState
@@ -180,14 +182,14 @@ fun NowPlayingCapsule(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = track?.title ?: "Nothing playing",
+                    text = track?.title ?: stringResource(R.string.player_nothing_playing),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = track?.let { listOfNotNull(it.artist, it.album).joinToString(" • ") }
-                        ?: "Start playback from Browse",
+                        ?: stringResource(R.string.player_start_from_browse),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -444,7 +446,7 @@ fun NowPlayingOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Now Playing",
+                            text = stringResource(R.string.player_now_playing),
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onBackground,
                         )
@@ -454,9 +456,9 @@ fun NowPlayingOverlay(
                         ) {
                             Text(
                                 text = when {
-                                    track.isCached -> "Offline"
-                                    playbackState.isStreamCached -> "Cached"
-                                    else -> "Streaming"
+                                    track.isCached -> stringResource(R.string.player_offline)
+                                    playbackState.isStreamCached -> stringResource(R.string.player_cached)
+                                    else -> stringResource(R.string.player_streaming)
                                 } + " • ${track.qualityLabel}",
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                 style = MaterialTheme.typography.labelLarge,
@@ -527,7 +529,7 @@ fun NowPlayingOverlay(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Close lyrics",
+                                        contentDescription = stringResource(R.string.player_close_lyrics),
                                         tint = Color.White.copy(alpha = 0.7f),
                                     )
                                 }
@@ -626,7 +628,12 @@ fun NowPlayingOverlay(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        PlayerActionButton(Icons.Rounded.SkipPrevious, "Previous", onSkipToPrevious, compactControls)
+                        PlayerActionButton(
+                            Icons.Rounded.SkipPrevious,
+                            stringResource(R.string.player_previous),
+                            onSkipToPrevious,
+                            compactControls,
+                        )
                         Spacer(Modifier.width(14.dp))
                         Surface(
                             modifier = Modifier.size(
@@ -650,7 +657,11 @@ fun NowPlayingOverlay(
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
                                 Text(
-                                    text = if (playbackState.isPlaying) "Pause" else "Play",
+                                    text = if (playbackState.isPlaying) {
+                                        stringResource(R.string.player_pause)
+                                    } else {
+                                        stringResource(R.string.player_play)
+                                    },
                                     modifier = Modifier.padding(start = 10.dp),
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -658,7 +669,12 @@ fun NowPlayingOverlay(
                             }
                         }
                         Spacer(Modifier.width(14.dp))
-                        PlayerActionButton(Icons.Rounded.SkipNext, "Next", onSkipToNext, compactControls)
+                        PlayerActionButton(
+                            Icons.Rounded.SkipNext,
+                            stringResource(R.string.player_next),
+                            onSkipToNext,
+                            compactControls,
+                        )
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -666,16 +682,23 @@ fun NowPlayingOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         val toastContext = LocalContext.current
+                        val repeatDescription = stringResource(R.string.player_repeat)
+                        val repeatOneLabel = stringResource(R.string.player_repeat_one)
+                        val repeatAllLabel = stringResource(R.string.player_repeat_all)
+                        val repeatOffLabel = stringResource(R.string.player_repeat_off)
+                        val shuffleDescription = stringResource(R.string.player_shuffle)
+                        val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
+                        val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
                         ToggleIconButton(
                             icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                             active = playbackState.repeatMode != RepeatModeSetting.OFF,
-                            contentDescription = "Repeat",
+                            contentDescription = repeatDescription,
                             onClick = {
                                 onCycleRepeatMode()
                                 val label = when (playbackState.repeatMode) {
-                                    RepeatModeSetting.OFF -> "Repeat one"
-                                    RepeatModeSetting.ONE -> "Repeat all"
-                                    RepeatModeSetting.ALL -> "Repeat off"
+                                    RepeatModeSetting.OFF -> repeatOneLabel
+                                    RepeatModeSetting.ONE -> repeatAllLabel
+                                    RepeatModeSetting.ALL -> repeatOffLabel
                                 }
                                 android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
                             },
@@ -683,10 +706,10 @@ fun NowPlayingOverlay(
                         ToggleIconButton(
                             icon = Icons.Rounded.Shuffle,
                             active = playbackState.shuffleEnabled,
-                            contentDescription = "Shuffle",
+                            contentDescription = shuffleDescription,
                             onClick = {
                                 onToggleShuffle()
-                                val label = if (!playbackState.shuffleEnabled) "Shuffle on" else "Shuffle off"
+                                val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
                                 android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
                             },
                         )
@@ -694,22 +717,22 @@ fun NowPlayingOverlay(
                             ToggleIconButton(
                                 icon = Icons.Rounded.KeyboardArrowUp,
                                 active = false,
-                                contentDescription = "Show queue",
+                                contentDescription = stringResource(R.string.player_show_queue),
                                 onClick = { showQueueSheet = true },
                             )
                         }
                         Box {
-                            PlayerActionButton(Icons.Rounded.MoreVert, "More", { showMenu = true }, compactControls)
+                            PlayerActionButton(Icons.Rounded.MoreVert, stringResource(R.string.player_more), { showMenu = true }, compactControls)
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                 DropdownMenuItem(
-                                    text = { Text("Song details") },
+                                    text = { Text(stringResource(R.string.player_song_details)) },
                                     onClick = {
                                         showMenu = false
                                         showDetails = true
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text(activeEndpointLabel ?: "No endpoint") },
+                                    text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
                                     onClick = {
                                         showMenu = false
                                         showEndpointStatus = true
@@ -730,7 +753,7 @@ fun NowPlayingOverlay(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ) {
                     Text(
-                        text = "Queue",
+                        text = stringResource(R.string.player_queue),
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
@@ -763,7 +786,7 @@ fun NowPlayingOverlay(
             onDismissRequest = { showDetails = false },
             confirmButton = {
                 TextButton(onClick = { showDetails = false }) {
-                    Text("Close")
+                    Text(stringResource(R.string.common_close))
                 }
             },
             title = { Text(track.title) },
@@ -772,21 +795,30 @@ fun NowPlayingOverlay(
                     modifier = Modifier.heightIn(max = 320.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    item { DetailLine("Artist", track.artist) }
-                    item { DetailLine("Album", track.album) }
-                    item { DetailLine("Quality", track.qualityLabel) }
-                    item { DetailLine("Server", currentServer?.name) }
-                    item { DetailLine("Mode", if (track.isCached) "Offline" else "Streaming") }
-                    item { DetailLine("MIME type", playbackState.runtimeInfo?.sampleMimeType) }
-                    item { DetailLine("Container", playbackState.runtimeInfo?.containerMimeType) }
-                    item { DetailLine("Codec", playbackState.runtimeInfo?.codecs) }
-                    item { DetailLine("Average bitrate", playbackState.runtimeInfo?.averageBitrate?.let(::formatBitrate)) }
-                    item { DetailLine("Peak bitrate", playbackState.runtimeInfo?.peakBitrate?.let(::formatBitrate)) }
-                    item { DetailLine("Sample rate", playbackState.runtimeInfo?.sampleRate?.let(::formatSampleRate)) }
-                    item { DetailLine("Channels", playbackState.runtimeInfo?.channelCount?.toString()) }
-                    item { DetailLine("Language", playbackState.runtimeInfo?.language) }
-                    item { DetailLine("Cover art ID", track.coverArtId) }
-                    item { DetailLine("Local file", track.localPath) }
+                    item { DetailLine(stringResource(R.string.detail_artist), track.artist) }
+                    item { DetailLine(stringResource(R.string.detail_album), track.album) }
+                    item { DetailLine(stringResource(R.string.detail_quality), track.qualityLabel) }
+                    item { DetailLine(stringResource(R.string.detail_server), currentServer?.name) }
+                    item {
+                        DetailLine(
+                            stringResource(R.string.detail_mode),
+                            if (track.isCached) {
+                                stringResource(R.string.player_offline)
+                            } else {
+                                stringResource(R.string.player_streaming)
+                            },
+                        )
+                    }
+                    item { DetailLine(stringResource(R.string.detail_mime_type), playbackState.runtimeInfo?.sampleMimeType) }
+                    item { DetailLine(stringResource(R.string.detail_container), playbackState.runtimeInfo?.containerMimeType) }
+                    item { DetailLine(stringResource(R.string.detail_codec), playbackState.runtimeInfo?.codecs) }
+                    item { DetailLine(stringResource(R.string.detail_average_bitrate), playbackState.runtimeInfo?.averageBitrate?.let(::formatBitrate)) }
+                    item { DetailLine(stringResource(R.string.detail_peak_bitrate), playbackState.runtimeInfo?.peakBitrate?.let(::formatBitrate)) }
+                    item { DetailLine(stringResource(R.string.detail_sample_rate), playbackState.runtimeInfo?.sampleRate?.let(::formatSampleRate)) }
+                    item { DetailLine(stringResource(R.string.detail_channels), playbackState.runtimeInfo?.channelCount?.toString()) }
+                    item { DetailLine(stringResource(R.string.detail_language), playbackState.runtimeInfo?.language) }
+                    item { DetailLine(stringResource(R.string.detail_cover_art_id), track.coverArtId) }
+                    item { DetailLine(stringResource(R.string.detail_local_file), track.localPath) }
                 }
             },
         )
@@ -797,14 +829,14 @@ fun NowPlayingOverlay(
             onDismissRequest = { showEndpointStatus = false },
             confirmButton = {
                 TextButton(onClick = { showEndpointStatus = false }) {
-                    Text("Close")
+                    Text(stringResource(R.string.common_close))
                 }
             },
-            title = { Text("Endpoint Status") },
+            title = { Text(stringResource(R.string.player_endpoint_status)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (endpointProbeResults.isEmpty()) {
-                        Text("No probe results yet.", style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.player_no_probe_results), style = MaterialTheme.typography.bodyMedium)
                     } else {
                         endpointProbeResults.forEach { result ->
                             val isActive = result.id == activeEndpointId
@@ -850,7 +882,11 @@ fun NowPlayingOverlay(
                                         )
                                     }
                                     Text(
-                                        text = if (result.reachable) "${result.latencyMs} ms" else "Unreachable",
+                                        text = if (result.reachable) {
+                                            stringResource(R.string.server_config_latency_ms, result.latencyMs ?: 0)
+                                        } else {
+                                            stringResource(R.string.player_unreachable)
+                                        },
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = if (result.reachable) {
                                             MaterialTheme.colorScheme.onSurface
@@ -867,7 +903,13 @@ fun NowPlayingOverlay(
                         enabled = !isProbing,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (isProbing) "Probing…" else "Re-test endpoints")
+                        Text(
+                            if (isProbing) {
+                                stringResource(R.string.player_probing)
+                            } else {
+                                stringResource(R.string.player_retest_endpoints)
+                            },
+                        )
                     }
                 }
             },
@@ -902,6 +944,8 @@ private fun ToggleIconButton(
     contentDescription: String,
     onClick: () -> Unit,
 ) {
+    val onText = stringResource(R.string.common_on)
+    val offText = stringResource(R.string.common_off)
     Surface(
         shape = MaterialTheme.shapes.large,
         color = if (active) MaterialTheme.colorScheme.primaryContainer
@@ -911,7 +955,7 @@ private fun ToggleIconButton(
             onClick = onClick,
             modifier = Modifier.semantics {
                 role = Role.Switch
-                stateDescription = if (active) "$contentDescription: On" else "$contentDescription: Off"
+                stateDescription = "$contentDescription: ${if (active) onText else offText}"
             },
         ) {
             Icon(
@@ -1032,7 +1076,7 @@ private fun QueueRow(
             }
             if (!isCurrent) {
                 TextButton(onClick = onRemove) {
-                    Text("Remove")
+                    Text(stringResource(R.string.common_remove))
                 }
             }
         }
@@ -1041,8 +1085,13 @@ private fun QueueRow(
 
 @Composable
 private fun DetailLine(label: String, value: String?) {
+    val unknown = stringResource(R.string.detail_unknown)
     Text(
-        text = "$label: ${value.orEmpty().ifBlank { "Unknown" }}",
+        text = stringResource(
+            R.string.detail_line_format,
+            label,
+            value.orEmpty().ifBlank { unknown },
+        ),
         style = MaterialTheme.typography.bodyLarge,
     )
 }
