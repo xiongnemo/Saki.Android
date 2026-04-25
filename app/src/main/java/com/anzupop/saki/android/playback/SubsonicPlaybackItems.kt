@@ -33,6 +33,8 @@ private const val EXTRA_MAX_BIT_RATE = "saki.playback.max_bit_rate"
 private const val EXTRA_FORMAT = "saki.playback.format"
 private const val EXTRA_STREAM_URLS = "saki.playback.stream_urls"
 private const val EXTRA_STREAM_INDEX = "saki.playback.stream_index"
+private const val EXTRA_SUFFIX = "saki.playback.suffix"
+private const val EXTRA_BIT_RATE = "saki.playback.bit_rate"
 
 internal data class PlaybackRequest(
     val serverId: Long,
@@ -55,6 +57,8 @@ internal data class PlaybackRequest(
     val isCached: Boolean,
     val maxBitRate: Int?,
     val format: String?,
+    val suffix: String?,
+    val bitRate: Int?,
 )
 
 internal fun Song.toPlaybackRequestMediaItem(
@@ -86,6 +90,8 @@ internal fun Song.toPlaybackRequestMediaItem(
         isCached = false,
         maxBitRate = maxBitRate,
         format = format,
+        suffix = suffix,
+        bitRate = bitRate,
     )
 
     return MediaItem.Builder()
@@ -122,6 +128,8 @@ internal fun CachedSong.toCachedMediaItem(): MediaItem {
         isCached = true,
         maxBitRate = null,
         format = null,
+        suffix = suffix,
+        bitRate = null,
     )
 
     return MediaItem.Builder()
@@ -169,6 +177,8 @@ internal fun MediaItem.toPlaybackRequestOrNull(): PlaybackRequest? {
         isCached = extras.getBoolean(EXTRA_IS_CACHED, false),
         maxBitRate = extras.getInt(EXTRA_MAX_BIT_RATE).takeIf { extras.containsKey(EXTRA_MAX_BIT_RATE) },
         format = extras.getString(EXTRA_FORMAT),
+        suffix = extras.getString(EXTRA_SUFFIX),
+        bitRate = extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
     )
 }
 
@@ -196,6 +206,9 @@ internal fun MediaItem.toQueueItemOrNull(): PlaybackQueueItem? {
         localPath = extras.getString(EXTRA_LOCAL_PATH),
         qualityLabel = extras.getString(EXTRA_QUALITY_LABEL).orEmpty().ifBlank { "Original" },
         isCached = extras.getBoolean(EXTRA_IS_CACHED, false),
+        suffix = extras.getString(EXTRA_SUFFIX),
+        bitRateKbps = extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
+        contentType = extras.getString(EXTRA_MIME_TYPE),
     )
 }
 
@@ -280,6 +293,8 @@ internal fun PlaybackRequest.toBundle(): Bundle {
         putBoolean(EXTRA_IS_CACHED, isCached)
         maxBitRate?.let { putInt(EXTRA_MAX_BIT_RATE, it) }
         putString(EXTRA_FORMAT, format)
+        putString(EXTRA_SUFFIX, suffix)
+        bitRate?.let { putInt(EXTRA_BIT_RATE, it) }
     }
 }
 
