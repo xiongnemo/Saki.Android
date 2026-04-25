@@ -207,7 +207,7 @@ internal fun MediaItem.toQueueItemOrNull(): PlaybackQueueItem? {
         qualityLabel = extras.getString(EXTRA_QUALITY_LABEL).orEmpty().ifBlank { "Original" },
         isCached = extras.getBoolean(EXTRA_IS_CACHED, false),
         suffix = extras.getString(EXTRA_SUFFIX),
-        bitRate = extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
+        bitRateKbps = extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
         contentType = extras.getString(EXTRA_MIME_TYPE),
     )
 }

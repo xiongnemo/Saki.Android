@@ -224,7 +224,7 @@ data class PlaybackQueueItem(
     val qualityLabel: String,
     val isCached: Boolean,
     val suffix: String? = null,
-    val bitRate: Int? = null,
+    val bitRateKbps: Int? = null,
     val contentType: String? = null,
 )
 
