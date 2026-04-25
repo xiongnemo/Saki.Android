@@ -58,11 +58,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.anzupop.saki.android.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.anzupop.saki.android.domain.model.ServerConfig
@@ -163,7 +166,7 @@ fun ServerConfigScreen(
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                 ) {
                     Text(
-                        text = "Add server",
+                        text = stringResource(R.string.server_config_add_server),
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
@@ -296,11 +299,11 @@ private fun HeroSection(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                text = "Server Profiles",
+                text = stringResource(R.string.server_config_title),
                 style = MaterialTheme.typography.displayMedium,
             )
             Text(
-                text = "Store one Subsonic server with multiple endpoints so local LAN and remote WAN addresses live under the same profile.",
+                text = stringResource(R.string.server_config_body),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -309,7 +312,15 @@ private fun HeroSection(
                 color = MaterialTheme.colorScheme.secondaryContainer,
             ) {
                 Text(
-                    text = if (serverCount == 0) "No saved servers yet" else "$serverCount server profile${if (serverCount == 1) "" else "s"} ready",
+                    text = if (serverCount == 0) {
+                        stringResource(R.string.server_config_no_saved_servers)
+                    } else {
+                        pluralStringResource(
+                            R.plurals.server_config_server_profile_count_ready,
+                            serverCount,
+                            serverCount,
+                        )
+                    },
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -335,16 +346,16 @@ private fun EmptyStateCard(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "Start with one server profile",
+                text = stringResource(R.string.server_config_start_title),
                 style = MaterialTheme.typography.headlineMedium,
             )
             Text(
-                text = "Each profile can carry multiple endpoints — save your local and remote addresses together now.",
+                text = stringResource(R.string.server_config_start_body),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(onClick = onAddServer) {
-                Text("Create server")
+                Text(stringResource(R.string.server_config_create_server))
             }
         }
     }
@@ -382,7 +393,9 @@ private fun ServerCard(
                         style = MaterialTheme.typography.headlineMedium,
                     )
                     Text(
-                        text = "${server.username}  •  ${server.clientName}  •  API ${server.apiVersion}",
+                        text = "${server.username}  •  ${server.clientName}  •  ${
+                            stringResource(R.string.server_config_api_version, server.apiVersion)
+                        }",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -393,7 +406,11 @@ private fun ServerCard(
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                 ) {
                     Text(
-                        text = "${server.endpoints.size} endpoint${if (server.endpoints.size == 1) "" else "s"}",
+                        text = pluralStringResource(
+                            R.plurals.server_config_endpoint_count,
+                            server.endpoints.size,
+                            server.endpoints.size,
+                        ),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -417,10 +434,10 @@ private fun ServerCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Button(onClick = onEditServer) {
-                    Text("Manage")
+                    Text(stringResource(R.string.server_config_manage))
                 }
                 TextButton(onClick = onDeleteServer) {
-                    Text("Delete")
+                    Text(stringResource(R.string.server_config_delete))
                 }
             }
         }
@@ -487,17 +504,21 @@ private fun ServerEditorSheet(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = if (editor.serverId == 0L) "New server" else "Edit server",
+                        text = if (editor.serverId == 0L) {
+                            stringResource(R.string.server_config_new_server)
+                        } else {
+                            stringResource(R.string.server_config_edit_server)
+                        },
                         style = MaterialTheme.typography.headlineMedium,
                     )
                     Text(
-                        text = "Define credentials once and attach as many endpoints as you need.",
+                        text = stringResource(R.string.server_config_editor_body),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 TextButton(onClick = onDismissEditor) {
-                    Text("Close")
+                    Text(stringResource(R.string.server_config_close))
                 }
             }
 
@@ -519,8 +540,8 @@ private fun ServerEditorSheet(
                 value = editor.name,
                 onValueChange = onNameChanged,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Profile name") },
-                placeholder = { Text("Home library") },
+                label = { Text(stringResource(R.string.server_config_profile_name)) },
+                placeholder = { Text(stringResource(R.string.server_config_profile_name_placeholder)) },
                 singleLine = true,
             )
 
@@ -532,14 +553,14 @@ private fun ServerEditorSheet(
                     value = editor.username,
                     onValueChange = onUsernameChanged,
                     modifier = Modifier.weight(1f),
-                    label = { Text("Username") },
+                    label = { Text(stringResource(R.string.server_config_username)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = editor.password,
                     onValueChange = onPasswordChanged,
                     modifier = Modifier.weight(1f),
-                    label = { Text("Password") },
+                    label = { Text(stringResource(R.string.server_config_password)) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
@@ -553,25 +574,25 @@ private fun ServerEditorSheet(
                     value = editor.clientName,
                     onValueChange = onClientNameChanged,
                     modifier = Modifier.weight(1f),
-                    label = { Text("Client name") },
+                    label = { Text(stringResource(R.string.server_config_client_name)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = editor.apiVersion,
                     onValueChange = onApiVersionChanged,
                     modifier = Modifier.weight(1f),
-                    label = { Text("API version") },
+                    label = { Text(stringResource(R.string.server_config_api_version_label)) },
                     singleLine = true,
                 )
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Endpoints",
+                    text = stringResource(R.string.server_config_endpoints_title),
                     style = MaterialTheme.typography.headlineMedium,
                 )
                 Text(
-                    text = "Mark one endpoint as primary. Use the test action to confirm the draft credentials work before saving.",
+                    text = stringResource(R.string.server_config_endpoints_body),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -590,7 +611,7 @@ private fun ServerEditorSheet(
             }
 
             TextButton(onClick = onAddEndpoint) {
-                Text("Add another endpoint")
+                Text(stringResource(R.string.server_config_add_endpoint))
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -612,13 +633,19 @@ private fun ServerEditorSheet(
                         )
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(if (editor.serverId == 0L) "Save server" else "Save changes")
+                    Text(
+                        if (editor.serverId == 0L) {
+                            stringResource(R.string.server_config_save_server)
+                        } else {
+                            stringResource(R.string.server_config_save_changes)
+                        },
+                    )
                 }
                 TextButton(
                     onClick = onDismissEditor,
                     enabled = !isSaving,
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.server_config_cancel))
                 }
             }
         }
@@ -653,7 +680,7 @@ private fun EndpointEditorCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Endpoint ${index + 1}",
+                    text = stringResource(R.string.server_config_endpoint_number, index + 1),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -663,8 +690,8 @@ private fun EndpointEditorCard(
                 value = endpoint.label,
                 onValueChange = onLabelChanged,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Label") },
-                placeholder = { Text("LAN") },
+                label = { Text(stringResource(R.string.server_config_endpoint_label)) },
+                placeholder = { Text(stringResource(R.string.server_config_endpoint_label_placeholder)) },
                 singleLine = true,
             )
 
@@ -672,8 +699,8 @@ private fun EndpointEditorCard(
                 value = endpoint.baseUrl,
                 onValueChange = onUrlChanged,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Base URL") },
-                placeholder = { Text("https://music.example.com") },
+                label = { Text(stringResource(R.string.server_config_base_url)) },
+                placeholder = { Text(stringResource(R.string.server_config_base_url_placeholder)) },
                 singleLine = true,
             )
 
@@ -696,15 +723,15 @@ private fun EndpointEditorCard(
                             strokeWidth = 2.dp,
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("Testing")
+                        Text(stringResource(R.string.server_config_testing))
                     } else {
-                        Text("Test")
+                        Text(stringResource(R.string.server_config_test))
                     }
                 }
 
                 if (canRemove) {
                     TextButton(onClick = onRemove) {
-                        Text("Remove")
+                        Text(stringResource(R.string.server_config_remove))
                     }
                 }
             }
@@ -723,7 +750,7 @@ private fun ConnectionStateBanner(
                 color = MaterialTheme.colorScheme.surface,
             ) {
                 Text(
-                    text = "No test run yet.",
+                    text = stringResource(R.string.server_config_no_test_run),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -747,7 +774,7 @@ private fun ConnectionStateBanner(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Contacting the endpoint...",
+                        text = stringResource(R.string.server_config_contacting_endpoint),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                     )
@@ -756,18 +783,23 @@ private fun ConnectionStateBanner(
         }
 
         is EndpointConnectionState.Success -> {
+            val serverVersion = testState.serverVersion
+            val serverApiText = if (!serverVersion.isNullOrBlank()) {
+                stringResource(R.string.server_config_server_api_version, serverVersion)
+            } else {
+                null
+            }
+            val successText = listOfNotNull(
+                stringResource(R.string.server_config_connection_successful),
+                serverApiText,
+                stringResource(R.string.server_config_latency_ms, testState.latencyMs),
+            ).joinToString(" ")
             Surface(
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.secondaryContainer,
             ) {
                 Text(
-                    text = buildString {
-                        append("Connection successful.")
-                        if (!testState.serverVersion.isNullOrBlank()) {
-                            append(" Server API ${testState.serverVersion}.")
-                        }
-                        append(" ${testState.latencyMs} ms.")
-                    },
+                    text = successText,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,

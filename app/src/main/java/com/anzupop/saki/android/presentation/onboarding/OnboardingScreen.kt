@@ -39,7 +39,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.anzupop.saki.android.R
 
 @Composable
 fun OnboardingScreen(
@@ -83,37 +85,37 @@ fun OnboardingScreen(
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 Text(
-                    text = "Saki.Android",
+                    text = stringResource(R.string.app_name),
                     style = MaterialTheme.typography.displayLarge,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
-                    text = "A Subsonic client built around expressive shapes, resilient streaming, and offline playback.",
+                    text = stringResource(R.string.onboarding_tagline),
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 FeatureCard(
                     icon = Icons.Rounded.WifiTethering,
-                    title = "One server, multiple endpoints",
-                    body = "Keep LAN and WAN URLs under one profile and let the client fail over when the network path changes.",
+                    title = stringResource(R.string.onboarding_feature_endpoints_title),
+                    body = stringResource(R.string.onboarding_feature_endpoints_body),
                 )
                 FeatureCard(
                     icon = Icons.Rounded.CloudDownload,
-                    title = "Offline-first listening",
-                    body = "Cache tracks for offline playback and keep a visible downloaded state throughout the library.",
+                    title = stringResource(R.string.onboarding_feature_offline_title),
+                    body = stringResource(R.string.onboarding_feature_offline_body),
                 )
                 FeatureCard(
                     icon = Icons.Rounded.LibraryMusic,
-                    title = "Focused playback",
-                    body = "Browse artists, albums, playlists, and songs with a persistent player and a dedicated now-playing view.",
+                    title = stringResource(R.string.onboarding_feature_playback_title),
+                    body = stringResource(R.string.onboarding_feature_playback_body),
                 )
 
                 Button(
                     onClick = onSetUpNow,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Set up my library")
+                    Text(stringResource(R.string.onboarding_set_up_library))
                 }
                 val importLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument(),
@@ -123,13 +125,13 @@ fun OnboardingScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Rounded.Upload, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("Import backup")
+                    Text(stringResource(R.string.onboarding_import_backup))
                 }
                 TextButton(
                     onClick = onContinue,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Continue without setup")
+                    Text(stringResource(R.string.onboarding_continue_without_setup))
                 }
             }
         }
