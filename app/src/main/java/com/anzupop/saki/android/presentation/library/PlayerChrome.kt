@@ -883,7 +883,7 @@ fun NowPlayingOverlay(
                                     }
                                     Text(
                                         text = if (result.reachable) {
-                                            stringResource(R.string.server_config_latency_ms, result.latencyMs).trimEnd('.')
+                                            stringResource(R.string.server_config_latency_ms, result.latencyMs ?: 0)
                                         } else {
                                             stringResource(R.string.player_unreachable)
                                         },

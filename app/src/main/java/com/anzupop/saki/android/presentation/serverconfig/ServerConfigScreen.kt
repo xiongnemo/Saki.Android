@@ -795,7 +795,7 @@ private fun ConnectionStateBanner(
             val successText = listOfNotNull(
                 stringResource(R.string.server_config_connection_successful),
                 serverApiText,
-                stringResource(R.string.server_config_latency_ms, testState.latencyMs),
+                stringResource(R.string.server_config_latency_ms_sentence, testState.latencyMs),
             ).joinToString(" ")
             Surface(
                 shape = MaterialTheme.shapes.medium,

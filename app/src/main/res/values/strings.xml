@@ -118,7 +118,8 @@
     <string name="server_config_contacting_endpoint">Contacting the endpoint...</string>
     <string name="server_config_connection_successful">Connection successful.</string>
     <string name="server_config_server_api_version">Server API %1$s.</string>
-    <string name="server_config_latency_ms">%1$d ms.</string>
+    <string name="server_config_latency_ms">%1$d ms</string>
+    <string name="server_config_latency_ms_sentence">%1$d ms.</string>
 
     <string name="library_artist_fallback">Artist</string>
     <string name="library_loading_artist">Loading artist</string>

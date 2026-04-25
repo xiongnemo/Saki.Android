@@ -2,7 +2,6 @@ package com.anzupop.saki.android.presentation.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,6 +69,7 @@ import com.anzupop.saki.android.domain.model.STREAM_CACHE_SIZE_STEP_MB
 import com.anzupop.saki.android.domain.model.StreamQuality
 import com.anzupop.saki.android.domain.model.TextScale
 import com.anzupop.saki.android.presentation.SakiAppUiState
+import com.anzupop.saki.android.presentation.labelRes
 import com.anzupop.saki.android.presentation.library.ArtworkCard
 import com.anzupop.saki.android.presentation.library.resolveArtworkModel
 import com.anzupop.saki.android.presentation.rememberBrowseBackgroundBrush
@@ -792,49 +792,14 @@ private fun CachedSongRow(
 @Composable
 private fun StreamQuality.localizedLabel(): String = stringResource(labelRes())
 
-@StringRes
-private fun StreamQuality.labelRes(): Int = when (this) {
-    StreamQuality.ORIGINAL -> R.string.stream_quality_original
-    StreamQuality.KBPS_320 -> R.string.stream_quality_320_kbps
-    StreamQuality.KBPS_256 -> R.string.stream_quality_256_kbps
-    StreamQuality.KBPS_192 -> R.string.stream_quality_192_kbps
-    StreamQuality.KBPS_160 -> R.string.stream_quality_160_kbps
-    StreamQuality.KBPS_128 -> R.string.stream_quality_128_kbps
-    StreamQuality.KBPS_96 -> R.string.stream_quality_96_kbps
-}
-
 @Composable
 private fun SoundBalancingMode.localizedLabel(): String = stringResource(labelRes())
-
-@StringRes
-private fun SoundBalancingMode.labelRes(): Int = when (this) {
-    SoundBalancingMode.OFF -> R.string.sound_balancing_off
-    SoundBalancingMode.LOW -> R.string.sound_balancing_low
-    SoundBalancingMode.MEDIUM -> R.string.sound_balancing_medium
-    SoundBalancingMode.HIGH -> R.string.sound_balancing_high
-}
 
 @Composable
 private fun BufferStrategy.localizedLabel(): String = stringResource(labelRes())
 
-@StringRes
-private fun BufferStrategy.labelRes(): Int = when (this) {
-    BufferStrategy.NORMAL -> R.string.buffer_strategy_normal
-    BufferStrategy.AGGRESSIVE -> R.string.buffer_strategy_aggressive
-    BufferStrategy.CUSTOM -> R.string.buffer_strategy_custom
-}
-
 @Composable
 private fun TextScale.localizedLabel(): String = stringResource(labelRes())
-
-@StringRes
-private fun TextScale.labelRes(): Int = when (this) {
-    TextScale.EXTRA_SMALL -> R.string.text_scale_extra_small
-    TextScale.SMALL -> R.string.text_scale_small
-    TextScale.DEFAULT -> R.string.text_scale_default
-    TextScale.LARGE -> R.string.text_scale_large
-    TextScale.EXTRA_LARGE -> R.string.text_scale_extra_large
-}
 
 private fun formatStorageSize(bytes: Long): String {
     if (bytes <= 0L) return "0 B"
