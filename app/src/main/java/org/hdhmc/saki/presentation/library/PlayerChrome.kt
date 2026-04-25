@@ -106,6 +106,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -536,6 +537,66 @@ fun NowPlayingOverlay(
                             }
                         }
                     }
+                    // Repeat / Shuffle / More row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val toastContext = LocalContext.current
+                        val repeatDescription = stringResource(R.string.player_repeat)
+                        val repeatOneLabel = stringResource(R.string.player_repeat_one)
+                        val repeatAllLabel = stringResource(R.string.player_repeat_all)
+                        val repeatOffLabel = stringResource(R.string.player_repeat_off)
+                        val shuffleDescription = stringResource(R.string.player_shuffle)
+                        val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
+                        val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
+                        Row {
+                            ToggleIconButton(
+                                icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                                active = playbackState.repeatMode != RepeatModeSetting.OFF,
+                                contentDescription = repeatDescription,
+                                onClick = {
+                                    onCycleRepeatMode()
+                                    val label = when (playbackState.repeatMode) {
+                                        RepeatModeSetting.OFF -> repeatOneLabel
+                                        RepeatModeSetting.ONE -> repeatAllLabel
+                                        RepeatModeSetting.ALL -> repeatOffLabel
+                                    }
+                                    android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                            )
+                            ToggleIconButton(
+                                icon = Icons.Rounded.Shuffle,
+                                active = playbackState.shuffleEnabled,
+                                contentDescription = shuffleDescription,
+                                onClick = {
+                                    onToggleShuffle()
+                                    val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
+                                    android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                            )
+                        }
+                        Box {
+                            PlayerActionButton(Icons.Rounded.MoreVert, stringResource(R.string.player_more), { showMenu = true }, compactControls)
+                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.player_song_details)) },
+                                    onClick = {
+                                        showMenu = false
+                                        showDetails = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
+                                    onClick = {
+                                        showMenu = false
+                                        showEndpointStatus = true
+                                    },
+                                )
+                            }
+                        }
+                    }
                     Text(
                         text = track.title,
                         style = titleStyle,
@@ -676,69 +737,32 @@ fun NowPlayingOverlay(
                             compactControls,
                         )
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val toastContext = LocalContext.current
-                        val repeatDescription = stringResource(R.string.player_repeat)
-                        val repeatOneLabel = stringResource(R.string.player_repeat_one)
-                        val repeatAllLabel = stringResource(R.string.player_repeat_all)
-                        val repeatOffLabel = stringResource(R.string.player_repeat_off)
-                        val shuffleDescription = stringResource(R.string.player_shuffle)
-                        val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
-                        val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
-                        ToggleIconButton(
-                            icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                            active = playbackState.repeatMode != RepeatModeSetting.OFF,
-                            contentDescription = repeatDescription,
-                            onClick = {
-                                onCycleRepeatMode()
-                                val label = when (playbackState.repeatMode) {
-                                    RepeatModeSetting.OFF -> repeatOneLabel
-                                    RepeatModeSetting.ONE -> repeatAllLabel
-                                    RepeatModeSetting.ALL -> repeatOffLabel
-                                }
-                                android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
-                            },
+                    // Tech info bar
+                    val runtimeInfo = playbackState.runtimeInfo
+                    val codec = runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
+                    val sampleRate = runtimeInfo?.sampleRate?.let { "${it / 1_000} kHz" }
+                    val bitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
+                        ?: track.bitRateKbps?.let { "$it kbps" }
+                    val techParts = listOfNotNull(codec, sampleRate, bitrate)
+                    if (techParts.isNotEmpty()) {
+                        Text(
+                            text = techParts.joinToString(" | "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
                         )
-                        ToggleIconButton(
-                            icon = Icons.Rounded.Shuffle,
-                            active = playbackState.shuffleEnabled,
-                            contentDescription = shuffleDescription,
-                            onClick = {
-                                onToggleShuffle()
-                                val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
-                                android.widget.Toast.makeText(toastContext, label, android.widget.Toast.LENGTH_SHORT).show()
-                            },
-                        )
-                        if (showQueueAffordance) {
-                            ToggleIconButton(
-                                icon = Icons.Rounded.KeyboardArrowUp,
-                                active = false,
+                    }
+                    // Queue toggle
+                    if (showQueueAffordance) {
+                        IconButton(
+                            onClick = { showQueueSheet = true },
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) {
+                            Icon(
+                                Icons.Rounded.KeyboardArrowUp,
                                 contentDescription = stringResource(R.string.player_show_queue),
-                                onClick = { showQueueSheet = true },
                             )
-                        }
-                        Box {
-                            PlayerActionButton(Icons.Rounded.MoreVert, stringResource(R.string.player_more), { showMenu = true }, compactControls)
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.player_song_details)) },
-                                    onClick = {
-                                        showMenu = false
-                                        showDetails = true
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
-                                    onClick = {
-                                        showMenu = false
-                                        showEndpointStatus = true
-                                    },
-                                )
-                            }
                         }
                     }
                     Spacer(Modifier.heightIn(min = 16.dp))
