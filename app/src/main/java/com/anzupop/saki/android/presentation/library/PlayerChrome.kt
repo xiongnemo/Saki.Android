@@ -792,7 +792,7 @@ fun NowPlayingOverlay(
             title = { Text(track.title) },
             text = {
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 320.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item { DetailLine(stringResource(R.string.detail_artist), track.artist) }
@@ -809,10 +809,10 @@ fun NowPlayingOverlay(
                             },
                         )
                     }
-                    item { DetailLine(stringResource(R.string.detail_mime_type), playbackState.runtimeInfo?.sampleMimeType) }
+                    item { DetailLine(stringResource(R.string.detail_mime_type), playbackState.runtimeInfo?.sampleMimeType ?: track.contentType) }
                     item { DetailLine(stringResource(R.string.detail_container), playbackState.runtimeInfo?.containerMimeType) }
-                    item { DetailLine(stringResource(R.string.detail_codec), playbackState.runtimeInfo?.codecs) }
-                    item { DetailLine(stringResource(R.string.detail_average_bitrate), playbackState.runtimeInfo?.averageBitrate?.let(::formatBitrate)) }
+                    item { DetailLine(stringResource(R.string.detail_codec), playbackState.runtimeInfo?.codecs ?: track.suffix?.uppercase()) }
+                    item { DetailLine(stringResource(R.string.detail_average_bitrate), playbackState.runtimeInfo?.averageBitrate?.let(::formatBitrate) ?: track.bitRate?.let(::formatBitrate)) }
                     item { DetailLine(stringResource(R.string.detail_peak_bitrate), playbackState.runtimeInfo?.peakBitrate?.let(::formatBitrate)) }
                     item { DetailLine(stringResource(R.string.detail_sample_rate), playbackState.runtimeInfo?.sampleRate?.let(::formatSampleRate)) }
                     item { DetailLine(stringResource(R.string.detail_channels), playbackState.runtimeInfo?.channelCount?.toString()) }

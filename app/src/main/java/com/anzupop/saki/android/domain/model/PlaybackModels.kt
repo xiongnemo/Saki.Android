@@ -223,6 +223,9 @@ data class PlaybackQueueItem(
     val localPath: String?,
     val qualityLabel: String,
     val isCached: Boolean,
+    val suffix: String? = null,
+    val bitRate: Int? = null,
+    val contentType: String? = null,
 )
 
 data class PlaybackRuntimeInfo(
