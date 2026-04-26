@@ -119,7 +119,6 @@
     <string name="server_config_latency_ms">%1$d ms</string>
     <string name="server_config_latency_ms_sentence">%1$d ms.</string>
 
-    <string name="library_artist_fallback">Artist</string>
     <string name="library_loading_artist">Loading artist</string>
     <string name="library_popular_songs">Popular songs</string>
     <string name="library_popular_songs_subtitle">Quick picks for %1$s</string>
@@ -133,7 +132,6 @@
     <string name="library_tracks">Tracks</string>
     <string name="library_playlist_sequence">Playlist sequence</string>
     <string name="library_play_playlist">Play playlist</string>
-    <string name="library_open_artist">Open artist</string>
     <string name="library_available_offline">Available offline</string>
     <string name="library_unknown_artist_album">Unknown artist • Unknown album</string>
     <string name="library_more_actions">More actions</string>
@@ -189,8 +187,6 @@
     <string name="browse_no_artists">No artists</string>
     <string name="browse_no_artists_body">The server did not return artist indexes.</string>
     <string name="browse_shortcuts">Shortcuts</string>
-    <string name="browse_shortcuts_subtitle">Pinned artists</string>
-    <string name="browse_albums_subtitle">Swipe to another tab or switch feed</string>
     <string name="browse_loading_albums">Loading albums</string>
     <string name="browse_no_albums">No albums</string>
     <string name="browse_no_albums_body">Try another album feed.</string>
@@ -198,11 +194,9 @@
     <string name="browse_no_playlists">No playlists</string>
     <string name="browse_no_playlists_body">Create a playlist on your server to see it here.</string>
     <string name="browse_playlists">Playlists</string>
-    <string name="browse_playlists_subtitle">Open a full playlist page</string>
     <string name="browse_loading_songs">Loading songs</string>
     <string name="browse_no_songs">No songs</string>
     <string name="browse_no_songs_body">The current song feed is empty.</string>
-    <string name="browse_songs_subtitle">Artwork, metadata, download state, and more actions</string>
     <string name="browse_section_artists_headline">Browse the library</string>
     <string name="browse_section_albums_headline">Flip through releases</string>
     <string name="browse_section_playlists_headline">Queue curated mixes</string>

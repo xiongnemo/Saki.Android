@@ -655,12 +655,6 @@ private fun ArtistsPage(
         ) {
             if (indexes.shortcuts.isNotEmpty()) {
                 item {
-                    SectionTitle(
-                        stringResource(R.string.browse_shortcuts),
-                        stringResource(R.string.browse_shortcuts_subtitle),
-                    )
-                }
-                item {
                     LazyRow {
                         items(indexes.shortcuts, key = { it.id }) { artist ->
                             ArtistShortcutCard(artist = artist, onOpenArtist = onOpenArtist)
@@ -746,12 +740,6 @@ private fun AlbumsPage(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
-            SectionTitle(
-                stringResource(R.string.library_albums),
-                stringResource(R.string.browse_albums_subtitle),
-            )
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
             LazyRow(contentPadding = PaddingValues(vertical = 10.dp)) {
                 items(feeds) { feed ->
                     FilterChip(
@@ -819,12 +807,6 @@ private fun PlaylistsPage(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item {
-            SectionTitle(
-                stringResource(R.string.browse_playlists),
-                stringResource(R.string.browse_playlists_subtitle),
-            )
-        }
         items(playlists, key = { it.id }) { playlist ->
             PlaylistCard(playlist = playlist, server = server, onOpenPlaylist = onOpenPlaylist)
         }
@@ -862,12 +844,6 @@ private fun SongsPage(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item {
-            SectionTitle(
-                stringResource(R.string.browse_songs),
-                stringResource(R.string.browse_songs_subtitle),
-            )
-        }
         itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
             SongRow(
                 song = song,
