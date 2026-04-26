@@ -274,8 +274,6 @@ class SakiPlaybackService : MediaSessionService() {
             Player.REPEAT_MODE_ONE -> R.drawable.ic_notification_repeat_one
             else -> R.drawable.ic_notification_repeat
         }
-        val playIcon = if (activePlayer.isPlaying) CommandButton.ICON_PAUSE else CommandButton.ICON_PLAY
-        val playName = getString(if (activePlayer.isPlaying) R.string.player_pause else R.string.player_play)
         val shuffleIcon = if (activePlayer.shuffleModeEnabled) {
             CommandButton.ICON_SHUFFLE_ON
         } else {
@@ -290,32 +288,14 @@ class SakiPlaybackService : MediaSessionService() {
                 .setDisplayName(repeatName)
                 .setCustomIconResId(repeatIconRes)
                 .setSessionCommand(SessionCommand(ACTION_TOGGLE_REPEAT, Bundle.EMPTY))
-                .setSlots(CommandButton.SLOT_BACK_SECONDARY)
+                .setSlots(CommandButton.SLOT_OVERFLOW)
                 .setEnabled(hasQueue)
-                .build(),
-            CommandButton.Builder(CommandButton.ICON_PREVIOUS)
-                .setDisplayName(getString(R.string.player_previous))
-                .setPlayerCommand(Player.COMMAND_SEEK_TO_PREVIOUS)
-                .setSlots(CommandButton.SLOT_BACK)
-                .setEnabled(hasQueue && activePlayer.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS))
-                .build(),
-            CommandButton.Builder(playIcon)
-                .setDisplayName(playName)
-                .setPlayerCommand(Player.COMMAND_PLAY_PAUSE)
-                .setSlots(CommandButton.SLOT_CENTRAL)
-                .setEnabled(hasQueue && activePlayer.isCommandAvailable(Player.COMMAND_PLAY_PAUSE))
-                .build(),
-            CommandButton.Builder(CommandButton.ICON_NEXT)
-                .setDisplayName(getString(R.string.player_next))
-                .setPlayerCommand(Player.COMMAND_SEEK_TO_NEXT)
-                .setSlots(CommandButton.SLOT_FORWARD)
-                .setEnabled(hasQueue && activePlayer.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT))
                 .build(),
             CommandButton.Builder(shuffleIcon)
                 .setDisplayName(shuffleName)
                 .setCustomIconResId(R.drawable.ic_notification_shuffle)
                 .setSessionCommand(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
-                .setSlots(CommandButton.SLOT_FORWARD_SECONDARY)
+                .setSlots(CommandButton.SLOT_OVERFLOW)
                 .setEnabled(activePlayer.mediaItemCount > 1)
                 .build(),
         )
