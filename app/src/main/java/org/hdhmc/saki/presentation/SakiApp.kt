@@ -344,7 +344,10 @@ private fun RootShell(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .onGloballyPositioned { coordinates ->
-                            capsuleHeightPx = coordinates.size.height
+                            val measuredHeight = coordinates.size.height
+                            if (capsuleHeightPx != measuredHeight) {
+                                capsuleHeightPx = measuredHeight
+                            }
                         },
                 ) {
                     NowPlayingCapsule(
