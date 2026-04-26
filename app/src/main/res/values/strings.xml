@@ -102,7 +102,7 @@
     <string name="server_config_client_name">Client name</string>
     <string name="server_config_api_version_label">API version</string>
     <string name="server_config_endpoints_title">Endpoints</string>
-    <string name="server_config_endpoints_body">Mark one endpoint as primary. Use the test action to confirm the draft credentials work before saving.</string>
+    <string name="server_config_endpoints_body">Add one or more endpoints. Use the test action to confirm the credentials work before saving.</string>
     <string name="server_config_add_endpoint">Add another endpoint</string>
     <string name="server_config_save_server">Save server</string>
     <string name="server_config_save_changes">Save changes</string>
