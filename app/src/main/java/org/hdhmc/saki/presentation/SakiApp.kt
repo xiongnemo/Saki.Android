@@ -28,7 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Density
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import org.hdhmc.saki.domain.model.AppLanguage
+import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.presentation.library.BrowseScreen
 import org.hdhmc.saki.presentation.library.NowPlayingOverlay
 import org.hdhmc.saki.presentation.library.NowPlayingCapsule
@@ -130,6 +130,7 @@ fun SakiApp(
                         onClearImageCache = viewModel::clearImageCache,
                         onUpdateTextScale = viewModel::updateTextScale,
                         onUpdateLanguage = viewModel::updateLanguage,
+                        onUpdateThemeMode = viewModel::updateThemeMode,
                         onUpdateBluetoothLyrics = viewModel::updateBluetoothLyrics,
                         onUpdateBufferStrategy = viewModel::updateBufferStrategy,
                         onUpdateCustomBufferSeconds = viewModel::updateCustomBufferSeconds,
@@ -204,6 +205,7 @@ private fun RootShell(
     onClearImageCache: () -> Unit,
     onUpdateTextScale: (org.hdhmc.saki.domain.model.TextScale) -> Unit,
     onUpdateLanguage: (org.hdhmc.saki.domain.model.AppLanguage) -> Unit,
+    onUpdateThemeMode: (ThemeMode) -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
     onUpdateBufferStrategy: (org.hdhmc.saki.domain.model.BufferStrategy) -> Unit,
     onUpdateCustomBufferSeconds: (Int) -> Unit,
@@ -271,6 +273,7 @@ private fun RootShell(
                             onClearImageCache = onClearImageCache,
                             onUpdateTextScale = onUpdateTextScale,
                             onUpdateLanguage = onUpdateLanguage,
+                            onUpdateThemeMode = onUpdateThemeMode,
                             onUpdateBluetoothLyrics = onUpdateBluetoothLyrics,
                             onUpdateBufferStrategy = onUpdateBufferStrategy,
                             onUpdateCustomBufferSeconds = onUpdateCustomBufferSeconds,

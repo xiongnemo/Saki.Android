@@ -11,6 +11,7 @@ import org.hdhmc.saki.domain.model.Album
 import org.hdhmc.saki.domain.model.AlbumListType
 import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.AppPreferences
+import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.domain.model.AlbumSummary
 import org.hdhmc.saki.domain.model.Artist
 import org.hdhmc.saki.domain.model.CacheStorageSummary
@@ -105,6 +106,11 @@ class SakiAppViewModel @Inject constructor(
                     if (current != locales) {
                         androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(locales)
                     }
+                }
+                // Apply saved theme mode
+                val nightMode = preferences.themeMode.toNightMode()
+                if (androidx.appcompat.app.AppCompatDelegate.getDefaultNightMode() != nightMode) {
+                    androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode)
                 }
             }
         }
@@ -254,6 +260,25 @@ class SakiAppViewModel @Inject constructor(
                     else -> androidx.core.os.LocaleListCompat.forLanguageTags(language.tag)
                 }
                 androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(locales)
+            }
+        }
+    }
+
+    private fun ThemeMode.toNightMode(): Int = when (this) {
+        ThemeMode.SYSTEM -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        ThemeMode.LIGHT -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO
+        ThemeMode.DARK -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
+    }
+
+    fun updateThemeMode(themeMode: ThemeMode) {
+        viewModelScope.launch {
+            runCatching {
+                appPreferencesRepository.updateThemeMode(themeMode)
+            }.onSuccess {
+                val nightMode = themeMode.toNightMode()
+                if (androidx.appcompat.app.AppCompatDelegate.getDefaultNightMode() != nightMode) {
+                    androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode)
+                }
             }
         }
     }
