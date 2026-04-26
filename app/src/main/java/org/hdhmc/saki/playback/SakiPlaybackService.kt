@@ -267,11 +267,17 @@ class SakiPlaybackService : MediaSessionService() {
         }
         val repeatIconRes = when (activePlayer.repeatMode) {
             Player.REPEAT_MODE_ONE -> R.drawable.ic_notification_repeat_one
+            Player.REPEAT_MODE_ALL -> R.drawable.ic_notification_repeat_on
             else -> R.drawable.ic_notification_repeat
         }
         val shuffleName = getString(
             if (activePlayer.shuffleModeEnabled) R.string.player_shuffle_on else R.string.player_shuffle_off,
         )
+        val shuffleIconRes = if (activePlayer.shuffleModeEnabled) {
+            R.drawable.ic_notification_shuffle_on
+        } else {
+            R.drawable.ic_notification_shuffle
+        }
 
         return listOf(
             CommandButton.Builder(CommandButton.ICON_UNDEFINED)
@@ -283,7 +289,7 @@ class SakiPlaybackService : MediaSessionService() {
                 .build(),
             CommandButton.Builder(CommandButton.ICON_UNDEFINED)
                 .setDisplayName(shuffleName)
-                .setCustomIconResId(R.drawable.ic_notification_shuffle)
+                .setCustomIconResId(shuffleIconRes)
                 .setSessionCommand(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
                 .setSlots(CommandButton.SLOT_OVERFLOW)
                 .setEnabled(activePlayer.mediaItemCount > 1)
