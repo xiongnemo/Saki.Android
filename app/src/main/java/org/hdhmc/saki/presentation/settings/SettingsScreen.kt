@@ -199,20 +199,6 @@ fun SettingsScreen(
                 body = stringResource(R.string.settings_stream_quality_body),
                 action = null,
             ) {
-                if (!prefs.adaptiveQualityEnabled) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        StreamQuality.entries.forEach { quality ->
-                            FilterChip(
-                                selected = prefs.streamQuality == quality,
-                                onClick = { onUpdateStreamQuality(quality) },
-                                label = { Text(quality.localizedLabel()) },
-                            )
-                        }
-                    }
-                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -247,6 +233,19 @@ fun SettingsScreen(
                             FilterChip(
                                 selected = prefs.mobileStreamQuality == quality,
                                 onClick = { onUpdateMobileStreamQuality(quality) },
+                                label = { Text(quality.localizedLabel()) },
+                            )
+                        }
+                    }
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StreamQuality.entries.forEach { quality ->
+                            FilterChip(
+                                selected = prefs.streamQuality == quality,
+                                onClick = { onUpdateStreamQuality(quality) },
                                 label = { Text(quality.localizedLabel()) },
                             )
                         }
