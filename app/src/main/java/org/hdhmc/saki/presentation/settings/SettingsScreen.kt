@@ -80,17 +80,6 @@ import org.hdhmc.saki.presentation.rememberBrowseBackgroundBrush
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val defaultAlbumFeedOptions = listOf(
-    AlbumListType.NEWEST,
-    AlbumListType.RECENT,
-    AlbumListType.RANDOM,
-    AlbumListType.HIGHEST,
-    AlbumListType.FREQUENT,
-    AlbumListType.ALPHABETICAL_BY_NAME,
-    AlbumListType.ALPHABETICAL_BY_ARTIST,
-    AlbumListType.STARRED,
-)
-
 @Composable
 fun SettingsScreen(
     uiState: SakiAppUiState,
@@ -476,7 +465,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        defaultAlbumFeedOptions.forEach { feed ->
+                        AlbumListType.defaultBrowseFeeds.forEach { feed ->
                             FilterChip(
                                 selected = uiState.appPreferences.defaultAlbumFeed == feed,
                                 onClick = { onUpdateDefaultAlbumFeed(feed) },

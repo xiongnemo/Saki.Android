@@ -77,18 +77,7 @@ private fun Preferences.toAppPreferences() = AppPreferences(
     themeMode = ThemeMode.fromStorageKey(this[DataStoreAppPreferencesRepository.KEY_THEME_MODE]),
     albumViewMode = AlbumViewMode.fromStorageKey(this[DataStoreAppPreferencesRepository.KEY_ALBUM_VIEW_MODE]),
     defaultBrowseTab = DefaultBrowseTab.fromStorageKey(this[DataStoreAppPreferencesRepository.KEY_DEFAULT_BROWSE_TAB]),
-    defaultAlbumFeed = supportedDefaultAlbumFeeds.firstOrNull {
-        it.apiValue == this[DataStoreAppPreferencesRepository.KEY_DEFAULT_ALBUM_FEED]
-    } ?: AlbumListType.NEWEST,
-)
-
-private val supportedDefaultAlbumFeeds = listOf(
-    AlbumListType.NEWEST,
-    AlbumListType.RECENT,
-    AlbumListType.RANDOM,
-    AlbumListType.HIGHEST,
-    AlbumListType.FREQUENT,
-    AlbumListType.ALPHABETICAL_BY_NAME,
-    AlbumListType.ALPHABETICAL_BY_ARTIST,
-    AlbumListType.STARRED,
+    defaultAlbumFeed = AlbumListType.fromApiValue(
+        this[DataStoreAppPreferencesRepository.KEY_DEFAULT_ALBUM_FEED],
+    )?.takeIf { it in AlbumListType.defaultBrowseFeeds } ?: AlbumListType.NEWEST,
 )

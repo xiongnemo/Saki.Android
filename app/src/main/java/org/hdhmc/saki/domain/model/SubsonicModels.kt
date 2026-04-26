@@ -56,7 +56,24 @@ enum class AlbumListType(val apiValue: String) {
     ALPHABETICAL_BY_ARTIST("alphabeticalByArtist"),
     STARRED("starred"),
     BY_YEAR("byYear"),
-    BY_GENRE("byGenre"),
+    BY_GENRE("byGenre");
+
+    companion object {
+        val defaultBrowseFeeds = listOf(
+            NEWEST,
+            RECENT,
+            RANDOM,
+            HIGHEST,
+            FREQUENT,
+            ALPHABETICAL_BY_NAME,
+            ALPHABETICAL_BY_ARTIST,
+            STARRED,
+        )
+
+        fun fromApiValue(apiValue: String?): AlbumListType? {
+            return entries.firstOrNull { it.apiValue == apiValue }
+        }
+    }
 }
 
 data class AlbumSummary(
