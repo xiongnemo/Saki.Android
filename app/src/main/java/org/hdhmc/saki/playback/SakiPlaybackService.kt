@@ -331,30 +331,44 @@ class SakiPlaybackService : MediaSessionService() {
         syncMediaButtonPreferences()
     }
 
-    private fun toggleNotificationShuffle() {
-        val activePlayer = player as? ExoPlayer ?: return
-        val count = activePlayer.mediaItemCount
-        if (count <= 1) {
-            activePlayer.shuffleModeEnabled = false
-            pendingShuffleOrder = null
-            serviceScope.launch { playbackPreferencesRepository.clearShuffleState() }
-            syncMediaButtonPreferences()
-            return
+    private fun toggleNotificationShuffle(): ListenableFuture<SessionResult> {
+        val future = SettableFuture.create<SessionResult>()
+        val activePlayer = player as? ExoPlayer
+        if (activePlayer == null) {
+            future.set(SessionResult(SessionResult.RESULT_ERROR_UNKNOWN))
+            return future
         }
+        playerScope.launch {
+            runCatching {
+                val count = activePlayer.mediaItemCount
+                if (count <= 1) {
+                    playbackPreferencesRepository.clearShuffleState()
+                    activePlayer.shuffleModeEnabled = false
+                    pendingShuffleOrder = null
+                    syncMediaButtonPreferences()
+                    return@runCatching
+                }
 
-        if (activePlayer.shuffleModeEnabled) {
-            activePlayer.shuffleModeEnabled = false
-            pendingShuffleOrder = null
-            serviceScope.launch { playbackPreferencesRepository.clearShuffleState() }
-        } else {
-            val seed = System.nanoTime()
-            val anchor = activePlayer.currentMediaItemIndex.coerceIn(0, count - 1)
-            activePlayer.setShuffleOrder(SakiShuffleOrder(count, seed, anchor))
-            activePlayer.shuffleModeEnabled = true
-            pendingShuffleOrder = null
-            serviceScope.launch { playbackPreferencesRepository.updateShuffleState(seed, anchor) }
+                if (activePlayer.shuffleModeEnabled) {
+                    playbackPreferencesRepository.clearShuffleState()
+                    activePlayer.shuffleModeEnabled = false
+                    pendingShuffleOrder = null
+                } else {
+                    val seed = System.nanoTime()
+                    val anchor = activePlayer.currentMediaItemIndex.coerceIn(0, count - 1)
+                    playbackPreferencesRepository.updateShuffleState(seed, anchor)
+                    activePlayer.setShuffleOrder(SakiShuffleOrder(count, seed, anchor))
+                    activePlayer.shuffleModeEnabled = true
+                    pendingShuffleOrder = null
+                }
+                syncMediaButtonPreferences()
+            }.onSuccess {
+                future.set(SessionResult(SessionResult.RESULT_SUCCESS))
+            }.onFailure { throwable ->
+                future.setException(throwable)
+            }
         }
-        syncMediaButtonPreferences()
+        return future
     }
 
     /** Latest playback preferences, kept in memory to avoid blocking reads in the resolver. */
@@ -556,8 +570,7 @@ class SakiPlaybackService : MediaSessionService() {
                     return successSessionResult()
                 }
                 ACTION_TOGGLE_SHUFFLE -> {
-                    toggleNotificationShuffle()
-                    return successSessionResult()
+                    return toggleNotificationShuffle()
                 }
             }
             return super.onCustomCommand(session, controller, customCommand, args)
