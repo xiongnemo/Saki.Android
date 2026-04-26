@@ -21,6 +21,7 @@ data class SubsonicResponseDto(
     val indexes: IndexesDto? = null,
     val artist: ArtistDetailDto? = null,
     val albumList: AlbumListDto? = null,
+    val albumList2: AlbumListDto? = null,
     val album: AlbumDto? = null,
     val song: SongDto? = null,
     val playlists: PlaylistsDto? = null,

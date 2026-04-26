@@ -117,7 +117,7 @@ class DefaultSubsonicRepository @Inject constructor(
 
         executeWithFallback(
             serverId = serverId,
-            path = "getAlbumList.view",
+            path = "getAlbumList2.view",
             extraQuery = mapOfNotNull(
                 "type" to type.apiValue,
                 "size" to size.toString(),

@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
@@ -97,6 +98,7 @@ fun BrowseScreen(
     onUpdateSearchQuery: (String) -> Unit,
     onRefreshCurrentTab: () -> Unit,
     onSelectAlbumFeed: (AlbumListType) -> Unit,
+    onLoadMoreAlbums: () -> Unit,
     onOpenArtist: (String) -> Unit,
     onCloseArtist: () -> Unit,
     onOpenAlbum: (String) -> Unit,
@@ -224,6 +226,7 @@ fun BrowseScreen(
                         onUpdateSearchQuery = onUpdateSearchQuery,
                         onRefreshCurrentTab = onRefreshCurrentTab,
                         onSelectAlbumFeed = onSelectAlbumFeed,
+                        onLoadMoreAlbums = onLoadMoreAlbums,
                         onOpenArtist = onOpenArtist,
                         onOpenAlbum = onOpenAlbum,
                         onOpenPlaylist = onOpenPlaylist,
@@ -284,6 +287,7 @@ private fun BrowsePager(
     onUpdateSearchQuery: (String) -> Unit,
     onRefreshCurrentTab: () -> Unit,
     onSelectAlbumFeed: (AlbumListType) -> Unit,
+    onLoadMoreAlbums: () -> Unit,
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
@@ -399,8 +403,11 @@ private fun BrowsePager(
                                 server = currentServer,
                                 selectedFeed = uiState.selectedAlbumFeed,
                                 isLoading = uiState.isAlbumsLoading,
+                                hasMore = uiState.hasMoreAlbums,
+                                isLoadingMore = uiState.isLoadingMoreAlbums,
                                 error = uiState.albumsError?.asString(),
                                 onSelectFeed = onSelectAlbumFeed,
+                                onLoadMore = onLoadMoreAlbums,
                                 onOpenAlbum = onOpenAlbum,
                             )
 
@@ -703,8 +710,11 @@ private fun AlbumsPage(
     server: ServerConfig,
     selectedFeed: AlbumListType,
     isLoading: Boolean,
+    hasMore: Boolean,
+    isLoadingMore: Boolean,
     error: String?,
     onSelectFeed: (AlbumListType) -> Unit,
+    onLoadMore: () -> Unit,
     onOpenAlbum: (String) -> Unit,
 ) {
     val feeds = listOf(
@@ -714,7 +724,23 @@ private fun AlbumsPage(
         AlbumListType.HIGHEST,
         AlbumListType.ALPHABETICAL_BY_NAME,
     )
+    val gridState = rememberLazyGridState()
+    LaunchedEffect(gridState, hasMore, isLoading, isLoadingMore, albums.size) {
+        snapshotFlow {
+            if (!hasMore || isLoading || isLoadingMore || albums.isEmpty()) {
+                false
+            } else {
+                val layoutInfo = gridState.layoutInfo
+                val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                lastVisibleIndex >= layoutInfo.totalItemsCount - 5
+            }
+        }
+            .distinctUntilChanged()
+            .filter { shouldLoad -> shouldLoad }
+            .collect { onLoadMore() }
+    }
     LazyVerticalGrid(
+        state = gridState,
         modifier = Modifier.fillMaxSize(),
         columns = GridCells.Fixed(2),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -755,6 +781,11 @@ private fun AlbumsPage(
 
             else -> items(albums, key = { it.id }) { album ->
                 AlbumCard(album = album, server = server, onOpenAlbum = onOpenAlbum)
+            }
+        }
+        if (isLoadingMore) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LoadingStateCard(stringResource(R.string.browse_loading_albums))
             }
         }
     }
