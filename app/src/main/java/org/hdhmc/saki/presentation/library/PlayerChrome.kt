@@ -162,7 +162,7 @@ fun NowPlayingCapsule(
         enabled = track != null,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp)
             .pointerInput(track != null) {
                 if (track == null) return@pointerInput
                 val distanceThresholdPx = 72.dp.toPx()
