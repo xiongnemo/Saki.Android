@@ -3,6 +3,7 @@ package org.hdhmc.saki.domain.repository
 import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.AppPreferences
 import org.hdhmc.saki.domain.model.TextScale
+import org.hdhmc.saki.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 
 interface AppPreferencesRepository {
@@ -13,4 +14,6 @@ interface AppPreferencesRepository {
     suspend fun updateTextScale(textScale: TextScale)
 
     suspend fun updateLanguage(language: AppLanguage)
+
+    suspend fun updateThemeMode(themeMode: ThemeMode)
 }

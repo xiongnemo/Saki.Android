@@ -41,6 +41,7 @@ enum class TextScale(
 data class AppPreferences(
     val textScale: TextScale = TextScale.DEFAULT,
     val language: AppLanguage = AppLanguage.SYSTEM,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
 )
 
 enum class AppLanguage(val tag: String) {
@@ -51,5 +52,16 @@ enum class AppLanguage(val tag: String) {
     companion object {
         fun fromTag(tag: String?): AppLanguage =
             entries.firstOrNull { it.tag == tag } ?: SYSTEM
+    }
+}
+
+enum class ThemeMode(val key: String) {
+    SYSTEM("system"),
+    LIGHT("light"),
+    DARK("dark");
+
+    companion object {
+        fun fromKey(key: String?): ThemeMode =
+            entries.firstOrNull { it.key == key } ?: SYSTEM
     }
 }

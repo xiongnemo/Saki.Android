@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import org.hdhmc.saki.R
 import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.CachedSong
+import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.domain.model.MAX_STREAM_CACHE_SIZE_MB
 import org.hdhmc.saki.domain.model.MIN_STREAM_CACHE_SIZE_MB
 import org.hdhmc.saki.domain.model.BufferStrategy
@@ -94,6 +95,7 @@ fun SettingsScreen(
     onClearImageCache: () -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
     onUpdateLanguage: (AppLanguage) -> Unit,
+    onUpdateThemeMode: (ThemeMode) -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
     onUpdateBufferStrategy: (BufferStrategy) -> Unit,
     onUpdateCustomBufferSeconds: (Int) -> Unit,
@@ -395,6 +397,36 @@ fun SettingsScreen(
                         selected = currentLanguage == AppLanguage.CHINESE,
                         coverage = translationCoverage("zh"),
                         onClick = { onUpdateLanguage(AppLanguage.CHINESE) },
+                    )
+                }
+            }
+        }
+
+        item {
+            SettingsSectionCard(
+                title = stringResource(R.string.settings_theme_title),
+                body = stringResource(R.string.settings_theme_body),
+                action = null,
+            ) {
+                val currentTheme = uiState.appPreferences.themeMode
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = currentTheme == ThemeMode.SYSTEM,
+                        onClick = { onUpdateThemeMode(ThemeMode.SYSTEM) },
+                        label = { Text(stringResource(R.string.settings_theme_system)) },
+                    )
+                    FilterChip(
+                        selected = currentTheme == ThemeMode.LIGHT,
+                        onClick = { onUpdateThemeMode(ThemeMode.LIGHT) },
+                        label = { Text(stringResource(R.string.settings_theme_light)) },
+                    )
+                    FilterChip(
+                        selected = currentTheme == ThemeMode.DARK,
+                        onClick = { onUpdateThemeMode(ThemeMode.DARK) },
+                        label = { Text(stringResource(R.string.settings_theme_dark)) },
                     )
                 }
             }

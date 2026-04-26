@@ -48,6 +48,11 @@
     <string name="settings_language_english">English</string>
     <string name="settings_language_chinese">中文</string>
     <string name="settings_language_coverage">%1$d%%</string>
+    <string name="settings_theme_title">主题</string>
+    <string name="settings_theme_body">选择应用的外观。</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
     <string name="settings_play_from_here">从此处播放</string>
     <string name="settings_remove_download">移除下载</string>
 

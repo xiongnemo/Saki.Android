@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.AppPreferences
 import org.hdhmc.saki.domain.model.TextScale
+import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.domain.repository.AppPreferencesRepository
 import java.io.IOException
 import javax.inject.Inject
@@ -41,13 +42,19 @@ class DataStoreAppPreferencesRepository @Inject constructor(
         dataStore.edit { it[KEY_LANGUAGE] = language.tag }
     }
 
+    override suspend fun updateThemeMode(themeMode: ThemeMode) {
+        dataStore.edit { it[KEY_THEME_MODE] = themeMode.key }
+    }
+
     companion object {
         val KEY_TEXT_SCALE = stringPreferencesKey("text_scale")
         val KEY_LANGUAGE = stringPreferencesKey("app_language")
+        val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
     }
 }
 
 private fun Preferences.toAppPreferences() = AppPreferences(
     textScale = TextScale.fromStorageKey(this[DataStoreAppPreferencesRepository.KEY_TEXT_SCALE]),
     language = AppLanguage.fromTag(this[DataStoreAppPreferencesRepository.KEY_LANGUAGE]),
+    themeMode = ThemeMode.fromKey(this[DataStoreAppPreferencesRepository.KEY_THEME_MODE]),
 )
