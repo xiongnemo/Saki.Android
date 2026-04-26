@@ -742,7 +742,7 @@ private fun AlbumsPage(
     }
 
     LaunchedEffect(feedPagerState) {
-        snapshotFlow { feedPagerState.targetPage }
+        snapshotFlow { feedPagerState.settledPage }
             .distinctUntilChanged()
             .map { feeds[it] }
             .filter { it != selectedFeedState.value }
