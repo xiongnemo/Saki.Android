@@ -154,10 +154,12 @@ fun SakiApp(
             }
 
             if (showServerManager) {
-                ServerConfigRoute(
-                    modifier = Modifier.fillMaxSize(),
-                    onCloseManager = { showServerManager = false },
-                )
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
+                    ServerConfigRoute(
+                        modifier = Modifier.fillMaxSize(),
+                        onCloseManager = { showServerManager = false },
+                    )
+                }
             }
         }
     }
