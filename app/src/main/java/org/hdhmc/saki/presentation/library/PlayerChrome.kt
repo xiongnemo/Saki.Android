@@ -16,6 +16,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,7 +60,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -800,22 +800,19 @@ fun NowPlayingOverlay(
                         }
                         // Queue toggle
                         if (showQueueAffordance) {
-                            Column {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 32.dp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.KeyboardArrowUp,
+                                    contentDescription = stringResource(R.string.player_show_queue),
+                                    modifier = Modifier
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                        ) { showQueueSheet = true },
                                 )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.Center,
-                                ) {
-                                    IconButton(onClick = { showQueueSheet = true }) {
-                                        Icon(
-                                            Icons.Rounded.KeyboardArrowUp,
-                                            contentDescription = stringResource(R.string.player_show_queue),
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
@@ -1046,6 +1043,7 @@ private fun ToggleIconButton(
         IconButton(
             onClick = onClick,
             modifier = Modifier
+                .size(if (compact) 48.dp else 56.dp)
                 .semantics {
                     role = Role.Switch
                     stateDescription = "$contentDescription: ${if (active) onText else offText}"
