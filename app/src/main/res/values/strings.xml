@@ -190,6 +190,8 @@
     <string name="browse_loading_albums">Loading albums</string>
     <string name="browse_no_albums">No albums</string>
     <string name="browse_no_albums_body">Try another album feed.</string>
+    <string name="browse_show_album_grid">Show album grid</string>
+    <string name="browse_show_album_list">Show album list</string>
     <string name="browse_loading_playlists">Loading playlists</string>
     <string name="browse_no_playlists">No playlists</string>
     <string name="browse_no_playlists_body">Create a playlist on your server to see it here.</string>

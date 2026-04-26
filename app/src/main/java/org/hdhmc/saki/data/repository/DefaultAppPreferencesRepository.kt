@@ -3,6 +3,7 @@ package org.hdhmc.saki.data.repository
 import org.hdhmc.saki.data.local.dao.AppPreferencesDao
 import org.hdhmc.saki.data.local.entity.AppPreferencesEntity
 import org.hdhmc.saki.di.IoDispatcher
+import org.hdhmc.saki.domain.model.AlbumViewMode
 import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.AppPreferences
 import org.hdhmc.saki.domain.model.TextScale
@@ -42,6 +43,10 @@ class DefaultAppPreferencesRepository @Inject constructor(
 
     override suspend fun updateThemeMode(themeMode: ThemeMode) {
         // Theme preference is only supported via DataStore; no-op here
+    }
+
+    override suspend fun updateAlbumViewMode(mode: AlbumViewMode) {
+        // Album view mode preference is only supported via DataStore; no-op here
     }
 }
 

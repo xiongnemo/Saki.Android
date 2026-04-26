@@ -42,6 +42,7 @@ data class AppPreferences(
     val textScale: TextScale = TextScale.DEFAULT,
     val language: AppLanguage = AppLanguage.SYSTEM,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val albumViewMode: AlbumViewMode = AlbumViewMode.GRID,
 )
 
 enum class AppLanguage(val tag: String) {
@@ -63,5 +64,15 @@ enum class ThemeMode(val storageKey: String) {
     companion object {
         fun fromStorageKey(storageKey: String?): ThemeMode =
             entries.firstOrNull { it.storageKey == storageKey } ?: SYSTEM
+    }
+}
+
+enum class AlbumViewMode(val storageKey: String) {
+    GRID("grid"),
+    LIST("list");
+
+    companion object {
+        fun fromStorageKey(storageKey: String?): AlbumViewMode =
+            entries.firstOrNull { it.storageKey == storageKey } ?: GRID
     }
 }
