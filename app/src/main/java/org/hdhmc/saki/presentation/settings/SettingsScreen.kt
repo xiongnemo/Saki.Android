@@ -53,8 +53,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.hdhmc.saki.R
+import org.hdhmc.saki.domain.model.AlbumListType
 import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.CachedSong
+import org.hdhmc.saki.domain.model.DefaultBrowseTab
 import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.domain.model.MAX_STREAM_CACHE_SIZE_MB
 import org.hdhmc.saki.domain.model.MIN_STREAM_CACHE_SIZE_MB
@@ -96,6 +98,8 @@ fun SettingsScreen(
     onUpdateTextScale: (TextScale) -> Unit,
     onUpdateLanguage: (AppLanguage) -> Unit,
     onUpdateThemeMode: (ThemeMode) -> Unit,
+    onUpdateDefaultBrowseTab: (DefaultBrowseTab) -> Unit,
+    onUpdateDefaultAlbumFeed: (AlbumListType) -> Unit,
     onUpdateBluetoothLyrics: (Boolean) -> Unit,
     onUpdateBufferStrategy: (BufferStrategy) -> Unit,
     onUpdateCustomBufferSeconds: (Int) -> Unit,
@@ -429,6 +433,46 @@ fun SettingsScreen(
                         onClick = { onUpdateThemeMode(ThemeMode.DARK) },
                         label = { Text(stringResource(R.string.settings_theme_dark)) },
                     )
+                }
+            }
+        }
+
+        item {
+            SettingsSectionCard(
+                title = stringResource(R.string.settings_default_browse_title),
+                body = stringResource(R.string.settings_default_browse_body),
+                action = null,
+            ) {
+                val defaultBrowseTab = uiState.appPreferences.defaultBrowseTab
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    DefaultBrowseTab.entries.forEach { tab ->
+                        FilterChip(
+                            selected = defaultBrowseTab == tab,
+                            onClick = { onUpdateDefaultBrowseTab(tab) },
+                            label = { Text(stringResource(tab.labelRes())) },
+                        )
+                    }
+                }
+                if (defaultBrowseTab == DefaultBrowseTab.ALBUMS) {
+                    Text(
+                        text = stringResource(R.string.settings_default_album_feed),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        AlbumListType.defaultBrowseFeeds.forEach { feed ->
+                            FilterChip(
+                                selected = uiState.appPreferences.defaultAlbumFeed == feed,
+                                onClick = { onUpdateDefaultAlbumFeed(feed) },
+                                label = { Text(stringResource(feed.labelRes())) },
+                            )
+                        }
+                    }
                 }
             }
         }

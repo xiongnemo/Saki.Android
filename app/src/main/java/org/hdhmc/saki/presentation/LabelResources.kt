@@ -2,7 +2,9 @@ package org.hdhmc.saki.presentation
 
 import androidx.annotation.StringRes
 import org.hdhmc.saki.R
+import org.hdhmc.saki.domain.model.AlbumListType
 import org.hdhmc.saki.domain.model.BufferStrategy
+import org.hdhmc.saki.domain.model.DefaultBrowseTab
 import org.hdhmc.saki.domain.model.SoundBalancingMode
 import org.hdhmc.saki.domain.model.StreamQuality
 import org.hdhmc.saki.domain.model.TextScale
@@ -40,4 +42,26 @@ fun TextScale.labelRes(): Int = when (this) {
     TextScale.DEFAULT -> R.string.text_scale_default
     TextScale.LARGE -> R.string.text_scale_large
     TextScale.EXTRA_LARGE -> R.string.text_scale_extra_large
+}
+
+@StringRes
+fun DefaultBrowseTab.labelRes(): Int = when (this) {
+    DefaultBrowseTab.ARTISTS -> R.string.browse_artists
+    DefaultBrowseTab.ALBUMS -> R.string.library_albums
+    DefaultBrowseTab.PLAYLISTS -> R.string.browse_playlists
+    DefaultBrowseTab.SONGS -> R.string.browse_songs
+}
+
+@StringRes
+fun AlbumListType.labelRes(): Int = when (this) {
+    AlbumListType.NEWEST -> R.string.album_feed_newest
+    AlbumListType.RECENT -> R.string.album_feed_recent
+    AlbumListType.RANDOM -> R.string.album_feed_random
+    AlbumListType.HIGHEST -> R.string.album_feed_top_rated
+    AlbumListType.FREQUENT -> R.string.album_feed_frequent
+    AlbumListType.ALPHABETICAL_BY_NAME -> R.string.album_feed_a_z
+    AlbumListType.ALPHABETICAL_BY_ARTIST -> R.string.album_feed_by_artist
+    AlbumListType.STARRED -> R.string.album_feed_starred
+    AlbumListType.BY_YEAR -> R.string.album_feed_by_year
+    AlbumListType.BY_GENRE -> R.string.album_feed_by_genre
 }

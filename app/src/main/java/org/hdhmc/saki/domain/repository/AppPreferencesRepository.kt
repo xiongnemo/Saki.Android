@@ -2,7 +2,9 @@ package org.hdhmc.saki.domain.repository
 
 import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.AppPreferences
+import org.hdhmc.saki.domain.model.AlbumListType
 import org.hdhmc.saki.domain.model.AlbumViewMode
+import org.hdhmc.saki.domain.model.DefaultBrowseTab
 import org.hdhmc.saki.domain.model.TextScale
 import org.hdhmc.saki.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
@@ -19,4 +21,8 @@ interface AppPreferencesRepository {
     suspend fun updateThemeMode(themeMode: ThemeMode)
 
     suspend fun updateAlbumViewMode(mode: AlbumViewMode)
+
+    suspend fun updateDefaultBrowseTab(tab: DefaultBrowseTab)
+
+    suspend fun updateDefaultAlbumFeed(feed: AlbumListType)
 }

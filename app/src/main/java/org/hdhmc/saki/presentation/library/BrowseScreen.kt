@@ -84,6 +84,7 @@ import org.hdhmc.saki.domain.model.ServerConfig
 import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.presentation.BrowseSection
 import org.hdhmc.saki.presentation.AlbumFeedState
+import org.hdhmc.saki.presentation.labelRes
 import org.hdhmc.saki.presentation.rememberBrowseBackgroundBrush
 import org.hdhmc.saki.presentation.SakiAppUiState
 import org.hdhmc.saki.presentation.asString
@@ -715,13 +716,7 @@ private fun AlbumsPage(
     onUpdateViewMode: (AlbumViewMode) -> Unit,
     onOpenAlbum: (String) -> Unit,
 ) {
-    val feeds = listOf(
-        AlbumListType.NEWEST,
-        AlbumListType.RECENT,
-        AlbumListType.RANDOM,
-        AlbumListType.HIGHEST,
-        AlbumListType.ALPHABETICAL_BY_NAME,
-    )
+    val feeds = AlbumListType.defaultBrowseFeeds
     val selectedFeedState = rememberUpdatedState(selectedFeed)
     val feedPagerState = rememberPagerState(
         initialPage = feeds.indexOf(selectedFeed).coerceAtLeast(0),
@@ -939,7 +934,7 @@ private fun AlbumFeedControls(
                 FilterChip(
                     selected = selectedFeed == feed,
                     onClick = { onSelectFeed(feed) },
-                    label = { Text(feed.localizedLabel()) },
+                    label = { Text(stringResource(feed.labelRes())) },
                     modifier = Modifier.padding(end = 8.dp),
                 )
             }
@@ -1042,20 +1037,6 @@ private fun BrowseSection.localizedLabel(): String = when (this) {
     BrowseSection.ALBUMS -> stringResource(R.string.library_albums)
     BrowseSection.PLAYLISTS -> stringResource(R.string.browse_playlists)
     BrowseSection.SONGS -> stringResource(R.string.browse_songs)
-}
-
-@Composable
-private fun AlbumListType.localizedLabel(): String = when (this) {
-    AlbumListType.NEWEST -> stringResource(R.string.album_feed_newest)
-    AlbumListType.RECENT -> stringResource(R.string.album_feed_recent)
-    AlbumListType.RANDOM -> stringResource(R.string.album_feed_random)
-    AlbumListType.HIGHEST -> stringResource(R.string.album_feed_top_rated)
-    AlbumListType.FREQUENT -> stringResource(R.string.album_feed_frequent)
-    AlbumListType.ALPHABETICAL_BY_NAME -> stringResource(R.string.album_feed_a_z)
-    AlbumListType.ALPHABETICAL_BY_ARTIST -> stringResource(R.string.album_feed_by_artist)
-    AlbumListType.STARRED -> stringResource(R.string.album_feed_starred)
-    AlbumListType.BY_YEAR -> stringResource(R.string.album_feed_by_year)
-    AlbumListType.BY_GENRE -> stringResource(R.string.album_feed_by_genre)
 }
 
 @Composable

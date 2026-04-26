@@ -53,6 +53,9 @@
     <string name="settings_theme_system">跟随系统</string>
     <string name="settings_theme_light">浅色</string>
     <string name="settings_theme_dark">深色</string>
+    <string name="settings_default_browse_title">默认浏览标签</string>
+    <string name="settings_default_browse_body">选择应用启动时显示的浏览标签。</string>
+    <string name="settings_default_album_feed">默认专辑源</string>
     <string name="settings_play_from_here">从此处播放</string>
     <string name="settings_remove_download">移除下载</string>
 
