@@ -238,33 +238,29 @@ private fun LibraryDetailScaffold(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item {
-            Card(
-                modifier = Modifier.padding(top = 8.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                ),
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    if (artwork != null) {
-                        ArtworkCard(
-                            model = artwork,
-                            contentDescription = title,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(320.dp),
-                            cornerRadiusDp = 34,
-                        )
-                    }
-                    Text(text = title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.padding(top = 14.dp))
-                    if (!subtitle.isNullOrBlank()) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp),
-                        )
-                    }
+            Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp)) {
+                if (artwork != null) {
+                    ArtworkCard(
+                        model = artwork,
+                        contentDescription = title,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(320.dp),
+                        cornerRadiusDp = 34,
+                    )
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.displaySmall,
+                    modifier = Modifier.padding(top = if (artwork != null) 14.dp else 0.dp),
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
             }
         }
