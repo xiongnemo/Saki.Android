@@ -238,7 +238,7 @@ private fun LibraryDetailScaffold(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item {
-            Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp)) {
+            Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp)) {
                 if (artwork != null) {
                     ArtworkCard(
                         model = artwork,
@@ -249,7 +249,11 @@ private fun LibraryDetailScaffold(
                         cornerRadiusDp = 34,
                     )
                 }
-                Text(text = title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.padding(top = 14.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.displaySmall,
+                    modifier = Modifier.padding(top = if (artwork != null) 14.dp else 0.dp),
+                )
                 if (!subtitle.isNullOrBlank()) {
                     Text(
                         text = subtitle,
