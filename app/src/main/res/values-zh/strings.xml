@@ -111,7 +111,6 @@
     <string name="server_config_latency_ms">%1$d 毫秒</string>
     <string name="server_config_latency_ms_sentence">%1$d 毫秒。</string>
 
-    <string name="library_artist_fallback">艺术家</string>
     <string name="library_loading_artist">正在加载艺术家</string>
     <string name="library_popular_songs">热门歌曲</string>
     <string name="library_popular_songs_subtitle">%1$s 的精选</string>
@@ -125,7 +124,6 @@
     <string name="library_tracks">曲目</string>
     <string name="library_playlist_sequence">播放列表顺序</string>
     <string name="library_play_playlist">播放列表</string>
-    <string name="library_open_artist">查看艺术家</string>
     <string name="library_available_offline">可离线播放</string>
     <string name="library_unknown_artist_album">未知艺术家 · 未知专辑</string>
     <string name="library_more_actions">更多操作</string>
@@ -181,8 +179,6 @@
     <string name="browse_no_artists">无艺术家</string>
     <string name="browse_no_artists_body">服务器未返回艺术家索引。</string>
     <string name="browse_shortcuts">快捷方式</string>
-    <string name="browse_shortcuts_subtitle">置顶艺术家</string>
-    <string name="browse_albums_subtitle">滑动切换标签或切换排序</string>
     <string name="browse_loading_albums">正在加载专辑</string>
     <string name="browse_no_albums">无专辑</string>
     <string name="browse_no_albums_body">试试其他专辑排序。</string>
@@ -190,11 +186,9 @@
     <string name="browse_no_playlists">无播放列表</string>
     <string name="browse_no_playlists_body">在服务器上创建播放列表后即可在此查看。</string>
     <string name="browse_playlists">播放列表</string>
-    <string name="browse_playlists_subtitle">打开完整播放列表页面</string>
     <string name="browse_loading_songs">正在加载歌曲</string>
     <string name="browse_no_songs">无歌曲</string>
     <string name="browse_no_songs_body">当前歌曲列表为空。</string>
-    <string name="browse_songs_subtitle">封面、元数据、下载状态及更多操作</string>
     <string name="browse_section_artists_headline">浏览曲库</string>
     <string name="browse_section_albums_headline">翻阅专辑</string>
     <string name="browse_section_playlists_headline">播放精选合集</string>

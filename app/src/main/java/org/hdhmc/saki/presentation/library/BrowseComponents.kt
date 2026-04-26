@@ -77,14 +77,9 @@ fun ArtistDetailScreen(
     onShowActions: (Song) -> Unit,
 ) {
     val albumCount = artist.albumCount
-    val subtitle = if (albumCount != null) {
-        albumCountText(albumCount)
-    } else {
-        stringResource(R.string.library_artist_fallback)
-    }
     LibraryDetailScaffold(
         title = artist.name,
-        subtitle = subtitle,
+        subtitle = if (albumCount != null) albumCountText(albumCount) else null,
         artwork = null,
     ) {
         when {
@@ -234,7 +229,7 @@ fun PlaylistDetailScreen(
 @Composable
 private fun LibraryDetailScaffold(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     artwork: Any?,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
@@ -262,12 +257,14 @@ private fun LibraryDetailScaffold(
                         )
                     }
                     Text(text = title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.padding(top = 14.dp))
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
                 }
             }
         }
@@ -278,14 +275,9 @@ private fun LibraryDetailScaffold(
 @Composable
 fun ArtistRow(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
     val albumCount = artist.albumCount
-    val subtitle = if (albumCount != null) {
-        albumCountText(albumCount)
-    } else {
-        stringResource(R.string.library_artist_fallback)
-    }
     RowCard(
         title = artist.name,
-        subtitle = subtitle,
+        subtitle = if (albumCount != null) albumCountText(albumCount) else null,
         artwork = null,
         onClick = { onOpenArtist(artist.id) },
     )
@@ -325,11 +317,6 @@ fun AlbumRow(album: AlbumSummary, server: ServerConfig, onOpenAlbum: (String) ->
 @Composable
 fun ArtistShortcutCard(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
     val albumCount = artist.albumCount
-    val subtitle = if (albumCount != null) {
-        releaseCountText(albumCount)
-    } else {
-        stringResource(R.string.library_open_artist)
-    }
     Card(
         modifier = Modifier
             .width(190.dp)
@@ -343,11 +330,13 @@ fun ArtistShortcutCard(artist: ArtistSummary, onOpenArtist: (String) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(text = artist.name, style = MaterialTheme.typography.titleLarge)
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (albumCount != null) {
+                Text(
+                    text = releaseCountText(albumCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -650,7 +639,7 @@ fun EmptyStateCard(title: String, body: String, icon: androidx.compose.ui.graphi
 }
 
 @Composable
-private fun RowCard(title: String, subtitle: String, artwork: Any?, onClick: () -> Unit) {
+private fun RowCard(title: String, subtitle: String?, artwork: Any?, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -669,7 +658,9 @@ private fun RowCard(title: String, subtitle: String, artwork: Any?, onClick: () 
                     .padding(start = if (artwork != null) 12.dp else 0.dp),
             ) {
                 Text(text = title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (subtitle != null) {
+                    Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
             Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
