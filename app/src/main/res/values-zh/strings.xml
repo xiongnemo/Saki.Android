@@ -182,6 +182,8 @@
     <string name="browse_loading_albums">正在加载专辑</string>
     <string name="browse_no_albums">无专辑</string>
     <string name="browse_no_albums_body">试试其他专辑排序。</string>
+    <string name="browse_show_album_grid">显示专辑网格</string>
+    <string name="browse_show_album_list">显示专辑列表</string>
     <string name="browse_loading_playlists">正在加载播放列表</string>
     <string name="browse_no_playlists">无播放列表</string>
     <string name="browse_no_playlists_body">在服务器上创建播放列表后即可在此查看。</string>

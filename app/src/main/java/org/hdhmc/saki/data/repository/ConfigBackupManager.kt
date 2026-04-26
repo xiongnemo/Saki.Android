@@ -134,6 +134,9 @@ class ConfigBackupManager @Inject constructor(
                         DataStoreAppPreferencesRepository.KEY_TEXT_SCALE.name -> {
                             ds[DataStoreAppPreferencesRepository.KEY_TEXT_SCALE] = value; settingsApplied = true
                         }
+                        DataStoreAppPreferencesRepository.KEY_ALBUM_VIEW_MODE.name -> {
+                            ds[DataStoreAppPreferencesRepository.KEY_ALBUM_VIEW_MODE] = value; settingsApplied = true
+                        }
                         DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY.name -> {
                             ds[DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY] = value; settingsApplied = true
                         }

@@ -9,6 +9,7 @@ import org.hdhmc.saki.data.repository.ConfigBackupManager
 import org.hdhmc.saki.data.repository.ImportResult
 import org.hdhmc.saki.domain.model.Album
 import org.hdhmc.saki.domain.model.AlbumListType
+import org.hdhmc.saki.domain.model.AlbumViewMode
 import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.AppPreferences
 import org.hdhmc.saki.domain.model.ThemeMode
@@ -281,6 +282,14 @@ class SakiAppViewModel @Inject constructor(
                 if (androidx.appcompat.app.AppCompatDelegate.getDefaultNightMode() != nightMode) {
                     androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode)
                 }
+            }
+        }
+    }
+
+    fun updateAlbumViewMode(mode: AlbumViewMode) {
+        viewModelScope.launch {
+            runCatching {
+                appPreferencesRepository.updateAlbumViewMode(mode)
             }
         }
     }
