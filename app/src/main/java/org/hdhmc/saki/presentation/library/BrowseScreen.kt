@@ -76,12 +76,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.hdhmc.saki.R
 import org.hdhmc.saki.domain.model.AlbumListType
+import org.hdhmc.saki.domain.model.AlbumSummary
 import org.hdhmc.saki.domain.model.AlbumViewMode
 import org.hdhmc.saki.domain.model.CachedSong
 import org.hdhmc.saki.domain.model.SearchResults
 import org.hdhmc.saki.domain.model.ServerConfig
 import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.presentation.BrowseSection
+import org.hdhmc.saki.presentation.AlbumFeedState
 import org.hdhmc.saki.presentation.rememberBrowseBackgroundBrush
 import org.hdhmc.saki.presentation.SakiAppUiState
 import org.hdhmc.saki.presentation.asString
@@ -311,7 +313,6 @@ private fun BrowsePager(
         state = pagerState,
         pagerSnapDistance = PagerSnapDistance.atMost(1),
     )
-
     LaunchedEffect(uiState.selectedBrowseSection) {
         val targetPage = sections.indexOf(uiState.selectedBrowseSection).coerceAtLeast(0)
         if (pagerState.settledPage != targetPage && pagerState.targetPage != targetPage) {
@@ -405,14 +406,10 @@ private fun BrowsePager(
                             )
 
                             BrowseSection.ALBUMS -> AlbumsPage(
-                                albums = uiState.albums,
+                                albumFeeds = uiState.albumFeeds,
                                 server = currentServer,
                                 selectedFeed = uiState.selectedAlbumFeed,
                                 viewMode = uiState.appPreferences.albumViewMode,
-                                isLoading = uiState.isAlbumsLoading,
-                                hasMore = uiState.hasMoreAlbums,
-                                isLoadingMore = uiState.isLoadingMoreAlbums,
-                                error = uiState.albumsError?.asString(),
                                 onSelectFeed = onSelectAlbumFeed,
                                 onLoadMore = onLoadMoreAlbums,
                                 onUpdateViewMode = onUpdateAlbumViewMode,
@@ -706,16 +703,13 @@ private fun ArtistsPage(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumsPage(
-    albums: List<org.hdhmc.saki.domain.model.AlbumSummary>,
+    albumFeeds: Map<AlbumListType, AlbumFeedState>,
     server: ServerConfig,
     selectedFeed: AlbumListType,
     viewMode: AlbumViewMode,
-    isLoading: Boolean,
-    hasMore: Boolean,
-    isLoadingMore: Boolean,
-    error: String?,
     onSelectFeed: (AlbumListType) -> Unit,
     onLoadMore: () -> Unit,
     onUpdateViewMode: (AlbumViewMode) -> Unit,
@@ -728,12 +722,89 @@ private fun AlbumsPage(
         AlbumListType.HIGHEST,
         AlbumListType.ALPHABETICAL_BY_NAME,
     )
+    val selectedFeedState = rememberUpdatedState(selectedFeed)
+    val feedPagerState = rememberPagerState(
+        initialPage = feeds.indexOf(selectedFeed).coerceAtLeast(0),
+        pageCount = { feeds.size },
+    )
+    val feedPagerFlingBehavior = PagerDefaults.flingBehavior(
+        state = feedPagerState,
+        pagerSnapDistance = PagerSnapDistance.atMost(1),
+    )
+    val coroutineScope = rememberCoroutineScope()
+    val highlightedFeed = feeds[feedPagerState.targetPage.coerceIn(0, feeds.lastIndex)]
+
+    LaunchedEffect(selectedFeed) {
+        val targetPage = feeds.indexOf(selectedFeed).coerceAtLeast(0)
+        if (feedPagerState.settledPage != targetPage && feedPagerState.targetPage != targetPage) {
+            feedPagerState.animateScrollToPage(targetPage)
+        }
+    }
+
+    LaunchedEffect(feedPagerState) {
+        snapshotFlow { feedPagerState.settledPage }
+            .distinctUntilChanged()
+            .map { feeds[it] }
+            .filter { it != selectedFeedState.value }
+            .collect { onSelectFeed(it) }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        AlbumFeedControls(
+            feeds = feeds,
+            selectedFeed = highlightedFeed,
+            viewMode = viewMode,
+            onSelectFeed = { feed ->
+                val targetPage = feeds.indexOf(feed)
+                if (targetPage >= 0 && feedPagerState.targetPage != targetPage) {
+                    coroutineScope.launch { feedPagerState.animateScrollToPage(targetPage) }
+                }
+            },
+            onUpdateViewMode = onUpdateViewMode,
+        )
+
+        HorizontalPager(
+            state = feedPagerState,
+            modifier = Modifier.weight(1f),
+            flingBehavior = feedPagerFlingBehavior,
+        ) { page ->
+            val feed = feeds[page]
+            val feedState = albumFeeds[feed] ?: AlbumFeedState()
+            AlbumFeedPageContent(
+                albums = feedState.albums,
+                server = server,
+                viewMode = viewMode,
+                isLoading = feedState.isLoading,
+                hasMore = feedState.hasMore,
+                isLoadingMore = feedState.isLoadingMore,
+                error = feedState.error?.asString(),
+                canLoadMore = feed == selectedFeed,
+                onLoadMore = onLoadMore,
+                onOpenAlbum = onOpenAlbum,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumFeedPageContent(
+    albums: List<AlbumSummary>,
+    server: ServerConfig,
+    viewMode: AlbumViewMode,
+    isLoading: Boolean,
+    hasMore: Boolean,
+    isLoadingMore: Boolean,
+    error: String?,
+    canLoadMore: Boolean,
+    onLoadMore: () -> Unit,
+    onOpenAlbum: (String) -> Unit,
+) {
     when (viewMode) {
         AlbumViewMode.GRID -> {
             val gridState = rememberLazyGridState()
-            LaunchedEffect(gridState, hasMore, isLoading, isLoadingMore, albums.size) {
+            LaunchedEffect(gridState, canLoadMore, hasMore, isLoading, isLoadingMore, albums.size) {
                 snapshotFlow {
-                    if (!hasMore || isLoading || isLoadingMore || albums.isEmpty()) {
+                    if (!canLoadMore || !hasMore || isLoading || isLoadingMore || albums.isEmpty()) {
                         false
                     } else {
                         val layoutInfo = gridState.layoutInfo
@@ -752,15 +823,6 @@ private fun AlbumsPage(
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    AlbumFeedControls(
-                        feeds = feeds,
-                        selectedFeed = selectedFeed,
-                        viewMode = viewMode,
-                        onSelectFeed = onSelectFeed,
-                        onUpdateViewMode = onUpdateViewMode,
-                    )
-                }
                 when {
                     isLoading && albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
                         LoadingStateCard(stringResource(R.string.browse_loading_albums))
@@ -791,9 +853,9 @@ private fun AlbumsPage(
 
         AlbumViewMode.LIST -> {
             val listState = rememberLazyListState()
-            LaunchedEffect(listState, hasMore, isLoading, isLoadingMore, albums.size) {
+            LaunchedEffect(listState, canLoadMore, hasMore, isLoading, isLoadingMore, albums.size) {
                 snapshotFlow {
-                    if (!hasMore || isLoading || isLoadingMore || albums.isEmpty()) {
+                    if (!canLoadMore || !hasMore || isLoading || isLoadingMore || albums.isEmpty()) {
                         false
                     } else {
                         val layoutInfo = listState.layoutInfo
@@ -811,15 +873,6 @@ private fun AlbumsPage(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
-                item {
-                    AlbumFeedControls(
-                        feeds = feeds,
-                        selectedFeed = selectedFeed,
-                        viewMode = viewMode,
-                        onSelectFeed = onSelectFeed,
-                        onUpdateViewMode = onUpdateViewMode,
-                    )
-                }
                 when {
                     isLoading && albums.isEmpty() -> item {
                         LoadingStateCard(stringResource(R.string.browse_loading_albums))
@@ -867,11 +920,18 @@ private fun AlbumFeedControls(
         AlbumViewMode.LIST -> stringResource(R.string.browse_show_album_list)
     }
 
+    val selectedIndex = feeds.indexOf(selectedFeed).coerceAtLeast(0)
+    val lazyRowState = rememberLazyListState()
+    LaunchedEffect(selectedIndex) {
+        lazyRowState.animateScrollToItem(selectedIndex)
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LazyRow(
+            state = lazyRowState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(vertical = 10.dp),
         ) {
