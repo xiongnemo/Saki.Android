@@ -45,6 +45,7 @@ data class AppPreferences(
     val albumViewMode: AlbumViewMode = AlbumViewMode.GRID,
     val defaultBrowseTab: DefaultBrowseTab = DefaultBrowseTab.ARTISTS,
     val defaultAlbumFeed: AlbumListType = AlbumListType.NEWEST,
+    val lastSelectedServerId: Long? = null,
 )
 
 enum class DefaultBrowseTab(val storageKey: String) {

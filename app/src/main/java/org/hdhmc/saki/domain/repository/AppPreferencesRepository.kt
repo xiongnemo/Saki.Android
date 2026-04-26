@@ -25,4 +25,6 @@ interface AppPreferencesRepository {
     suspend fun updateDefaultBrowseTab(tab: DefaultBrowseTab)
 
     suspend fun updateDefaultAlbumFeed(feed: AlbumListType)
+
+    suspend fun updateLastSelectedServerId(serverId: Long)
 }
