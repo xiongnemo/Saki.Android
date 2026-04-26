@@ -22,6 +22,7 @@ import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.RepeatModeSetting
 import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.domain.model.StreamQuality
+import org.hdhmc.saki.domain.repository.CachedSongRepository
 import org.hdhmc.saki.domain.repository.PlaybackManager
 import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
 import org.hdhmc.saki.domain.repository.StreamCacheRepository
@@ -53,6 +54,7 @@ class DefaultPlaybackManager @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
     @param:MainDispatcher private val mainDispatcher: CoroutineDispatcher,
     private val playbackPreferencesRepository: PlaybackPreferencesRepository,
+    private val cachedSongRepository: CachedSongRepository,
     private val streamCacheRepository: StreamCacheRepository,
     private val networkTypeProvider: NetworkTypeProvider,
 ) : PlaybackManager {
@@ -85,10 +87,53 @@ class DefaultPlaybackManager @Inject constructor(
         }
     }
 
-    private fun resolveQualityForSong(serverId: Long, songId: String): StreamQuality {
-        val preferred = effectiveQuality()
+    private fun resolveQualityForSong(
+        serverId: Long,
+        songId: String,
+        preferred: StreamQuality = effectiveQuality(),
+    ): StreamQuality {
         val cachedKey = streamCacheRepository.findCachedQualityKey(serverId, songId, preferred)
         return if (cachedKey != null) StreamQuality.fromStorageKey(cachedKey) else preferred
+    }
+
+    private fun Song.toPreferredMediaItem(
+        serverId: Long,
+        preferredQuality: StreamQuality,
+        cachedSong: CachedSong?,
+    ): MediaItem {
+        if (cachedSong != null) {
+            return cachedSong.toCachedMediaItem()
+        }
+
+        val quality = resolveQualityForSong(serverId, id, preferredQuality)
+        return toPlaybackRequestMediaItem(
+            serverId = serverId,
+            qualityLabel = quality.label,
+            streamCacheKey = streamCacheRepository.buildCacheKey(serverId, id, quality),
+            artworkUri = null,
+            maxBitRate = quality.maxBitRate,
+            format = quality.format,
+        )
+    }
+
+    private suspend fun PlaybackRequest.toPreferredMediaItemOrNull(): MediaItem? {
+        val preferredQuality = effectiveQuality()
+        val cachedSong = cachedSongRepository.getPlayableCachedSong(serverId, songId, preferredQuality)
+        if (cachedSong != null) {
+            return cachedSong.toCachedMediaItem()
+        }
+
+        val quality = resolveQualityForSong(serverId, songId, preferredQuality)
+        if (quality.maxBitRate == maxBitRate && quality.format == format) {
+            return null
+        }
+
+        return copy(
+            qualityLabel = quality.label,
+            streamCacheKey = streamCacheRepository.buildCacheKey(serverId, songId, quality),
+            maxBitRate = quality.maxBitRate,
+            format = quality.format,
+        ).toLogicalMediaItem()
     }
 
     init {
@@ -137,15 +182,13 @@ class DefaultPlaybackManager @Inject constructor(
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
         shuffleDisplayOrder = null
         persistShuffleState()
+        val preferredQuality = effectiveQuality()
+        val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality)
         val mediaItems = songs.map { song ->
-            val quality = resolveQualityForSong(serverId, song.id)
-            song.toPlaybackRequestMediaItem(
+            song.toPreferredMediaItem(
                 serverId = serverId,
-                qualityLabel = quality.label,
-                streamCacheKey = streamCacheRepository.buildCacheKey(serverId, song.id, quality),
-                artworkUri = null,
-                maxBitRate = quality.maxBitRate,
-                format = quality.format,
+                preferredQuality = preferredQuality,
+                cachedSong = cachedSongsById[song.id],
             )
         }
 
@@ -167,15 +210,13 @@ class DefaultPlaybackManager @Inject constructor(
     ) {
         if (songs.isEmpty()) return
         shuffleDisplayOrder = null
+        val preferredQuality = effectiveQuality()
+        val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality)
         val mediaItems = songs.map { song ->
-            val quality = resolveQualityForSong(serverId, song.id)
-            song.toPlaybackRequestMediaItem(
+            song.toPreferredMediaItem(
                 serverId = serverId,
-                qualityLabel = quality.label,
-                streamCacheKey = streamCacheRepository.buildCacheKey(serverId, song.id, quality),
-                artworkUri = null,
-                maxBitRate = quality.maxBitRate,
-                format = quality.format,
+                preferredQuality = preferredQuality,
+                cachedSong = cachedSongsById[song.id],
             )
         }
 
@@ -225,15 +266,13 @@ class DefaultPlaybackManager @Inject constructor(
     ) {
         if (songs.isEmpty()) return
         clearShuffleIfActive()
+        val preferredQuality = effectiveQuality()
+        val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality)
         val mediaItems = songs.map { song ->
-            val quality = resolveQualityForSong(serverId, song.id)
-            song.toPlaybackRequestMediaItem(
+            song.toPreferredMediaItem(
                 serverId = serverId,
-                qualityLabel = quality.label,
-                streamCacheKey = streamCacheRepository.buildCacheKey(serverId, song.id, quality),
-                artworkUri = null,
-                maxBitRate = quality.maxBitRate,
-                format = quality.format,
+                preferredQuality = preferredQuality,
+                cachedSong = cachedSongsById[song.id],
             )
         }
 
@@ -248,14 +287,12 @@ class DefaultPlaybackManager @Inject constructor(
         song: Song,
     ) {
         clearShuffleIfActive()
-        val quality = resolveQualityForSong(serverId, song.id)
-        val mediaItem = song.toPlaybackRequestMediaItem(
+        val preferredQuality = effectiveQuality()
+        val cachedSong = cachedSongRepository.getPlayableCachedSong(serverId, song.id, preferredQuality)
+        val mediaItem = song.toPreferredMediaItem(
             serverId = serverId,
-            qualityLabel = quality.label,
-            streamCacheKey = streamCacheRepository.buildCacheKey(serverId, song.id, quality),
-            artworkUri = null,
-            maxBitRate = quality.maxBitRate,
-            format = quality.format,
+            preferredQuality = preferredQuality,
+            cachedSong = cachedSong,
         )
 
         withController { activeController ->
@@ -291,24 +328,7 @@ class DefaultPlaybackManager @Inject constructor(
                 val nextItem = activeController.getMediaItemAt(nextIndex)
                 val request = nextItem.toPlaybackRequestOrNull()
                 if (request != null && !request.isCached) {
-                    val quality = resolveQualityForSong(request.serverId, request.songId)
-                    if (quality.maxBitRate != request.maxBitRate) {
-                        val rebuilt = request.copy(
-                            qualityLabel = quality.label,
-                            streamCacheKey = streamCacheRepository.buildCacheKey(request.serverId, request.songId, quality),
-                            maxBitRate = quality.maxBitRate,
-                            format = quality.format,
-                        ).let { updated ->
-                            MediaItem.Builder()
-                                .setMediaId(updated.songId)
-                                .setMediaMetadata(updated.toMediaMetadata())
-                                .setRequestMetadata(
-                                    MediaItem.RequestMetadata.Builder()
-                                        .setExtras(updated.toBundle())
-                                        .build(),
-                                )
-                                .build()
-                        }
+                    request.toPreferredMediaItemOrNull()?.let { rebuilt ->
                         activeController.replaceMediaItem(nextIndex, rebuilt)
                     }
                 }
@@ -562,6 +582,18 @@ private fun Int.toRepeatModeSetting(): RepeatModeSetting {
         Player.REPEAT_MODE_ALL -> RepeatModeSetting.ALL
         else -> RepeatModeSetting.OFF
     }
+}
+
+private fun PlaybackRequest.toLogicalMediaItem(): MediaItem {
+    return MediaItem.Builder()
+        .setMediaId(songId)
+        .setMediaMetadata(toMediaMetadata())
+        .setRequestMetadata(
+            MediaItem.RequestMetadata.Builder()
+                .setExtras(toBundle())
+                .build(),
+        )
+        .build()
 }
 
 @UnstableApi
