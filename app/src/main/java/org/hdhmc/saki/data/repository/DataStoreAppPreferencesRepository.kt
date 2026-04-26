@@ -62,8 +62,14 @@ class DataStoreAppPreferencesRepository @Inject constructor(
         dataStore.edit { it[KEY_DEFAULT_ALBUM_FEED] = feed.apiValue }
     }
 
-    override suspend fun updateLastSelectedServerId(serverId: Long) {
-        dataStore.edit { it[KEY_LAST_SELECTED_SERVER_ID] = serverId }
+    override suspend fun updateLastSelectedServerId(serverId: Long?) {
+        dataStore.edit {
+            if (serverId == null) {
+                it.remove(KEY_LAST_SELECTED_SERVER_ID)
+            } else {
+                it[KEY_LAST_SELECTED_SERVER_ID] = serverId
+            }
+        }
     }
 
     companion object {

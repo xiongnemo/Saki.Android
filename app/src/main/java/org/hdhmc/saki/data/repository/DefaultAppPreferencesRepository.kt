@@ -59,7 +59,7 @@ class DefaultAppPreferencesRepository @Inject constructor(
         // Default album feed preference is only supported via DataStore; no-op here
     }
 
-    override suspend fun updateLastSelectedServerId(serverId: Long) {
+    override suspend fun updateLastSelectedServerId(serverId: Long?) {
         // Last selected server is only supported via DataStore; no-op here
     }
 }

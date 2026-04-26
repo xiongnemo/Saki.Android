@@ -26,5 +26,5 @@ interface AppPreferencesRepository {
 
     suspend fun updateDefaultAlbumFeed(feed: AlbumListType)
 
-    suspend fun updateLastSelectedServerId(serverId: Long)
+    suspend fun updateLastSelectedServerId(serverId: Long?)
 }
