@@ -54,7 +54,7 @@ class DefaultCachedSongRepository @Inject constructor(
         serverId: Long,
         song: Song,
     ): CachedSong = withContext(ioDispatcher) {
-        val quality = playbackPreferencesRepository.getPreferences().streamQuality
+        val quality = playbackPreferencesRepository.getPreferences().downloadQuality
         val existing = cachedSongDao.getCachedSong(serverId, song.id)
         if (
             existing != null &&

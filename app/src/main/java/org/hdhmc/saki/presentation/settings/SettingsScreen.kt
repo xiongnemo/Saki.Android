@@ -105,6 +105,7 @@ fun SettingsScreen(
     onPlayCachedQueue: (List<CachedSong>, Int) -> Unit,
     onDeleteCachedSong: (String) -> Unit,
     onClearCachedSongs: () -> Unit,
+    onUpdateDownloadQuality: (StreamQuality) -> Unit,
 ) {
     val background = rememberBrowseBackgroundBrush()
     val selectedServer = uiState.servers.firstOrNull { it.id == uiState.selectedServerId }
@@ -603,6 +604,24 @@ fun SettingsScreen(
                 body = downloadsBodyWithServer,
                 action = null,
             ) {
+                Text(
+                    text = stringResource(R.string.settings_download_quality),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val currentDownloadQuality = uiState.playbackState.preferences.downloadQuality
+                    StreamQuality.entries.forEach { quality ->
+                        FilterChip(
+                            selected = currentDownloadQuality == quality,
+                            onClick = { onUpdateDownloadQuality(quality) },
+                            label = { Text(quality.localizedLabel()) },
+                        )
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (visibleCachedSongs.isNotEmpty()) {
                         OutlinedButton(onClick = { onPlayCachedQueue(visibleCachedSongs, 0) }, shape = MaterialTheme.shapes.small) {

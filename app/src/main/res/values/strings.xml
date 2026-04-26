@@ -272,6 +272,9 @@
     <string name="error_clear_cover_art_cache">Unable to clear cover art cache.</string>
     <string name="message_stream_quality_set">Streaming quality set to %1$s.</string>
     <string name="error_update_stream_quality">Unable to update stream quality.</string>
+    <string name="settings_download_quality">Download quality</string>
+    <string name="message_download_quality_set">Download quality set to %1$s.</string>
+    <string name="error_update_download_quality">Unable to update download quality.</string>
     <string name="message_sound_balancing_set">Sound balancing set to %1$s.</string>
     <string name="error_update_sound_balancing">Unable to update sound balancing.</string>
     <string name="message_stream_cache_limit_updated">Stream cache limit updated.</string>

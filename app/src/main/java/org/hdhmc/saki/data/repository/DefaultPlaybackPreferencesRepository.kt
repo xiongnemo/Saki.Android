@@ -39,6 +39,9 @@ class DefaultPlaybackPreferencesRepository @Inject constructor(
         }
     }
 
+    override suspend fun updateDownloadQuality(quality: StreamQuality) =
+        error("Room-backed repository does not support download quality. Use DataStore implementation.")
+
     override suspend fun updateAdaptiveQuality(enabled: Boolean) =
         error("Room-backed repository does not support adaptive quality. Use DataStore implementation.")
     override suspend fun updateWifiStreamQuality(quality: StreamQuality) =

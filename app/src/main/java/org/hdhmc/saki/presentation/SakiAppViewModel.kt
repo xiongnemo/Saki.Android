@@ -684,6 +684,20 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    fun updateDownloadQuality(quality: StreamQuality) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPreferencesRepository.updateDownloadQuality(quality)
+            }.onSuccess {
+                snackbarMessages.emit(
+                    SnackbarMessage(UiText.resource(R.string.message_download_quality_set, UiText.resource(quality.labelRes()))),
+                )
+            }.onFailure { throwable ->
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_download_quality)))
+            }
+        }
+    }
+
     fun updateAdaptiveQuality(enabled: Boolean) {
         viewModelScope.launch {
             playbackPreferencesRepository.updateAdaptiveQuality(enabled)

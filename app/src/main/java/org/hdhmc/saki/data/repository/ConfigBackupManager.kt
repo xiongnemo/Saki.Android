@@ -146,6 +146,9 @@ class ConfigBackupManager @Inject constructor(
                         DataStorePlaybackPreferencesRepository.KEY_MOBILE_STREAM_QUALITY.name -> {
                             ds[DataStorePlaybackPreferencesRepository.KEY_MOBILE_STREAM_QUALITY] = value; settingsApplied = true
                         }
+                        DataStorePlaybackPreferencesRepository.KEY_DOWNLOAD_QUALITY.name -> {
+                            ds[DataStorePlaybackPreferencesRepository.KEY_DOWNLOAD_QUALITY] = value; settingsApplied = true
+                        }
                     }
                 }
             }
