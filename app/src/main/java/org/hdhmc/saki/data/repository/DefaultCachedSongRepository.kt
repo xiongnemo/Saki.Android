@@ -50,6 +50,27 @@ class DefaultCachedSongRepository @Inject constructor(
         cachedSongDao.getCachedSong(serverId, songId)?.toDomain()
     }
 
+    override suspend fun getPlayableCachedSong(
+        serverId: Long,
+        songId: String,
+        preferredQuality: StreamQuality,
+    ): CachedSong? = withContext(ioDispatcher) {
+        cachedSongDao.getCachedSong(serverId, songId)
+            ?.toDomain()
+            ?.takeIf { song -> song.canPlayAt(preferredQuality) }
+    }
+
+    override suspend fun getPlayableCachedSongs(
+        serverId: Long,
+        preferredQuality: StreamQuality,
+    ): Map<String, CachedSong> = withContext(ioDispatcher) {
+        cachedSongDao.getCachedSongsForServer(serverId)
+            .asSequence()
+            .map(CachedSongEntity::toDomain)
+            .filter { song -> song.canPlayAt(preferredQuality) }
+            .associateBy(CachedSong::songId)
+    }
+
     override suspend fun cacheSong(
         serverId: Long,
         song: Song,
@@ -316,6 +337,14 @@ private fun CachedSongEntity.toDomain(): CachedSong {
         fileSizeBytes = fileSizeBytes,
         downloadedAt = downloadedAt,
     )
+}
+
+private fun CachedSong.canPlayAt(preferredQuality: StreamQuality): Boolean {
+    return File(localPath).isFile && quality.isAtLeast(preferredQuality)
+}
+
+private fun StreamQuality.isAtLeast(preferredQuality: StreamQuality): Boolean {
+    return ordinal <= preferredQuality.ordinal
 }
 
 private fun buildCacheFileStem(

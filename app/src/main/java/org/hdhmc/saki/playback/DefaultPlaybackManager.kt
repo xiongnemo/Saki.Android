@@ -27,7 +27,6 @@ import org.hdhmc.saki.domain.repository.PlaybackManager
 import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
 import org.hdhmc.saki.domain.repository.StreamCacheRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutionException
 import javax.inject.Inject
@@ -97,10 +96,12 @@ class DefaultPlaybackManager @Inject constructor(
         return if (cachedKey != null) StreamQuality.fromStorageKey(cachedKey) else preferred
     }
 
-    private suspend fun Song.toPreferredMediaItem(serverId: Long): MediaItem {
-        val preferredQuality = effectiveQuality()
-        val cachedSong = cachedSongRepository.getCachedSong(serverId, id)
-        if (cachedSong != null && cachedSong.canPlayAt(preferredQuality)) {
+    private fun Song.toPreferredMediaItem(
+        serverId: Long,
+        preferredQuality: StreamQuality,
+        cachedSong: CachedSong?,
+    ): MediaItem {
+        if (cachedSong != null) {
             return cachedSong.toCachedMediaItem()
         }
 
@@ -117,8 +118,8 @@ class DefaultPlaybackManager @Inject constructor(
 
     private suspend fun PlaybackRequest.toPreferredMediaItemOrNull(): MediaItem? {
         val preferredQuality = effectiveQuality()
-        val cachedSong = cachedSongRepository.getCachedSong(serverId, songId)
-        if (cachedSong != null && cachedSong.canPlayAt(preferredQuality)) {
+        val cachedSong = cachedSongRepository.getPlayableCachedSong(serverId, songId, preferredQuality)
+        if (cachedSong != null) {
             return cachedSong.toCachedMediaItem()
         }
 
@@ -181,7 +182,15 @@ class DefaultPlaybackManager @Inject constructor(
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
         shuffleDisplayOrder = null
         persistShuffleState()
-        val mediaItems = songs.map { song -> song.toPreferredMediaItem(serverId) }
+        val preferredQuality = effectiveQuality()
+        val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality)
+        val mediaItems = songs.map { song ->
+            song.toPreferredMediaItem(
+                serverId = serverId,
+                preferredQuality = preferredQuality,
+                cachedSong = cachedSongsById[song.id],
+            )
+        }
 
         withController { activeController ->
             val safeStartIndex = startIndex.coerceIn(mediaItems.indices)
@@ -201,7 +210,15 @@ class DefaultPlaybackManager @Inject constructor(
     ) {
         if (songs.isEmpty()) return
         shuffleDisplayOrder = null
-        val mediaItems = songs.map { song -> song.toPreferredMediaItem(serverId) }
+        val preferredQuality = effectiveQuality()
+        val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality)
+        val mediaItems = songs.map { song ->
+            song.toPreferredMediaItem(
+                serverId = serverId,
+                preferredQuality = preferredQuality,
+                cachedSong = cachedSongsById[song.id],
+            )
+        }
 
         withController { activeController ->
             val safeStartIndex = startIndex.coerceIn(mediaItems.indices)
@@ -249,7 +266,15 @@ class DefaultPlaybackManager @Inject constructor(
     ) {
         if (songs.isEmpty()) return
         clearShuffleIfActive()
-        val mediaItems = songs.map { song -> song.toPreferredMediaItem(serverId) }
+        val preferredQuality = effectiveQuality()
+        val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality)
+        val mediaItems = songs.map { song ->
+            song.toPreferredMediaItem(
+                serverId = serverId,
+                preferredQuality = preferredQuality,
+                cachedSong = cachedSongsById[song.id],
+            )
+        }
 
         withController { activeController ->
             activeController.addMediaItems(mediaItems)
@@ -262,7 +287,13 @@ class DefaultPlaybackManager @Inject constructor(
         song: Song,
     ) {
         clearShuffleIfActive()
-        val mediaItem = song.toPreferredMediaItem(serverId)
+        val preferredQuality = effectiveQuality()
+        val cachedSong = cachedSongRepository.getPlayableCachedSong(serverId, song.id, preferredQuality)
+        val mediaItem = song.toPreferredMediaItem(
+            serverId = serverId,
+            preferredQuality = preferredQuality,
+            cachedSong = cachedSong,
+        )
 
         withController { activeController ->
             val insertIndex = if (activeController.currentMediaItemIndex == C.INDEX_UNSET) {
@@ -551,14 +582,6 @@ private fun Int.toRepeatModeSetting(): RepeatModeSetting {
         Player.REPEAT_MODE_ALL -> RepeatModeSetting.ALL
         else -> RepeatModeSetting.OFF
     }
-}
-
-private fun CachedSong.canPlayAt(preferredQuality: StreamQuality): Boolean {
-    return File(localPath).isFile && quality.isAtLeast(preferredQuality)
-}
-
-private fun StreamQuality.isAtLeast(preferredQuality: StreamQuality): Boolean {
-    return StreamQuality.entries.indexOf(this) <= StreamQuality.entries.indexOf(preferredQuality)
 }
 
 private fun PlaybackRequest.toLogicalMediaItem(): MediaItem {
