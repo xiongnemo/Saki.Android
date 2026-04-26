@@ -4,6 +4,7 @@ import org.hdhmc.saki.data.remote.EndpointSelector
 import org.hdhmc.saki.data.remote.subsonic.SubsonicApiException
 import org.hdhmc.saki.data.remote.subsonic.SubsonicApiService
 import org.hdhmc.saki.di.IoDispatcher
+import org.hdhmc.saki.domain.model.AlbumListType
 import org.hdhmc.saki.domain.model.DEFAULT_SUBSONIC_API_VERSION
 import org.hdhmc.saki.domain.model.DEFAULT_SUBSONIC_CLIENT
 import org.hdhmc.saki.domain.model.ServerConfig
@@ -218,6 +219,53 @@ class DefaultSubsonicRepositoryTest {
         assertEquals("5", url?.queryParameter("artistCount"))
         assertEquals("6", url?.queryParameter("albumCount"))
         assertEquals("7", url?.queryParameter("songCount"))
+    }
+
+    @Test
+    fun `getAlbumList2 sends pagination parameters`() = runTest {
+        primaryServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "subsonic-response": {
+                        "status": "ok",
+                        "version": "1.16.1",
+                        "albumList2": {
+                          "album": [
+                            {
+                              "id": "album-1",
+                              "name": "Dummy",
+                              "artist": "Portishead",
+                              "artistId": "artist-1",
+                              "songCount": 10
+                            }
+                          ]
+                        }
+                      }
+                    }
+                    """.trimIndent(),
+                ),
+        )
+
+        val result = repository.getAlbumList(
+            serverId = PRIMARY_ONLY_SERVER_ID,
+            type = AlbumListType.NEWEST,
+            size = 36,
+            offset = 72,
+        )
+
+        assertEquals(primaryBaseUrl(), result.endpoint.baseUrl)
+        assertEquals(1, result.data.size)
+        assertEquals("Dummy", result.data.first().name)
+
+        val request = primaryServer.takeRequest()
+        val url = request.requestUrl
+        assertEquals("/rest/getAlbumList2.view", url?.encodedPath)
+        assertEquals("newest", url?.queryParameter("type"))
+        assertEquals("36", url?.queryParameter("size"))
+        assertEquals("72", url?.queryParameter("offset"))
     }
 
     private fun createApiService(): SubsonicApiService {

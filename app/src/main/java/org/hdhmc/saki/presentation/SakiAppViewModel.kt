@@ -57,6 +57,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+private const val ALBUMS_PAGE_SIZE = 36
+
 @HiltViewModel
 @OptIn(FlowPreview::class)
 class SakiAppViewModel @Inject constructor(
@@ -330,9 +332,70 @@ class SakiAppViewModel @Inject constructor(
     fun selectAlbumFeed(type: AlbumListType) {
         val serverId = uiState.value.selectedServerId ?: return
         mutableUiState.update { state ->
-            state.copy(selectedAlbumFeed = type)
+            state.copy(
+                selectedAlbumFeed = type,
+                albums = emptyList(),
+                albumsOffset = 0,
+                hasMoreAlbums = type.supportsPagination(),
+                isLoadingMoreAlbums = false,
+                albumsError = null,
+            )
         }
         loadAlbums(serverId, type, forceRefresh = true)
+    }
+
+    fun loadMoreAlbums() {
+        val state = uiState.value
+        val serverId = state.selectedServerId ?: return
+        val type = state.selectedAlbumFeed
+        if (
+            !type.supportsPagination() ||
+            !state.hasMoreAlbums ||
+            state.isAlbumsLoading ||
+            state.isLoadingMoreAlbums
+        ) {
+            return
+        }
+        val offset = state.albumsOffset
+
+        viewModelScope.launch {
+            mutableUiState.update { it.copy(isLoadingMoreAlbums = true, albumsError = null) }
+
+            runCatching {
+                subsonicRepository.getAlbumList(
+                    serverId = serverId,
+                    type = type,
+                    size = ALBUMS_PAGE_SIZE,
+                    offset = offset,
+                ).data
+            }.onSuccess { page ->
+                if (uiState.value.selectedServerId == serverId && uiState.value.selectedAlbumFeed == type) {
+                    var mergedAlbums = emptyList<AlbumSummary>()
+                    mutableUiState.update { current ->
+                        mergedAlbums = (current.albums + page).distinctBy(AlbumSummary::id)
+                        val addedAny = mergedAlbums.size > current.albums.size
+                        current.copy(
+                            albums = mergedAlbums,
+                            albumsOffset = current.albumsOffset + page.size,
+                            hasMoreAlbums = page.size >= ALBUMS_PAGE_SIZE && addedAny,
+                            isLoadingMoreAlbums = false,
+                            albumsError = null,
+                        )
+                    }
+                    runCatching { libraryCacheRepository.saveAlbums(serverId, type, mergedAlbums) }
+                        .onFailure { Log.w("SakiApp", "Failed to cache albums", it) }
+                }
+            }.onFailure { throwable ->
+                if (uiState.value.selectedServerId == serverId && uiState.value.selectedAlbumFeed == type) {
+                    mutableUiState.update {
+                        it.copy(
+                            isLoadingMoreAlbums = false,
+                            albumsError = throwable.localizedOr(R.string.error_load_albums),
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun refreshCurrentTab() {
@@ -977,7 +1040,13 @@ class SakiAppViewModel @Inject constructor(
             val albums = loadCachedOrNull { libraryCacheRepository.getAlbums(serverId, selectedAlbumFeed) }
             if (!albums.isNullOrEmpty() && uiState.value.selectedServerId == serverId &&
                 uiState.value.selectedAlbumFeed == selectedAlbumFeed) {
-                mutableUiState.update { it.copy(albums = albums) }
+                mutableUiState.update {
+                    it.copy(
+                        albums = albums,
+                        albumsOffset = albums.size,
+                        hasMoreAlbums = selectedAlbumFeed.supportsPagination(),
+                    )
+                }
             }
             val playlists = loadCachedOrNull { libraryCacheRepository.getPlaylists(serverId) }
             if (!playlists.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
@@ -1050,23 +1119,58 @@ class SakiAppViewModel @Inject constructor(
             if (!forceRefresh) {
                 val cached = runCatching { libraryCacheRepository.getAlbums(serverId, type) }.getOrNull()
                 if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { it.copy(albums = cached) }
+                    mutableUiState.update {
+                        it.copy(
+                            albums = cached,
+                            albumsOffset = cached.size,
+                            hasMoreAlbums = type.supportsPagination(),
+                        )
+                    }
                 }
             }
 
-            mutableUiState.update { it.copy(isAlbumsLoading = true, albumsError = null) }
+            mutableUiState.update {
+                it.copy(
+                    isAlbumsLoading = true,
+                    isLoadingMoreAlbums = false,
+                    albumsOffset = 0,
+                    hasMoreAlbums = type.supportsPagination(),
+                    albumsError = null,
+                )
+            }
 
             runCatching {
-                subsonicRepository.getAlbumList(serverId = serverId, type = type, size = 36).data
+                subsonicRepository.getAlbumList(
+                    serverId = serverId,
+                    type = type,
+                    size = ALBUMS_PAGE_SIZE,
+                    offset = 0,
+                ).data
             }.onSuccess { albums ->
-                if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { it.copy(albums = albums, isAlbumsLoading = false, albumsError = null) }
+                val uniqueAlbums = albums.distinctBy(AlbumSummary::id)
+                if (uiState.value.selectedServerId == serverId && uiState.value.selectedAlbumFeed == type) {
+                    mutableUiState.update {
+                        it.copy(
+                            albums = uniqueAlbums,
+                            albumsOffset = albums.size,
+                            hasMoreAlbums = type.supportsPagination() && albums.size >= ALBUMS_PAGE_SIZE,
+                            isAlbumsLoading = false,
+                            isLoadingMoreAlbums = false,
+                            albumsError = null,
+                        )
+                    }
                 }
-                runCatching { libraryCacheRepository.saveAlbums(serverId, type, albums) }
+                runCatching { libraryCacheRepository.saveAlbums(serverId, type, uniqueAlbums) }
                     .onFailure { Log.w("SakiApp", "Failed to cache albums", it) }
             }.onFailure { throwable ->
-                mutableUiState.update {
-                    it.copy(isAlbumsLoading = false, albumsError = throwable.localizedOr(R.string.error_load_albums))
+                if (uiState.value.selectedServerId == serverId && uiState.value.selectedAlbumFeed == type) {
+                    mutableUiState.update {
+                        it.copy(
+                            isAlbumsLoading = false,
+                            isLoadingMoreAlbums = false,
+                            albumsError = throwable.localizedOr(R.string.error_load_albums),
+                        )
+                    }
                 }
             }
         }
@@ -1400,6 +1504,9 @@ data class SakiAppUiState(
     val artistError: UiText? = null,
     val albums: List<AlbumSummary> = emptyList(),
     val isAlbumsLoading: Boolean = false,
+    val albumsOffset: Int = 0,
+    val hasMoreAlbums: Boolean = true,
+    val isLoadingMoreAlbums: Boolean = false,
     val albumsError: UiText? = null,
     val selectedAlbum: Album? = null,
     val isAlbumLoading: Boolean = false,
@@ -1434,4 +1541,8 @@ private fun Song.withFallbackAlbumMetadata(album: Album): Song {
         artistId = artistId ?: album.artistId,
         coverArtId = coverArtId ?: album.coverArtId,
     )
+}
+
+private fun AlbumListType.supportsPagination(): Boolean {
+    return this != AlbumListType.RANDOM && this != AlbumListType.STARRED
 }

@@ -58,7 +58,7 @@ internal fun SubsonicResponseDto.toLibraryIndexes(): LibraryIndexes {
 }
 
 internal fun SubsonicResponseDto.toAlbumSummaries(): List<AlbumSummary> {
-    return albumList?.album.orEmpty().map(AlbumDto::toAlbumSummary)
+    return (albumList2 ?: albumList)?.album.orEmpty().map(AlbumDto::toAlbumSummary)
 }
 
 internal fun SubsonicResponseDto.toArtist(): Artist {
