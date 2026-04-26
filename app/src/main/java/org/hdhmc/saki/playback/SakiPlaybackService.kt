@@ -20,6 +20,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSession.ConnectionResult
 import androidx.media3.session.MediaSessionService
@@ -27,6 +28,7 @@ import androidx.media3.session.MediaSession.ControllerInfo
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import org.hdhmc.saki.MainActivity
+import org.hdhmc.saki.R
 import org.hdhmc.saki.data.remote.HTTP_USER_AGENT
 import org.hdhmc.saki.domain.model.LyricLine
 import org.hdhmc.saki.domain.model.SoundBalancingMode
@@ -59,6 +61,8 @@ import okhttp3.OkHttpClient
 class SakiPlaybackService : MediaSessionService() {
     companion object {
         const val ACTION_SET_SHUFFLE_ORDER = "saki.action.SET_SHUFFLE_ORDER"
+        const val ACTION_TOGGLE_REPEAT = "saki.action.TOGGLE_REPEAT"
+        const val ACTION_TOGGLE_SHUFFLE = "saki.action.TOGGLE_SHUFFLE"
         const val EXTRA_SHUFFLE_SEED = "saki.extra.SHUFFLE_SEED"
         const val EXTRA_SHUFFLE_ANCHOR = "saki.extra.SHUFFLE_ANCHOR"
         const val EXTRA_SHUFFLE_COUNT = "saki.extra.SHUFFLE_COUNT"
@@ -153,6 +157,7 @@ class SakiPlaybackService : MediaSessionService() {
                     ExoPlayer.PreloadConfiguration(10 * C.MICROS_PER_SECOND)
                 addListener(PlaybackRecoveryListener())
                 addListener(PlayQueueSaveListener())
+                addListener(NotificationMediaButtonListener())
                 addListener(object : Player.Listener {
                     override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
                         val pending = pendingShuffleOrder ?: return
@@ -180,6 +185,7 @@ class SakiPlaybackService : MediaSessionService() {
             .setCallback(SakiMediaSessionCallback())
             .setBitmapLoader(CoilBitmapLoader(this))
             .build()
+        syncMediaButtonPreferences()
 
         playerScope.launch {
             playbackPreferencesRepository.observePreferences()
@@ -245,6 +251,110 @@ class SakiPlaybackService : MediaSessionService() {
                     }
                 }
         }
+    }
+
+    private fun syncMediaButtonPreferences() {
+        val activePlayer = player ?: return
+        mediaSession?.setMediaButtonPreferences(buildMediaButtonPreferences(activePlayer))
+    }
+
+    private fun buildMediaButtonPreferences(activePlayer: Player): List<CommandButton> {
+        val hasQueue = activePlayer.mediaItemCount > 0
+        val repeatIcon = when (activePlayer.repeatMode) {
+            Player.REPEAT_MODE_ONE -> CommandButton.ICON_REPEAT_ONE
+            Player.REPEAT_MODE_ALL -> CommandButton.ICON_REPEAT_ALL
+            else -> CommandButton.ICON_REPEAT_OFF
+        }
+        val repeatName = when (activePlayer.repeatMode) {
+            Player.REPEAT_MODE_ONE -> getString(R.string.player_repeat_one)
+            Player.REPEAT_MODE_ALL -> getString(R.string.player_repeat_all)
+            else -> getString(R.string.player_repeat_off)
+        }
+        val repeatIconRes = when (activePlayer.repeatMode) {
+            Player.REPEAT_MODE_ONE -> R.drawable.ic_notification_repeat_one
+            else -> R.drawable.ic_notification_repeat
+        }
+        val playIcon = if (activePlayer.isPlaying) CommandButton.ICON_PAUSE else CommandButton.ICON_PLAY
+        val playName = getString(if (activePlayer.isPlaying) R.string.player_pause else R.string.player_play)
+        val shuffleIcon = if (activePlayer.shuffleModeEnabled) {
+            CommandButton.ICON_SHUFFLE_ON
+        } else {
+            CommandButton.ICON_SHUFFLE_OFF
+        }
+        val shuffleName = getString(
+            if (activePlayer.shuffleModeEnabled) R.string.player_shuffle_on else R.string.player_shuffle_off,
+        )
+
+        return listOf(
+            CommandButton.Builder(repeatIcon)
+                .setDisplayName(repeatName)
+                .setCustomIconResId(repeatIconRes)
+                .setSessionCommand(SessionCommand(ACTION_TOGGLE_REPEAT, Bundle.EMPTY))
+                .setSlots(intArrayOf(CommandButton.SLOT_BACK_SECONDARY))
+                .setEnabled(hasQueue)
+                .build(),
+            CommandButton.Builder(CommandButton.ICON_PREVIOUS)
+                .setDisplayName(getString(R.string.player_previous))
+                .setPlayerCommand(Player.COMMAND_SEEK_TO_PREVIOUS)
+                .setSlots(intArrayOf(CommandButton.SLOT_BACK))
+                .setEnabled(hasQueue && activePlayer.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS))
+                .build(),
+            CommandButton.Builder(playIcon)
+                .setDisplayName(playName)
+                .setPlayerCommand(Player.COMMAND_PLAY_PAUSE)
+                .setSlots(intArrayOf(CommandButton.SLOT_CENTRAL))
+                .setEnabled(hasQueue && activePlayer.isCommandAvailable(Player.COMMAND_PLAY_PAUSE))
+                .build(),
+            CommandButton.Builder(CommandButton.ICON_NEXT)
+                .setDisplayName(getString(R.string.player_next))
+                .setPlayerCommand(Player.COMMAND_SEEK_TO_NEXT)
+                .setSlots(intArrayOf(CommandButton.SLOT_FORWARD))
+                .setEnabled(hasQueue && activePlayer.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT))
+                .build(),
+            CommandButton.Builder(shuffleIcon)
+                .setDisplayName(shuffleName)
+                .setCustomIconResId(R.drawable.ic_notification_shuffle)
+                .setSessionCommand(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
+                .setSlots(intArrayOf(CommandButton.SLOT_FORWARD_SECONDARY))
+                .setEnabled(activePlayer.mediaItemCount > 1)
+                .build(),
+        )
+    }
+
+    private fun cycleNotificationRepeatMode() {
+        val activePlayer = player ?: return
+        activePlayer.repeatMode = when (activePlayer.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+        syncMediaButtonPreferences()
+    }
+
+    private fun toggleNotificationShuffle() {
+        val activePlayer = player as? ExoPlayer ?: return
+        val count = activePlayer.mediaItemCount
+        if (count <= 1) {
+            activePlayer.shuffleModeEnabled = false
+            pendingShuffleOrder = null
+            serviceScope.launch { playbackPreferencesRepository.clearShuffleState() }
+            syncMediaButtonPreferences()
+            return
+        }
+
+        if (activePlayer.shuffleModeEnabled) {
+            activePlayer.shuffleModeEnabled = false
+            pendingShuffleOrder = null
+            serviceScope.launch { playbackPreferencesRepository.clearShuffleState() }
+        } else {
+            val seed = System.nanoTime()
+            val anchor = activePlayer.currentMediaItemIndex.coerceIn(0, count - 1)
+            activePlayer.setShuffleOrder(SakiShuffleOrder(count, seed, anchor))
+            activePlayer.shuffleModeEnabled = true
+            pendingShuffleOrder = null
+            serviceScope.launch { playbackPreferencesRepository.updateShuffleState(seed, anchor) }
+        }
+        syncMediaButtonPreferences()
     }
 
     /** Latest playback preferences, kept in memory to avoid blocking reads in the resolver. */
@@ -375,8 +485,11 @@ class SakiPlaybackService : MediaSessionService() {
             controller: ControllerInfo,
         ): ConnectionResult {
             val baseResult = ConnectionResult.AcceptedResultBuilder(session)
+            val sessionCommandsBuilder = ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                .add(SessionCommand(ACTION_TOGGLE_REPEAT, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
             if (controller.packageName == packageName || controller.isTrusted) {
-                val sessionCommands = ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                val sessionCommands = sessionCommandsBuilder
                     .add(SessionCommand(ACTION_SET_SHUFFLE_ORDER, Bundle.EMPTY))
                     .build()
                 return baseResult
@@ -390,6 +503,7 @@ class SakiPlaybackService : MediaSessionService() {
                 .build()
 
             return baseResult
+                .setAvailableSessionCommands(sessionCommandsBuilder.build())
                 .setAvailablePlayerCommands(filteredPlayerCommands)
                 .build()
         }
@@ -422,20 +536,28 @@ class SakiPlaybackService : MediaSessionService() {
             customCommand: SessionCommand,
             args: Bundle,
         ): ListenableFuture<SessionResult> {
-            if (customCommand.customAction == ACTION_SET_SHUFFLE_ORDER) {
-                val seed = args.getLong(EXTRA_SHUFFLE_SEED)
-                val anchor = args.getInt(EXTRA_SHUFFLE_ANCHOR)
-                val count = args.getInt(EXTRA_SHUFFLE_COUNT)
-                val exoPlayer = player as? ExoPlayer
-                if (exoPlayer != null && count > 0 && count == exoPlayer.mediaItemCount) {
-                    val order = SakiShuffleOrder(count, seed, anchor)
-                    exoPlayer.setShuffleOrder(order)
-                    pendingShuffleOrder = null
-                } else {
-                    pendingShuffleOrder = Triple(seed, anchor, count)
+            when (customCommand.customAction) {
+                ACTION_SET_SHUFFLE_ORDER -> {
+                    val seed = args.getLong(EXTRA_SHUFFLE_SEED)
+                    val anchor = args.getInt(EXTRA_SHUFFLE_ANCHOR)
+                    val count = args.getInt(EXTRA_SHUFFLE_COUNT)
+                    val exoPlayer = player as? ExoPlayer
+                    if (exoPlayer != null && count > 0 && count == exoPlayer.mediaItemCount) {
+                        val order = SakiShuffleOrder(count, seed, anchor)
+                        exoPlayer.setShuffleOrder(order)
+                        pendingShuffleOrder = null
+                    } else {
+                        pendingShuffleOrder = Triple(seed, anchor, count)
+                    }
+                    return successSessionResult()
                 }
-                return SettableFuture.create<SessionResult>().apply {
-                    set(SessionResult(SessionResult.RESULT_SUCCESS))
+                ACTION_TOGGLE_REPEAT -> {
+                    cycleNotificationRepeatMode()
+                    return successSessionResult()
+                }
+                ACTION_TOGGLE_SHUFFLE -> {
+                    toggleNotificationShuffle()
+                    return successSessionResult()
                 }
             }
             return super.onCustomCommand(session, controller, customCommand, args)
@@ -495,6 +617,28 @@ class SakiPlaybackService : MediaSessionService() {
                         .build(),
                 )
                 .build()
+        }
+    }
+
+    private inner class NotificationMediaButtonListener : Player.Listener {
+        override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+            syncMediaButtonPreferences()
+        }
+
+        override fun onRepeatModeChanged(repeatMode: Int) {
+            syncMediaButtonPreferences()
+        }
+
+        override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+            syncMediaButtonPreferences()
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            syncMediaButtonPreferences()
+        }
+
+        override fun onAvailableCommandsChanged(availableCommands: Player.Commands) {
+            syncMediaButtonPreferences()
         }
     }
 
@@ -632,3 +776,8 @@ private fun Throwable.causeSequence(): Sequence<Throwable> = sequence {
         current = current.cause
     }
 }
+
+private fun successSessionResult(): ListenableFuture<SessionResult> =
+    SettableFuture.create<SessionResult>().apply {
+        set(SessionResult(SessionResult.RESULT_SUCCESS))
+    }

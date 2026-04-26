@@ -65,9 +65,11 @@ class DefaultPlaybackManager @Inject constructor(
     private var shuffleSeed: Long = 0L
     private var shuffleAnchorIndex: Int = 0
     private var shuffleDisplayOrder: List<Int>? = null // player indices in shuffle display order
+    private var restoringExternalShuffleState = false
 
     private val controllerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
+            syncExternalShuffleState(player)
             syncState(player)
         }
     }
@@ -150,7 +152,10 @@ class DefaultPlaybackManager @Inject constructor(
         scope.launch {
             runCatching { ensureControllerConnected() }
             while (isActive) {
-                controller?.let(::syncState)
+                controller?.let { activeController ->
+                    syncExternalShuffleState(activeController)
+                    syncState(activeController)
+                }
                 delay(if (mutablePlaybackState.value.isPlaying) 500L else 1_000L)
             }
         }
@@ -543,9 +548,49 @@ class DefaultPlaybackManager @Inject constructor(
                 bufferedPositionMs = player.bufferedPosition.coerceKnownTime(),
                 isStreamCached = streamCached,
                 repeatMode = player.repeatMode.toRepeatModeSetting(),
-                shuffleEnabled = shuffleDisplayOrder != null,
+                shuffleEnabled = shuffleDisplayOrder != null || player.shuffleModeEnabled,
                 runtimeInfo = player.currentAudioRuntimeInfoOrNull(),
             )
+        }
+    }
+
+    private fun syncExternalShuffleState(player: Player) {
+        if (!player.shuffleModeEnabled) {
+            restoringExternalShuffleState = false
+            if (shuffleDisplayOrder != null) {
+                shuffleDisplayOrder = null
+                scope.launch { playbackPreferencesRepository.clearShuffleState() }
+            }
+            return
+        }
+        if (shuffleDisplayOrder != null || player.mediaItemCount <= 1 || restoringExternalShuffleState) return
+
+        restoringExternalShuffleState = true
+        scope.launch {
+            try {
+                var saved = playbackPreferencesRepository.getShuffleState()
+                if (saved == null) {
+                    delay(150)
+                    saved = playbackPreferencesRepository.getShuffleState()
+                }
+                val count = player.mediaItemCount
+                if (!player.shuffleModeEnabled || count <= 1 || shuffleDisplayOrder != null) return@launch
+                if (saved == null) {
+                    shuffleSeed = System.nanoTime()
+                    shuffleAnchorIndex = player.currentMediaItemIndex.coerceIn(0, count - 1)
+                    (player as? MediaController)?.let { controller ->
+                        sendShuffleOrderToService(controller, count, shuffleSeed, shuffleAnchorIndex)
+                    }
+                    playbackPreferencesRepository.updateShuffleState(shuffleSeed, shuffleAnchorIndex)
+                } else {
+                    shuffleSeed = saved.first
+                    shuffleAnchorIndex = saved.second.coerceIn(0, count - 1)
+                }
+                shuffleDisplayOrder = SakiShuffleOrder(count, shuffleSeed, shuffleAnchorIndex).toDisplayOrder()
+                syncState(player)
+            } finally {
+                restoringExternalShuffleState = false
+            }
         }
     }
 }
