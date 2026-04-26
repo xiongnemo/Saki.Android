@@ -257,7 +257,7 @@ private fun LibraryDetailScaffold(
                         )
                     }
                     Text(text = title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.padding(top = 14.dp))
-                    if (subtitle != null) {
+                    if (!subtitle.isNullOrBlank()) {
                         Text(
                             text = subtitle,
                             style = MaterialTheme.typography.bodyLarge,
@@ -658,7 +658,7 @@ private fun RowCard(title: String, subtitle: String?, artwork: Any?, onClick: ()
                     .padding(start = if (artwork != null) 12.dp else 0.dp),
             ) {
                 Text(text = title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (subtitle != null) {
+                if (!subtitle.isNullOrBlank()) {
                     Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
