@@ -166,7 +166,7 @@ fun NowPlayingCapsule(
             .pointerInput(track != null) {
                 if (track == null) return@pointerInput
                 val distanceThresholdPx = 72.dp.toPx()
-                val velocityThresholdPxPerSecond = 300.dp.toPx()
+                val velocityThresholdDpPerSecond = 300f
                 var upwardDistance = 0f
                 var dragStartedAtNanos = 0L
                 var didOpen = false
@@ -196,8 +196,13 @@ fun NowPlayingCapsule(
                     },
                     onDragEnd = {
                         val elapsedSeconds = (System.nanoTime() - dragStartedAtNanos) / 1_000_000_000f
+                        val upwardVelocityDpPerSecond = if (elapsedSeconds > 0f) {
+                            (upwardDistance / elapsedSeconds).toDp().value
+                        } else {
+                            0f
+                        }
                         if (elapsedSeconds > 0f &&
-                            upwardDistance / elapsedSeconds >= velocityThresholdPxPerSecond
+                            upwardVelocityDpPerSecond >= velocityThresholdDpPerSecond
                         ) {
                             openFromSwipe()
                         }
@@ -221,14 +226,16 @@ fun NowPlayingCapsule(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(width = 36.dp, height = 3.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f),
-                        shape = RoundedCornerShape(100),
-                    ),
-            )
+            AnimatedVisibility(visible = track != null) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 36.dp, height = 3.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f),
+                            shape = RoundedCornerShape(100),
+                        ),
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
