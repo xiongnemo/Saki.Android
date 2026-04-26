@@ -395,7 +395,6 @@ private fun BrowsePager(
                         state = pagerState,
                         modifier = Modifier.weight(1f),
                         flingBehavior = pagerFlingBehavior,
-                        userScrollEnabled = uiState.selectedBrowseSection != BrowseSection.ALBUMS,
                     ) { page ->
                         when (sections[page]) {
                             BrowseSection.ARTISTS -> ArtistsPage(
@@ -921,11 +920,18 @@ private fun AlbumFeedControls(
         AlbumViewMode.LIST -> stringResource(R.string.browse_show_album_list)
     }
 
+    val selectedIndex = feeds.indexOf(selectedFeed).coerceAtLeast(0)
+    val lazyRowState = rememberLazyListState()
+    LaunchedEffect(selectedIndex) {
+        lazyRowState.animateScrollToItem(selectedIndex)
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LazyRow(
+            state = lazyRowState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(vertical = 10.dp),
         ) {
