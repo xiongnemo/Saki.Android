@@ -288,9 +288,7 @@ class SakiAppViewModel @Inject constructor(
 
     fun updateAlbumViewMode(mode: AlbumViewMode) {
         viewModelScope.launch {
-            runCatching {
-                appPreferencesRepository.updateAlbumViewMode(mode)
-            }
+            appPreferencesRepository.updateAlbumViewMode(mode)
         }
     }
 
