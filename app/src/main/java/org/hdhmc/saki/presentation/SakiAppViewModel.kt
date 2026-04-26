@@ -326,6 +326,7 @@ class SakiAppViewModel @Inject constructor(
                 selectedServerId = serverId,
                 selectedArtist = null,
                 selectedArtistTopSongs = emptyList(),
+                albumFeeds = emptyAlbumFeedStates(),
                 selectedAlbum = null,
                 selectedPlaylist = null,
             )
@@ -341,32 +342,40 @@ class SakiAppViewModel @Inject constructor(
         mutableUiState.update { state ->
             state.copy(
                 selectedAlbumFeed = type,
-                albums = emptyList(),
-                albumsOffset = 0,
-                hasMoreAlbums = type.supportsPagination(),
-                isLoadingMoreAlbums = false,
-                albumsError = null,
+                albumFeeds = state.albumFeeds.updateFeed(type) { feedState ->
+                    feedState.copy(
+                        isLoadingMore = false,
+                        error = null,
+                    )
+                },
             )
         }
-        loadAlbums(serverId, type, forceRefresh = true)
+        loadAlbums(serverId, type)
     }
 
     fun loadMoreAlbums() {
         val state = uiState.value
         val serverId = state.selectedServerId ?: return
         val type = state.selectedAlbumFeed
+        val feedState = state.albumFeedState(type)
         if (
             !type.supportsPagination() ||
-            !state.hasMoreAlbums ||
-            state.isAlbumsLoading ||
-            state.isLoadingMoreAlbums
+            !feedState.hasMore ||
+            feedState.isLoading ||
+            feedState.isLoadingMore
         ) {
             return
         }
-        val offset = state.albumsOffset
+        val offset = feedState.offset
 
         viewModelScope.launch {
-            mutableUiState.update { it.copy(isLoadingMoreAlbums = true, albumsError = null) }
+            mutableUiState.update { current ->
+                current.copy(
+                    albumFeeds = current.albumFeeds.updateFeed(type) {
+                        it.copy(isLoadingMore = true, error = null)
+                    },
+                )
+            }
 
             runCatching {
                 subsonicRepository.getAlbumList(
@@ -376,28 +385,37 @@ class SakiAppViewModel @Inject constructor(
                     offset = offset,
                 ).data
             }.onSuccess { page ->
-                if (uiState.value.selectedServerId == serverId && uiState.value.selectedAlbumFeed == type) {
+                if (uiState.value.selectedServerId == serverId) {
                     var mergedAlbums = emptyList<AlbumSummary>()
                     mutableUiState.update { current ->
-                        mergedAlbums = (current.albums + page).distinctBy(AlbumSummary::id)
-                        val addedAny = mergedAlbums.size > current.albums.size
+                        val currentFeed = current.albumFeedState(type)
+                        mergedAlbums = (currentFeed.albums + page).distinctBy(AlbumSummary::id)
+                        val addedAny = mergedAlbums.size > currentFeed.albums.size
                         current.copy(
-                            albums = mergedAlbums,
-                            albumsOffset = mergedAlbums.size,
-                            hasMoreAlbums = page.size >= ALBUMS_PAGE_SIZE && addedAny,
-                            isLoadingMoreAlbums = false,
-                            albumsError = null,
+                            albumFeeds = current.albumFeeds.updateFeed(type) {
+                                it.copy(
+                                    albums = mergedAlbums,
+                                    offset = mergedAlbums.size,
+                                    hasMore = page.size >= ALBUMS_PAGE_SIZE && addedAny,
+                                    isLoadingMore = false,
+                                    error = null,
+                                )
+                            },
                         )
                     }
                     runCatching { libraryCacheRepository.saveAlbums(serverId, type, mergedAlbums) }
                         .onFailure { Log.w("SakiApp", "Failed to cache albums", it) }
                 }
             }.onFailure { throwable ->
-                if (uiState.value.selectedServerId == serverId && uiState.value.selectedAlbumFeed == type) {
-                    mutableUiState.update {
-                        it.copy(
-                            isLoadingMoreAlbums = false,
-                            albumsError = throwable.localizedOr(R.string.error_load_albums),
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { current ->
+                        current.copy(
+                            albumFeeds = current.albumFeeds.updateFeed(type) {
+                                it.copy(
+                                    isLoadingMore = false,
+                                    error = throwable.localizedOr(R.string.error_load_albums),
+                                )
+                            },
                         )
                     }
                 }
@@ -941,6 +959,7 @@ class SakiAppViewModel @Inject constructor(
                 selectedServerId = selectedServerId,
                 selectedArtist = if (serverChanged) null else state.selectedArtist,
                 selectedArtistTopSongs = if (serverChanged) emptyList() else state.selectedArtistTopSongs,
+                albumFeeds = if (serverChanged) emptyAlbumFeedStates() else state.albumFeeds,
                 selectedAlbum = if (serverChanged) null else state.selectedAlbum,
                 selectedPlaylist = if (serverChanged) null else state.selectedPlaylist,
             )
@@ -1043,16 +1062,20 @@ class SakiAppViewModel @Inject constructor(
             if (artists != null && uiState.value.selectedServerId == serverId) {
                 mutableUiState.update { it.copy(libraryIndexes = artists.regroupByLocale()) }
             }
-            val selectedAlbumFeed = uiState.value.selectedAlbumFeed
-            val albums = loadCachedOrNull { libraryCacheRepository.getAlbums(serverId, selectedAlbumFeed) }
-            if (!albums.isNullOrEmpty() && uiState.value.selectedServerId == serverId &&
-                uiState.value.selectedAlbumFeed == selectedAlbumFeed) {
-                mutableUiState.update {
-                    it.copy(
-                        albums = albums,
-                        albumsOffset = albums.size,
-                        hasMoreAlbums = selectedAlbumFeed.supportsPagination(),
-                    )
+            AlbumListType.entries.forEach { albumFeed ->
+                val albums = loadCachedOrNull { libraryCacheRepository.getAlbums(serverId, albumFeed) }
+                if (!albums.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { state ->
+                        state.copy(
+                            albumFeeds = state.albumFeeds.updateFeed(albumFeed) {
+                                it.copy(
+                                    albums = albums,
+                                    offset = albums.size,
+                                    hasMore = albumFeed.supportsPagination(),
+                                )
+                            },
+                        )
+                    }
                 }
             }
             val playlists = loadCachedOrNull { libraryCacheRepository.getPlaylists(serverId) }
@@ -1118,7 +1141,8 @@ class SakiAppViewModel @Inject constructor(
         type: AlbumListType,
         forceRefresh: Boolean = false,
     ) {
-        if (!forceRefresh && uiState.value.albums.isNotEmpty() && uiState.value.selectedAlbumFeed == type) {
+        val currentFeed = uiState.value.albumFeedState(type)
+        if (!forceRefresh && (currentFeed.isLoading || currentFeed.hasLoadedFromNetwork)) {
             return
         }
 
@@ -1126,23 +1150,31 @@ class SakiAppViewModel @Inject constructor(
             if (!forceRefresh) {
                 val cached = runCatching { libraryCacheRepository.getAlbums(serverId, type) }.getOrNull()
                 if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update {
-                        it.copy(
-                            albums = cached,
-                            albumsOffset = cached.size,
-                            hasMoreAlbums = type.supportsPagination(),
+                    mutableUiState.update { state ->
+                        state.copy(
+                            albumFeeds = state.albumFeeds.updateFeed(type) {
+                                it.copy(
+                                    albums = cached,
+                                    offset = cached.size,
+                                    hasMore = type.supportsPagination(),
+                                    error = null,
+                                )
+                            },
                         )
                     }
                 }
             }
 
-            mutableUiState.update {
-                it.copy(
-                    isAlbumsLoading = true,
-                    isLoadingMoreAlbums = false,
-                    albumsOffset = 0,
-                    hasMoreAlbums = type.supportsPagination(),
-                    albumsError = null,
+            mutableUiState.update { state ->
+                state.copy(
+                    albumFeeds = state.albumFeeds.updateFeed(type) {
+                        it.copy(
+                            isLoading = true,
+                            isLoadingMore = false,
+                            hasMore = type.supportsPagination(),
+                            error = null,
+                        )
+                    },
                 )
             }
 
@@ -1155,27 +1187,36 @@ class SakiAppViewModel @Inject constructor(
                 ).data
             }.onSuccess { albums ->
                 val uniqueAlbums = albums.distinctBy(AlbumSummary::id)
-                if (uiState.value.selectedServerId == serverId && uiState.value.selectedAlbumFeed == type) {
-                    mutableUiState.update {
-                        it.copy(
-                            albums = uniqueAlbums,
-                            albumsOffset = uniqueAlbums.size,
-                            hasMoreAlbums = type.supportsPagination() && albums.size >= ALBUMS_PAGE_SIZE,
-                            isAlbumsLoading = false,
-                            isLoadingMoreAlbums = false,
-                            albumsError = null,
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { state ->
+                        state.copy(
+                            albumFeeds = state.albumFeeds.updateFeed(type) {
+                                it.copy(
+                                    albums = uniqueAlbums,
+                                    offset = uniqueAlbums.size,
+                                    hasMore = type.supportsPagination() && albums.size >= ALBUMS_PAGE_SIZE,
+                                    isLoading = false,
+                                    isLoadingMore = false,
+                                    error = null,
+                                    hasLoadedFromNetwork = true,
+                                )
+                            },
                         )
                     }
                 }
                 runCatching { libraryCacheRepository.saveAlbums(serverId, type, uniqueAlbums) }
                     .onFailure { Log.w("SakiApp", "Failed to cache albums", it) }
             }.onFailure { throwable ->
-                if (uiState.value.selectedServerId == serverId && uiState.value.selectedAlbumFeed == type) {
-                    mutableUiState.update {
-                        it.copy(
-                            isAlbumsLoading = false,
-                            isLoadingMoreAlbums = false,
-                            albumsError = throwable.localizedOr(R.string.error_load_albums),
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { state ->
+                        state.copy(
+                            albumFeeds = state.albumFeeds.updateFeed(type) {
+                                it.copy(
+                                    isLoading = false,
+                                    isLoadingMore = false,
+                                    error = throwable.localizedOr(R.string.error_load_albums),
+                                )
+                            },
                         )
                     }
                 }
@@ -1494,6 +1535,16 @@ enum class BrowseSection {
     SONGS,
 }
 
+data class AlbumFeedState(
+    val albums: List<AlbumSummary> = emptyList(),
+    val isLoading: Boolean = false,
+    val offset: Int = 0,
+    val hasMore: Boolean = true,
+    val isLoadingMore: Boolean = false,
+    val error: UiText? = null,
+    val hasLoadedFromNetwork: Boolean = false,
+)
+
 data class SakiAppUiState(
     val isAppReady: Boolean = false,
     val textScale: TextScale = TextScale.DEFAULT,
@@ -1509,12 +1560,7 @@ data class SakiAppUiState(
     val selectedArtistTopSongs: List<Song> = emptyList(),
     val isArtistLoading: Boolean = false,
     val artistError: UiText? = null,
-    val albums: List<AlbumSummary> = emptyList(),
-    val isAlbumsLoading: Boolean = false,
-    val albumsOffset: Int = 0,
-    val hasMoreAlbums: Boolean = true,
-    val isLoadingMoreAlbums: Boolean = false,
-    val albumsError: UiText? = null,
+    val albumFeeds: Map<AlbumListType, AlbumFeedState> = emptyAlbumFeedStates(),
     val selectedAlbum: Album? = null,
     val isAlbumLoading: Boolean = false,
     val albumError: UiText? = null,
@@ -1538,7 +1584,36 @@ data class SakiAppUiState(
     val downloadingSongIds: Set<String> = emptySet(),
     val playbackState: PlaybackSessionState = PlaybackSessionState(),
     val currentLyrics: SongLyrics? = null,
-)
+) {
+    fun albumFeedState(type: AlbumListType): AlbumFeedState {
+        return albumFeeds[type] ?: AlbumFeedState(hasMore = type.supportsPagination())
+    }
+
+    val selectedAlbumFeedState: AlbumFeedState
+        get() = albumFeedState(selectedAlbumFeed)
+    val albums: List<AlbumSummary>
+        get() = selectedAlbumFeedState.albums
+    val isAlbumsLoading: Boolean
+        get() = selectedAlbumFeedState.isLoading
+    val hasMoreAlbums: Boolean
+        get() = selectedAlbumFeedState.hasMore
+    val isLoadingMoreAlbums: Boolean
+        get() = selectedAlbumFeedState.isLoadingMore
+    val albumsError: UiText?
+        get() = selectedAlbumFeedState.error
+}
+
+private fun emptyAlbumFeedStates(): Map<AlbumListType, AlbumFeedState> {
+    return AlbumListType.entries.associateWith { AlbumFeedState(hasMore = it.supportsPagination()) }
+}
+
+private fun Map<AlbumListType, AlbumFeedState>.updateFeed(
+    type: AlbumListType,
+    transform: (AlbumFeedState) -> AlbumFeedState,
+): Map<AlbumListType, AlbumFeedState> {
+    val current = this[type] ?: AlbumFeedState(hasMore = type.supportsPagination())
+    return this + (type to transform(current))
+}
 
 private fun Song.withFallbackAlbumMetadata(album: Album): Song {
     return copy(
