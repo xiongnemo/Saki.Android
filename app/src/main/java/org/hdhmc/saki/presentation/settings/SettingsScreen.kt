@@ -77,6 +77,7 @@ import org.hdhmc.saki.presentation.SakiAppUiState
 import org.hdhmc.saki.presentation.labelRes
 import org.hdhmc.saki.presentation.library.ArtworkCard
 import org.hdhmc.saki.presentation.library.resolveArtworkModel
+import org.hdhmc.saki.presentation.bottomContentPadding
 import org.hdhmc.saki.presentation.rememberBrowseBackgroundBrush
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -135,7 +136,7 @@ fun SettingsScreen(
             .padding(contentPadding)
             .statusBarsPadding()
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(bottom = 24.dp + bottomOverlayPadding),
+        contentPadding = bottomContentPadding(bottomOverlayPadding),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {

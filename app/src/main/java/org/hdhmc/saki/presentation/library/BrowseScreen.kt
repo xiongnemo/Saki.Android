@@ -86,6 +86,7 @@ import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.presentation.BrowseSection
 import org.hdhmc.saki.presentation.AlbumFeedState
 import org.hdhmc.saki.presentation.labelRes
+import org.hdhmc.saki.presentation.bottomContentPadding
 import org.hdhmc.saki.presentation.rememberBrowseBackgroundBrush
 import org.hdhmc.saki.presentation.SakiAppUiState
 import org.hdhmc.saki.presentation.asString
@@ -557,7 +558,7 @@ private fun SearchResultsPage(
 
         else -> LazyColumn(
             modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp + bottomOverlayPadding),
+            contentPadding = bottomContentPadding(bottomOverlayPadding),
         ) {
             if (results.artists.isNotEmpty()) {
                 item {
@@ -833,7 +834,7 @@ private fun AlbumFeedPageContent(
                 state = gridState,
                 modifier = Modifier.fillMaxSize(),
                 columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(bottom = 24.dp + bottomOverlayPadding),
+                contentPadding = bottomContentPadding(bottomOverlayPadding),
             ) {
                 when {
                     isLoading && albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
@@ -883,7 +884,7 @@ private fun AlbumFeedPageContent(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp + bottomOverlayPadding),
+                contentPadding = bottomContentPadding(bottomOverlayPadding),
             ) {
                 when {
                     isLoading && albums.isEmpty() -> item {
@@ -996,7 +997,7 @@ private fun PlaylistsPage(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp + bottomOverlayPadding),
+        contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
         items(playlists, key = { it.id }) { playlist ->
             PlaylistCard(playlist = playlist, server = server, onOpenPlaylist = onOpenPlaylist)
@@ -1034,7 +1035,7 @@ private fun SongsPage(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp + bottomOverlayPadding),
+        contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
         itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
             SongRow(

@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.hdhmc.saki.R
+import org.hdhmc.saki.presentation.bottomContentPadding
 import org.hdhmc.saki.domain.model.Album
 import org.hdhmc.saki.domain.model.AlbumSummary
 import org.hdhmc.saki.domain.model.Artist
@@ -243,7 +244,7 @@ private fun LibraryDetailScaffold(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp + bottomOverlayPadding),
+        contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
         item {
             Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp)) {

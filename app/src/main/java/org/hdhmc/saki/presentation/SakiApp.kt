@@ -15,6 +15,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -26,6 +27,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -241,8 +243,10 @@ private fun RootShell(
     val currentOrQueuedTrack = uiState.playbackState.currentItem ?: uiState.playbackState.queue.firstOrNull()
     val shellBackgroundBrush = rememberBrowseBackgroundBrush()
     var showSettings by rememberSaveable { mutableStateOf(false) }
-    var capsuleHeightPx by remember { mutableStateOf(0) }
-    val capsuleOverlayPadding = with(LocalDensity.current) { capsuleHeightPx.toDp() }
+    val density = LocalDensity.current
+    val defaultCapsuleHeightPx = with(density) { 72.dp.roundToPx() }
+    var capsuleHeightPx by remember { mutableIntStateOf(defaultCapsuleHeightPx) }
+    val capsuleOverlayPadding = with(density) { capsuleHeightPx.toDp() }
     val availableArtistIds = remember(uiState.libraryIndexes) {
         uiState.libraryIndexes
             ?.let { indexes ->
