@@ -72,6 +72,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.hdhmc.saki.R
@@ -85,6 +86,7 @@ import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.presentation.BrowseSection
 import org.hdhmc.saki.presentation.AlbumFeedState
 import org.hdhmc.saki.presentation.labelRes
+import org.hdhmc.saki.presentation.bottomContentPadding
 import org.hdhmc.saki.presentation.rememberBrowseBackgroundBrush
 import org.hdhmc.saki.presentation.SakiAppUiState
 import org.hdhmc.saki.presentation.asString
@@ -98,6 +100,7 @@ import kotlinx.coroutines.flow.map
 fun BrowseScreen(
     uiState: SakiAppUiState,
     contentPadding: PaddingValues,
+    bottomOverlayPadding: Dp = 0.dp,
     onManageServers: () -> Unit,
     onSelectBrowseSection: (BrowseSection) -> Unit,
     onSetSearchActive: (Boolean) -> Unit,
@@ -147,8 +150,8 @@ fun BrowseScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(contentPadding)
             .background(background)
+            .padding(contentPadding)
             .statusBarsPadding()
             .padding(horizontal = 16.dp),
     ) {
@@ -193,6 +196,7 @@ fun BrowseScreen(
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isAlbumLoading,
                         error = uiState.albumError?.asString(),
+                        bottomOverlayPadding = bottomOverlayPadding,
                         onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
                     )
@@ -206,6 +210,7 @@ fun BrowseScreen(
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isArtistLoading,
                         error = uiState.artistError?.asString(),
+                        bottomOverlayPadding = bottomOverlayPadding,
                         onOpenAlbum = onOpenAlbum,
                         onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
@@ -219,6 +224,7 @@ fun BrowseScreen(
                         downloadingSongIds = uiState.downloadingSongIds,
                         isLoading = uiState.isPlaylistLoading,
                         error = uiState.playlistError?.asString(),
+                        bottomOverlayPadding = bottomOverlayPadding,
                         onPlaySongs = onPlaySongs,
                         onShowActions = { actionSong = it },
                     )
@@ -228,6 +234,7 @@ fun BrowseScreen(
                         uiState = uiState,
                         currentServer = currentServer,
                         cachedSongsBySongId = cachedSongsBySongId,
+                        bottomOverlayPadding = bottomOverlayPadding,
                         onSelectBrowseSection = onSelectBrowseSection,
                         onSetSearchActive = onSetSearchActive,
                         onUpdateSearchQuery = onUpdateSearchQuery,
@@ -290,6 +297,7 @@ private fun BrowsePager(
     uiState: SakiAppUiState,
     currentServer: ServerConfig,
     cachedSongsBySongId: Map<String, CachedSong>,
+    bottomOverlayPadding: Dp,
     onSelectBrowseSection: (BrowseSection) -> Unit,
     onSetSearchActive: (Boolean) -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
@@ -349,6 +357,7 @@ private fun BrowsePager(
                 cachedSongsBySongId = cachedSongsBySongId,
                 streamCachedSongIds = uiState.streamCachedSongIds,
                 downloadingSongIds = uiState.downloadingSongIds,
+                bottomOverlayPadding = bottomOverlayPadding,
                 onOpenArtist = onOpenArtist,
                 onOpenAlbum = onOpenAlbum,
                 onPlaySongs = onPlaySongs,
@@ -403,6 +412,7 @@ private fun BrowsePager(
                                 server = currentServer,
                                 isLoading = uiState.isArtistsLoading,
                                 error = uiState.artistsError?.asString(),
+                                bottomOverlayPadding = bottomOverlayPadding,
                                 onOpenArtist = onOpenArtist,
                             )
 
@@ -415,6 +425,7 @@ private fun BrowsePager(
                                 onLoadMore = onLoadMoreAlbums,
                                 onUpdateViewMode = onUpdateAlbumViewMode,
                                 onOpenAlbum = onOpenAlbum,
+                                bottomOverlayPadding = bottomOverlayPadding,
                             )
 
                             BrowseSection.PLAYLISTS -> PlaylistsPage(
@@ -422,6 +433,7 @@ private fun BrowsePager(
                                 server = currentServer,
                                 isLoading = uiState.isPlaylistsLoading,
                                 error = uiState.playlistsError?.asString(),
+                                bottomOverlayPadding = bottomOverlayPadding,
                                 onOpenPlaylist = onOpenPlaylist,
                             )
 
@@ -433,6 +445,7 @@ private fun BrowsePager(
                                 downloadingSongIds = uiState.downloadingSongIds,
                                 isLoading = uiState.isSongsLoading,
                                 error = uiState.songsError?.asString(),
+                                bottomOverlayPadding = bottomOverlayPadding,
                                 onPlaySongs = onPlaySongs,
                                 onShowSongActions = onShowSongActions,
                             )
@@ -513,6 +526,7 @@ private fun SearchResultsPage(
     cachedSongsBySongId: Map<String, CachedSong>,
     streamCachedSongIds: Set<String>,
     downloadingSongIds: Set<String>,
+    bottomOverlayPadding: Dp,
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
@@ -544,7 +558,7 @@ private fun SearchResultsPage(
 
         else -> LazyColumn(
             modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            contentPadding = bottomContentPadding(bottomOverlayPadding),
         ) {
             if (results.artists.isNotEmpty()) {
                 item {
@@ -599,6 +613,7 @@ private fun ArtistsPage(
     server: ServerConfig,
     isLoading: Boolean,
     error: String?,
+    bottomOverlayPadding: Dp,
     onOpenArtist: (String) -> Unit,
 ) {
     if (isLoading && indexes == null) {
@@ -657,7 +672,7 @@ private fun ArtistsPage(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp, end = 24.dp),
+            contentPadding = PaddingValues(bottom = 24.dp + bottomOverlayPadding, end = 24.dp),
         ) {
             if (indexes.shortcuts.isNotEmpty()) {
                 item {
@@ -715,6 +730,7 @@ private fun AlbumsPage(
     onLoadMore: () -> Unit,
     onUpdateViewMode: (AlbumViewMode) -> Unit,
     onOpenAlbum: (String) -> Unit,
+    bottomOverlayPadding: Dp,
 ) {
     val feeds = AlbumListType.defaultBrowseFeeds
     val selectedFeedState = rememberUpdatedState(selectedFeed)
@@ -776,6 +792,7 @@ private fun AlbumsPage(
                 canLoadMore = feed == selectedFeed,
                 onLoadMore = onLoadMore,
                 onOpenAlbum = onOpenAlbum,
+                bottomOverlayPadding = bottomOverlayPadding,
             )
         }
     }
@@ -793,6 +810,7 @@ private fun AlbumFeedPageContent(
     canLoadMore: Boolean,
     onLoadMore: () -> Unit,
     onOpenAlbum: (String) -> Unit,
+    bottomOverlayPadding: Dp,
 ) {
     when (viewMode) {
         AlbumViewMode.GRID -> {
@@ -816,7 +834,7 @@ private fun AlbumFeedPageContent(
                 state = gridState,
                 modifier = Modifier.fillMaxSize(),
                 columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                contentPadding = bottomContentPadding(bottomOverlayPadding),
             ) {
                 when {
                     isLoading && albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
@@ -866,7 +884,7 @@ private fun AlbumFeedPageContent(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                contentPadding = bottomContentPadding(bottomOverlayPadding),
             ) {
                 when {
                     isLoading && albums.isEmpty() -> item {
@@ -958,6 +976,7 @@ private fun PlaylistsPage(
     server: ServerConfig,
     isLoading: Boolean,
     error: String?,
+    bottomOverlayPadding: Dp,
     onOpenPlaylist: (String) -> Unit,
 ) {
     if (isLoading && playlists.isEmpty()) {
@@ -978,7 +997,7 @@ private fun PlaylistsPage(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
         items(playlists, key = { it.id }) { playlist ->
             PlaylistCard(playlist = playlist, server = server, onOpenPlaylist = onOpenPlaylist)
@@ -995,6 +1014,7 @@ private fun SongsPage(
     downloadingSongIds: Set<String>,
     isLoading: Boolean,
     error: String?,
+    bottomOverlayPadding: Dp,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
@@ -1015,7 +1035,7 @@ private fun SongsPage(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
         itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
             SongRow(

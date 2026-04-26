@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.hdhmc.saki.R
 import org.hdhmc.saki.domain.model.AlbumListType
@@ -76,6 +77,7 @@ import org.hdhmc.saki.presentation.SakiAppUiState
 import org.hdhmc.saki.presentation.labelRes
 import org.hdhmc.saki.presentation.library.ArtworkCard
 import org.hdhmc.saki.presentation.library.resolveArtworkModel
+import org.hdhmc.saki.presentation.bottomContentPadding
 import org.hdhmc.saki.presentation.rememberBrowseBackgroundBrush
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -84,6 +86,7 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     uiState: SakiAppUiState,
     contentPadding: PaddingValues,
+    bottomOverlayPadding: Dp = 0.dp,
     onManageServers: () -> Unit,
     onSelectServer: (Long) -> Unit,
     onUpdateStreamQuality: (StreamQuality) -> Unit,
@@ -129,11 +132,11 @@ fun SettingsScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(contentPadding)
             .background(background)
+            .padding(contentPadding)
             .statusBarsPadding()
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = bottomContentPadding(bottomOverlayPadding),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {

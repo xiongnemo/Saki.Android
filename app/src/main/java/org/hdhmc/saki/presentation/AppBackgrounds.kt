@@ -1,9 +1,12 @@
 package org.hdhmc.saki.presentation
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 
 @Composable
@@ -19,3 +22,5 @@ fun rememberBrowseBackgroundBrush(): Brush {
         )
     }
 }
+
+fun bottomContentPadding(overlayPadding: Dp) = PaddingValues(bottom = 24.dp + overlayPadding)

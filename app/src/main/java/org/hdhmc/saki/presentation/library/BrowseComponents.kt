@@ -50,8 +50,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.hdhmc.saki.R
+import org.hdhmc.saki.presentation.bottomContentPadding
 import org.hdhmc.saki.domain.model.Album
 import org.hdhmc.saki.domain.model.AlbumSummary
 import org.hdhmc.saki.domain.model.Artist
@@ -72,6 +74,7 @@ fun ArtistDetailScreen(
     downloadingSongIds: Set<String>,
     isLoading: Boolean,
     error: String?,
+    bottomOverlayPadding: Dp = 0.dp,
     onOpenAlbum: (String) -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
@@ -81,6 +84,7 @@ fun ArtistDetailScreen(
         title = artist.name,
         subtitle = if (albumCount != null) albumCountText(albumCount) else null,
         artwork = null,
+        bottomOverlayPadding = bottomOverlayPadding,
     ) {
         when {
             isLoading && topSongs.isEmpty() -> item { LoadingStateCard(stringResource(R.string.library_loading_artist)) }
@@ -134,6 +138,7 @@ fun AlbumDetailScreen(
     downloadingSongIds: Set<String>,
     isLoading: Boolean,
     error: String?,
+    bottomOverlayPadding: Dp = 0.dp,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
@@ -147,6 +152,7 @@ fun AlbumDetailScreen(
         title = album.name,
         subtitle = subtitle,
         artwork = resolveArtworkModel(server, album.coverArtId, null),
+        bottomOverlayPadding = bottomOverlayPadding,
     ) {
         when {
             isLoading && album.songs.isEmpty() -> item { LoadingStateCard(stringResource(R.string.library_loading_album)) }
@@ -185,6 +191,7 @@ fun PlaylistDetailScreen(
     downloadingSongIds: Set<String>,
     isLoading: Boolean,
     error: String?,
+    bottomOverlayPadding: Dp = 0.dp,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
@@ -197,6 +204,7 @@ fun PlaylistDetailScreen(
         title = playlist.name,
         subtitle = subtitle,
         artwork = resolveArtworkModel(server, playlist.coverArtId, null),
+        bottomOverlayPadding = bottomOverlayPadding,
     ) {
         when {
             isLoading && playlist.songs.isEmpty() -> item { LoadingStateCard(stringResource(R.string.library_loading_playlist)) }
@@ -231,11 +239,12 @@ private fun LibraryDetailScaffold(
     title: String,
     subtitle: String?,
     artwork: Any?,
+    bottomOverlayPadding: Dp,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
         item {
             Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp)) {
