@@ -693,7 +693,7 @@ class SakiAppViewModel @Inject constructor(
                     SnackbarMessage(UiText.resource(R.string.message_download_quality_set, UiText.resource(quality.labelRes()))),
                 )
             }.onFailure { throwable ->
-                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_stream_quality)))
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_update_download_quality)))
             }
         }
     }

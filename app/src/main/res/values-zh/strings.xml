@@ -266,6 +266,7 @@
     <string name="error_update_stream_quality">无法更新串流质量。</string>
     <string name="settings_download_quality">下载音质</string>
     <string name="message_download_quality_set">下载音质已设为 %1$s。</string>
+    <string name="error_update_download_quality">无法更新下载音质。</string>
     <string name="message_sound_balancing_set">音量均衡已设为 %1$s。</string>
     <string name="error_update_sound_balancing">无法更新音量均衡。</string>
     <string name="message_stream_cache_limit_updated">串流缓存上限已更新。</string>
