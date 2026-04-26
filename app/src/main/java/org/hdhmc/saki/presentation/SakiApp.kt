@@ -3,10 +3,10 @@ package org.hdhmc.saki.presentation
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -26,6 +26,8 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.hdhmc.saki.domain.model.ThemeMode
@@ -239,6 +241,8 @@ private fun RootShell(
     val currentOrQueuedTrack = uiState.playbackState.currentItem ?: uiState.playbackState.queue.firstOrNull()
     val shellBackgroundBrush = rememberBrowseBackgroundBrush()
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var capsuleHeightPx by remember { mutableStateOf(0) }
+    val capsuleOverlayPadding = with(LocalDensity.current) { capsuleHeightPx.toDp() }
     val availableArtistIds = remember(uiState.libraryIndexes) {
         uiState.libraryIndexes
             ?.let { indexes ->
@@ -264,85 +268,95 @@ private fun RootShell(
             .background(shellBackgroundBrush),
     ) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
-            Column(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
-                Box(modifier = Modifier.weight(1f)) {
-                    if (showSettings) {
-                        SettingsScreen(
-                            uiState = uiState,
-                            contentPadding = PaddingValues(),
-                            onManageServers = onManageServers,
-                            onSelectServer = onSelectServer,
-                            onUpdateStreamQuality = onUpdateStreamQuality,
-                            onUpdateDownloadQuality = onUpdateDownloadQuality,
-                            onUpdateAdaptiveQuality = onUpdateAdaptiveQuality,
-                            onUpdateWifiStreamQuality = onUpdateWifiStreamQuality,
-                            onUpdateMobileStreamQuality = onUpdateMobileStreamQuality,
-                            onUpdateSoundBalancing = onUpdateSoundBalancing,
-                            onUpdateStreamCacheSizeMb = onUpdateStreamCacheSizeMb,
-                            onClearStreamCache = onClearStreamCache,
-                            onUpdateImageCacheSizeMb = onUpdateImageCacheSizeMb,
-                            onClearImageCache = onClearImageCache,
-                            onUpdateTextScale = onUpdateTextScale,
-                            onUpdateLanguage = onUpdateLanguage,
-                            onUpdateThemeMode = onUpdateThemeMode,
-                            onUpdateDefaultBrowseTab = onUpdateDefaultBrowseTab,
-                            onUpdateDefaultAlbumFeed = onUpdateDefaultAlbumFeed,
-                            onUpdateBluetoothLyrics = onUpdateBluetoothLyrics,
-                            onUpdateBufferStrategy = onUpdateBufferStrategy,
-                            onUpdateCustomBufferSeconds = onUpdateCustomBufferSeconds,
-                            onExportConfig = onExportConfig,
-                            onImportConfig = onImportConfig,
-                            onPlayCachedSong = onPlayCachedSong,
-                            onPlayCachedQueue = onPlayCachedQueue,
-                            onDeleteCachedSong = onDeleteCachedSong,
-                            onClearCachedSongs = onClearCachedSongs,
-                        )
-                    } else {
-                        BrowseScreen(
-                            uiState = uiState,
-                            contentPadding = PaddingValues(),
-                            onManageServers = onManageServers,
-                            onSelectBrowseSection = onSelectBrowseSection,
-                            onSetSearchActive = onSetSearchActive,
-                            onUpdateSearchQuery = onUpdateSearchQuery,
-                            onRefreshCurrentTab = onRefreshCurrentTab,
-                            onSelectAlbumFeed = onSelectAlbumFeed,
-                            onLoadMoreAlbums = onLoadMoreAlbums,
-                            onUpdateAlbumViewMode = onUpdateAlbumViewMode,
-                            onOpenArtist = onOpenArtist,
-                            onCloseArtist = onCloseArtist,
-                            onOpenAlbum = onOpenAlbum,
-                            onCloseAlbum = onCloseAlbum,
-                            onOpenPlaylist = onOpenPlaylist,
-                            onClosePlaylist = onClosePlaylist,
-                            onPlaySongs = onPlaySongs,
-                            onQueueSong = onQueueSong,
-                            onPlaySongNext = onPlaySongNext,
-                            onToggleSongDownload = onToggleSongDownload,
-                            onOpenSettings = { showSettings = true },
-                            onImportConfig = onImportConfig,
-                        )
-                    }
-
-                    SnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+            Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
+                if (showSettings) {
+                    SettingsScreen(
+                        uiState = uiState,
+                        contentPadding = PaddingValues(),
+                        bottomOverlayPadding = capsuleOverlayPadding,
+                        onManageServers = onManageServers,
+                        onSelectServer = onSelectServer,
+                        onUpdateStreamQuality = onUpdateStreamQuality,
+                        onUpdateDownloadQuality = onUpdateDownloadQuality,
+                        onUpdateAdaptiveQuality = onUpdateAdaptiveQuality,
+                        onUpdateWifiStreamQuality = onUpdateWifiStreamQuality,
+                        onUpdateMobileStreamQuality = onUpdateMobileStreamQuality,
+                        onUpdateSoundBalancing = onUpdateSoundBalancing,
+                        onUpdateStreamCacheSizeMb = onUpdateStreamCacheSizeMb,
+                        onClearStreamCache = onClearStreamCache,
+                        onUpdateImageCacheSizeMb = onUpdateImageCacheSizeMb,
+                        onClearImageCache = onClearImageCache,
+                        onUpdateTextScale = onUpdateTextScale,
+                        onUpdateLanguage = onUpdateLanguage,
+                        onUpdateThemeMode = onUpdateThemeMode,
+                        onUpdateDefaultBrowseTab = onUpdateDefaultBrowseTab,
+                        onUpdateDefaultAlbumFeed = onUpdateDefaultAlbumFeed,
+                        onUpdateBluetoothLyrics = onUpdateBluetoothLyrics,
+                        onUpdateBufferStrategy = onUpdateBufferStrategy,
+                        onUpdateCustomBufferSeconds = onUpdateCustomBufferSeconds,
+                        onExportConfig = onExportConfig,
+                        onImportConfig = onImportConfig,
+                        onPlayCachedSong = onPlayCachedSong,
+                        onPlayCachedQueue = onPlayCachedQueue,
+                        onDeleteCachedSong = onDeleteCachedSong,
+                        onClearCachedSongs = onClearCachedSongs,
+                    )
+                } else {
+                    BrowseScreen(
+                        uiState = uiState,
+                        contentPadding = PaddingValues(),
+                        bottomOverlayPadding = capsuleOverlayPadding,
+                        onManageServers = onManageServers,
+                        onSelectBrowseSection = onSelectBrowseSection,
+                        onSetSearchActive = onSetSearchActive,
+                        onUpdateSearchQuery = onUpdateSearchQuery,
+                        onRefreshCurrentTab = onRefreshCurrentTab,
+                        onSelectAlbumFeed = onSelectAlbumFeed,
+                        onLoadMoreAlbums = onLoadMoreAlbums,
+                        onUpdateAlbumViewMode = onUpdateAlbumViewMode,
+                        onOpenArtist = onOpenArtist,
+                        onCloseArtist = onCloseArtist,
+                        onOpenAlbum = onOpenAlbum,
+                        onCloseAlbum = onCloseAlbum,
+                        onOpenPlaylist = onOpenPlaylist,
+                        onClosePlaylist = onClosePlaylist,
+                        onPlaySongs = onPlaySongs,
+                        onQueueSong = onQueueSong,
+                        onPlaySongNext = onPlaySongNext,
+                        onToggleSongDownload = onToggleSongDownload,
+                        onOpenSettings = { showSettings = true },
+                        onImportConfig = onImportConfig,
                     )
                 }
 
-                NowPlayingCapsule(
-                    track = currentOrQueuedTrack,
-                    isPlaying = uiState.playbackState.isPlaying,
-                    currentServer = currentOrQueuedTrack?.serverId?.let { sid ->
-                        uiState.servers.firstOrNull { it.id == sid }
-                    },
-                    onExpand = onOpenNowPlaying,
-                    onPlayPause = {
-                        if (uiState.playbackState.isPlaying) onPausePlayback() else onResumePlayback()
-                    },
-                    onSkipToPrevious = onSkipToPrevious,
-                    onSkipToNext = onSkipToNext,
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = capsuleOverlayPadding),
                 )
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .onGloballyPositioned { coordinates ->
+                            capsuleHeightPx = coordinates.size.height
+                        },
+                ) {
+                    NowPlayingCapsule(
+                        track = currentOrQueuedTrack,
+                        isPlaying = uiState.playbackState.isPlaying,
+                        currentServer = currentOrQueuedTrack?.serverId?.let { sid ->
+                            uiState.servers.firstOrNull { it.id == sid }
+                        },
+                        onExpand = onOpenNowPlaying,
+                        onPlayPause = {
+                            if (uiState.playbackState.isPlaying) onPausePlayback() else onResumePlayback()
+                        },
+                        onSkipToPrevious = onSkipToPrevious,
+                        onSkipToNext = onSkipToNext,
+                    )
+                }
             }
         }
     }
