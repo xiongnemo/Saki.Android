@@ -137,6 +137,12 @@ class ConfigBackupManager @Inject constructor(
                         DataStoreAppPreferencesRepository.KEY_ALBUM_VIEW_MODE.name -> {
                             ds[DataStoreAppPreferencesRepository.KEY_ALBUM_VIEW_MODE] = value; settingsApplied = true
                         }
+                        DataStoreAppPreferencesRepository.KEY_DEFAULT_BROWSE_TAB.name -> {
+                            ds[DataStoreAppPreferencesRepository.KEY_DEFAULT_BROWSE_TAB] = value; settingsApplied = true
+                        }
+                        DataStoreAppPreferencesRepository.KEY_DEFAULT_ALBUM_FEED.name -> {
+                            ds[DataStoreAppPreferencesRepository.KEY_DEFAULT_ALBUM_FEED] = value; settingsApplied = true
+                        }
                         DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY.name -> {
                             ds[DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY] = value; settingsApplied = true
                         }

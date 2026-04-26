@@ -3,9 +3,11 @@ package org.hdhmc.saki.data.repository
 import org.hdhmc.saki.data.local.dao.AppPreferencesDao
 import org.hdhmc.saki.data.local.entity.AppPreferencesEntity
 import org.hdhmc.saki.di.IoDispatcher
+import org.hdhmc.saki.domain.model.AlbumListType
 import org.hdhmc.saki.domain.model.AlbumViewMode
 import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.AppPreferences
+import org.hdhmc.saki.domain.model.DefaultBrowseTab
 import org.hdhmc.saki.domain.model.TextScale
 import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.domain.repository.AppPreferencesRepository
@@ -47,6 +49,14 @@ class DefaultAppPreferencesRepository @Inject constructor(
 
     override suspend fun updateAlbumViewMode(mode: AlbumViewMode) {
         // Album view mode preference is only supported via DataStore; no-op here
+    }
+
+    override suspend fun updateDefaultBrowseTab(tab: DefaultBrowseTab) {
+        // Default browse tab preference is only supported via DataStore; no-op here
+    }
+
+    override suspend fun updateDefaultAlbumFeed(feed: AlbumListType) {
+        // Default album feed preference is only supported via DataStore; no-op here
     }
 }
 

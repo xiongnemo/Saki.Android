@@ -17,6 +17,7 @@ import org.hdhmc.saki.domain.model.AlbumSummary
 import org.hdhmc.saki.domain.model.Artist
 import org.hdhmc.saki.domain.model.CacheStorageSummary
 import org.hdhmc.saki.domain.model.CachedSong
+import org.hdhmc.saki.domain.model.DefaultBrowseTab
 import org.hdhmc.saki.domain.model.LibraryIndexes
 import org.hdhmc.saki.domain.model.regroupByLocale
 import org.hdhmc.saki.domain.model.PlaybackSessionState
@@ -81,6 +82,7 @@ class SakiAppViewModel @Inject constructor(
     private val openNowPlayingRequestsFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val searchQueryFlow = MutableStateFlow("")
     private var lastLoadedServerId: Long? = null
+    private var appliedDefaultBrowsePreference = false
 
     private val mutableEndpointStatus = MutableStateFlow(EndpointStatus())
     val endpointStatus: StateFlow<EndpointStatus> = mutableEndpointStatus.asStateFlow()
@@ -95,12 +97,31 @@ class SakiAppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             appPreferencesRepository.observePreferences().collectLatest { preferences ->
+                val shouldApplyDefaultBrowse = !appliedDefaultBrowsePreference
+                if (shouldApplyDefaultBrowse) {
+                    appliedDefaultBrowsePreference = true
+                }
                 mutableUiState.update { state ->
                     state.copy(
                         isAppReady = true,
                         textScale = preferences.textScale,
                         appPreferences = preferences,
+                        selectedBrowseSection = if (shouldApplyDefaultBrowse) {
+                            preferences.defaultBrowseTab.toBrowseSection()
+                        } else {
+                            state.selectedBrowseSection
+                        },
+                        selectedAlbumFeed = if (shouldApplyDefaultBrowse) {
+                            preferences.defaultAlbumFeed
+                        } else {
+                            state.selectedAlbumFeed
+                        },
                     )
+                }
+                if (shouldApplyDefaultBrowse) {
+                    uiState.value.selectedServerId?.let { serverId ->
+                        loadBrowseSectionIfNeeded(serverId, preferences.defaultBrowseTab.toBrowseSection())
+                    }
                 }
                 // Apply saved locale when preference changes (no-ops if already matching)
                 if (preferences.language != AppLanguage.SYSTEM) {
@@ -201,6 +222,10 @@ class SakiAppViewModel @Inject constructor(
             state.copy(selectedBrowseSection = section)
         }
         val serverId = uiState.value.selectedServerId ?: return
+        loadBrowseSectionIfNeeded(serverId, section)
+    }
+
+    private fun loadBrowseSectionIfNeeded(serverId: Long, section: BrowseSection) {
         when (section) {
             BrowseSection.ARTISTS -> if (uiState.value.libraryIndexes == null) loadArtists(serverId)
             BrowseSection.ALBUMS -> if (uiState.value.albums.isEmpty()) loadAlbums(serverId, uiState.value.selectedAlbumFeed)
@@ -289,6 +314,18 @@ class SakiAppViewModel @Inject constructor(
     fun updateAlbumViewMode(mode: AlbumViewMode) {
         viewModelScope.launch {
             appPreferencesRepository.updateAlbumViewMode(mode)
+        }
+    }
+
+    fun updateDefaultBrowseTab(tab: DefaultBrowseTab) {
+        viewModelScope.launch {
+            appPreferencesRepository.updateDefaultBrowseTab(tab)
+        }
+    }
+
+    fun updateDefaultAlbumFeed(feed: AlbumListType) {
+        viewModelScope.launch {
+            appPreferencesRepository.updateDefaultAlbumFeed(feed)
         }
     }
 
@@ -1533,6 +1570,13 @@ enum class BrowseSection {
     ALBUMS,
     PLAYLISTS,
     SONGS,
+}
+
+private fun DefaultBrowseTab.toBrowseSection(): BrowseSection = when (this) {
+    DefaultBrowseTab.ARTISTS -> BrowseSection.ARTISTS
+    DefaultBrowseTab.ALBUMS -> BrowseSection.ALBUMS
+    DefaultBrowseTab.PLAYLISTS -> BrowseSection.PLAYLISTS
+    DefaultBrowseTab.SONGS -> BrowseSection.SONGS
 }
 
 data class AlbumFeedState(

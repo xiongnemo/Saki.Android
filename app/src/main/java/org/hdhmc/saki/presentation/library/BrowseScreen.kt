@@ -720,7 +720,10 @@ private fun AlbumsPage(
         AlbumListType.RECENT,
         AlbumListType.RANDOM,
         AlbumListType.HIGHEST,
+        AlbumListType.FREQUENT,
         AlbumListType.ALPHABETICAL_BY_NAME,
+        AlbumListType.ALPHABETICAL_BY_ARTIST,
+        AlbumListType.STARRED,
     )
     val selectedFeedState = rememberUpdatedState(selectedFeed)
     val feedPagerState = rememberPagerState(

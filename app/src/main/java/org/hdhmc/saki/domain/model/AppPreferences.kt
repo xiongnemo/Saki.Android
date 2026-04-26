@@ -43,7 +43,21 @@ data class AppPreferences(
     val language: AppLanguage = AppLanguage.SYSTEM,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val albumViewMode: AlbumViewMode = AlbumViewMode.GRID,
+    val defaultBrowseTab: DefaultBrowseTab = DefaultBrowseTab.ARTISTS,
+    val defaultAlbumFeed: AlbumListType = AlbumListType.NEWEST,
 )
+
+enum class DefaultBrowseTab(val storageKey: String) {
+    ARTISTS("artists"),
+    ALBUMS("albums"),
+    PLAYLISTS("playlists"),
+    SONGS("songs");
+
+    companion object {
+        fun fromStorageKey(storageKey: String?): DefaultBrowseTab =
+            entries.firstOrNull { it.storageKey == storageKey } ?: ARTISTS
+    }
+}
 
 enum class AppLanguage(val tag: String) {
     SYSTEM("system"),
