@@ -94,7 +94,7 @@
     <string name="server_config_client_name">客户端名称</string>
     <string name="server_config_api_version_label">API 版本</string>
     <string name="server_config_endpoints_title">端点</string>
-    <string name="server_config_endpoints_body">将一个端点标记为主端点。保存前可使用测试功能验证凭据。</string>
+    <string name="server_config_endpoints_body">添加一个或多个端点。保存前可使用测试功能验证凭据。</string>
     <string name="server_config_add_endpoint">添加端点</string>
     <string name="server_config_save_server">保存服务器</string>
     <string name="server_config_save_changes">保存更改</string>
