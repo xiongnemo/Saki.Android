@@ -155,68 +155,128 @@ fun NowPlayingCapsule(
         ),
         label = "capsuleElevation",
     )
+    val onExpandState = rememberUpdatedState(onExpand)
 
     Card(
         onClick = onExpand,
         enabled = track != null,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 4.dp),
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .pointerInput(track != null) {
+                if (track == null) return@pointerInput
+                val distanceThresholdPx = 72.dp.toPx()
+                val velocityThresholdPxPerSecond = 300.dp.toPx()
+                var upwardDistance = 0f
+                var dragStartedAtNanos = 0L
+                var didOpen = false
+
+                fun openFromSwipe() {
+                    if (!didOpen) {
+                        didOpen = true
+                        onExpandState.value()
+                    }
+                }
+
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        upwardDistance = 0f
+                        dragStartedAtNanos = System.nanoTime()
+                        didOpen = false
+                    },
+                    onVerticalDrag = { _, dragAmount ->
+                        if (dragAmount < 0f) {
+                            upwardDistance -= dragAmount
+                            if (upwardDistance >= distanceThresholdPx) {
+                                openFromSwipe()
+                            }
+                        } else {
+                            upwardDistance = (upwardDistance - dragAmount).coerceAtLeast(0f)
+                        }
+                    },
+                    onDragEnd = {
+                        val elapsedSeconds = (System.nanoTime() - dragStartedAtNanos) / 1_000_000_000f
+                        if (elapsedSeconds > 0f &&
+                            upwardDistance / elapsedSeconds >= velocityThresholdPxPerSecond
+                        ) {
+                            openFromSwipe()
+                        }
+                    },
+                    onDragCancel = {
+                        upwardDistance = 0f
+                        didOpen = false
+                    },
+                )
+            },
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = elevation),
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            AnimatedContent(
-                targetState = Pair(track?.queueArtworkModel(currentServer), track?.title),
-                transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
-                label = "capsule-artwork",
-            ) { (model, title) ->
-                ArtworkCard(
-                    model = model,
-                    contentDescription = title,
-                    modifier = Modifier.size(46.dp),
-                    cornerRadiusDp = 14,
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+            Box(
+                modifier = Modifier
+                    .size(width = 36.dp, height = 3.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f),
+                        shape = RoundedCornerShape(100),
+                    ),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = track?.title ?: stringResource(R.string.player_nothing_playing),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = track?.let { listOfNotNull(it.artist, it.album).joinToString(" • ") }
-                        ?: stringResource(R.string.player_start_from_browse),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            IconButton(onClick = onSkipToPrevious, enabled = track != null) {
-                Icon(imageVector = Icons.Rounded.SkipPrevious, contentDescription = null)
-            }
-            IconButton(onClick = onPlayPause, enabled = track != null) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = null,
-                )
-            }
-            IconButton(onClick = onSkipToNext, enabled = track != null) {
-                Icon(imageVector = Icons.Rounded.SkipNext, contentDescription = null)
+                AnimatedContent(
+                    targetState = Pair(track?.queueArtworkModel(currentServer), track?.title),
+                    transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
+                    label = "capsule-artwork",
+                ) { (model, title) ->
+                    ArtworkCard(
+                        model = model,
+                        contentDescription = title,
+                        modifier = Modifier.size(46.dp),
+                        cornerRadiusDp = 14,
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = track?.title ?: stringResource(R.string.player_nothing_playing),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = track?.let { listOfNotNull(it.artist, it.album).joinToString(" • ") }
+                            ?: stringResource(R.string.player_start_from_browse),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(onClick = onSkipToPrevious, enabled = track != null) {
+                    Icon(imageVector = Icons.Rounded.SkipPrevious, contentDescription = null)
+                }
+                IconButton(onClick = onPlayPause, enabled = track != null) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                    )
+                }
+                IconButton(onClick = onSkipToNext, enabled = track != null) {
+                    Icon(imageVector = Icons.Rounded.SkipNext, contentDescription = null)
+                }
             }
         }
     }
