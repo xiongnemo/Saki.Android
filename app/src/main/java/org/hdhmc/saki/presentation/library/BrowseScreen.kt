@@ -34,6 +34,8 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -74,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.hdhmc.saki.R
 import org.hdhmc.saki.domain.model.AlbumListType
+import org.hdhmc.saki.domain.model.AlbumSummary
 import org.hdhmc.saki.domain.model.AlbumViewMode
 import org.hdhmc.saki.domain.model.CachedSong
 import org.hdhmc.saki.domain.model.SearchResults
@@ -305,6 +308,10 @@ private fun BrowsePager(
         initialPage = sections.indexOf(uiState.selectedBrowseSection).coerceAtLeast(0),
         pageCount = { sections.size },
     )
+    val pagerFlingBehavior = PagerDefaults.flingBehavior(
+        state = pagerState,
+        pagerSnapDistance = PagerSnapDistance.atMost(1),
+    )
     LaunchedEffect(uiState.selectedBrowseSection) {
         val targetPage = sections.indexOf(uiState.selectedBrowseSection).coerceAtLeast(0)
         if (pagerState.settledPage != targetPage && pagerState.targetPage != targetPage) {
@@ -386,7 +393,8 @@ private fun BrowsePager(
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.weight(1f),
-                        userScrollEnabled = false,
+                        flingBehavior = pagerFlingBehavior,
+                        userScrollEnabled = uiState.selectedBrowseSection != BrowseSection.ALBUMS,
                     ) { page ->
                         when (sections[page]) {
                             BrowseSection.ARTISTS -> ArtistsPage(
@@ -699,9 +707,10 @@ private fun ArtistsPage(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumsPage(
-    albums: List<org.hdhmc.saki.domain.model.AlbumSummary>,
+    albums: List<AlbumSummary>,
     server: ServerConfig,
     selectedFeed: AlbumListType,
     viewMode: AlbumViewMode,
@@ -721,6 +730,31 @@ private fun AlbumsPage(
         AlbumListType.HIGHEST,
         AlbumListType.ALPHABETICAL_BY_NAME,
     )
+    val selectedFeedState = rememberUpdatedState(selectedFeed)
+    val feedPagerState = rememberPagerState(
+        initialPage = feeds.indexOf(selectedFeed).coerceAtLeast(0),
+        pageCount = { feeds.size },
+    )
+    val feedPagerFlingBehavior = PagerDefaults.flingBehavior(
+        state = feedPagerState,
+        pagerSnapDistance = PagerSnapDistance.atMost(1),
+    )
+
+    LaunchedEffect(selectedFeed) {
+        val targetPage = feeds.indexOf(selectedFeed).coerceAtLeast(0)
+        if (feedPagerState.settledPage != targetPage && feedPagerState.targetPage != targetPage) {
+            feedPagerState.animateScrollToPage(targetPage)
+        }
+    }
+
+    LaunchedEffect(feedPagerState) {
+        snapshotFlow { feedPagerState.settledPage }
+            .distinctUntilChanged()
+            .map { feeds[it] }
+            .filter { it != selectedFeedState.value }
+            .collect { onSelectFeed(it) }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         AlbumFeedControls(
             feeds = feeds,
@@ -730,104 +764,136 @@ private fun AlbumsPage(
             onUpdateViewMode = onUpdateViewMode,
         )
 
-        when (viewMode) {
-            AlbumViewMode.GRID -> {
-                val gridState = rememberLazyGridState()
-                LaunchedEffect(gridState, hasMore, isLoading, isLoadingMore, albums.size) {
-                    snapshotFlow {
-                        if (!hasMore || isLoading || isLoadingMore || albums.isEmpty()) {
-                            false
-                        } else {
-                            val layoutInfo = gridState.layoutInfo
-                            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                            lastVisibleIndex >= layoutInfo.totalItemsCount - 5
-                        }
+        HorizontalPager(
+            state = feedPagerState,
+            modifier = Modifier.weight(1f),
+            flingBehavior = feedPagerFlingBehavior,
+        ) { page ->
+            val isSelectedPage = feeds[page] == selectedFeed
+            AlbumFeedPageContent(
+                albums = if (isSelectedPage) albums else emptyList(),
+                server = server,
+                viewMode = viewMode,
+                isLoading = !isSelectedPage || isLoading,
+                hasMore = isSelectedPage && hasMore,
+                isLoadingMore = isSelectedPage && isLoadingMore,
+                error = if (isSelectedPage) error else null,
+                onLoadMore = onLoadMore,
+                onOpenAlbum = onOpenAlbum,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumFeedPageContent(
+    albums: List<AlbumSummary>,
+    server: ServerConfig,
+    viewMode: AlbumViewMode,
+    isLoading: Boolean,
+    hasMore: Boolean,
+    isLoadingMore: Boolean,
+    error: String?,
+    onLoadMore: () -> Unit,
+    onOpenAlbum: (String) -> Unit,
+) {
+    when (viewMode) {
+        AlbumViewMode.GRID -> {
+            val gridState = rememberLazyGridState()
+            LaunchedEffect(gridState, hasMore, isLoading, isLoadingMore, albums.size) {
+                snapshotFlow {
+                    if (!hasMore || isLoading || isLoadingMore || albums.isEmpty()) {
+                        false
+                    } else {
+                        val layoutInfo = gridState.layoutInfo
+                        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        lastVisibleIndex >= layoutInfo.totalItemsCount - 5
                     }
-                        .distinctUntilChanged()
-                        .filter { shouldLoad -> shouldLoad }
-                        .collect { onLoadMore() }
                 }
+                    .distinctUntilChanged()
+                    .filter { shouldLoad -> shouldLoad }
+                    .collect { onLoadMore() }
+            }
 
-                LazyVerticalGrid(
-                    state = gridState,
-                    modifier = Modifier.weight(1f),
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                ) {
-                    when {
-                        isLoading && albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
-                            LoadingStateCard(stringResource(R.string.browse_loading_albums))
-                        }
-
-                        error != null && albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
-                            ErrorStateCard(error)
-                        }
-
-                        albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
-                            EmptyStateCard(
-                                stringResource(R.string.browse_no_albums),
-                                stringResource(R.string.browse_no_albums_body),
-                            )
-                        }
-
-                        else -> items(albums, key = { it.id }) { album ->
-                            AlbumCard(album = album, server = server, onOpenAlbum = onOpenAlbum)
-                        }
+            LazyVerticalGrid(
+                state = gridState,
+                modifier = Modifier.fillMaxSize(),
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                when {
+                    isLoading && albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
+                        LoadingStateCard(stringResource(R.string.browse_loading_albums))
                     }
-                    if (isLoadingMore) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            LoadingStateCard(stringResource(R.string.browse_loading_albums))
-                        }
+
+                    error != null && albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
+                        ErrorStateCard(error)
+                    }
+
+                    albums.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
+                        EmptyStateCard(
+                            stringResource(R.string.browse_no_albums),
+                            stringResource(R.string.browse_no_albums_body),
+                        )
+                    }
+
+                    else -> items(albums, key = { it.id }) { album ->
+                        AlbumCard(album = album, server = server, onOpenAlbum = onOpenAlbum)
+                    }
+                }
+                if (isLoadingMore) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        LoadingStateCard(stringResource(R.string.browse_loading_albums))
                     }
                 }
             }
+        }
 
-            AlbumViewMode.LIST -> {
-                val listState = rememberLazyListState()
-                LaunchedEffect(listState, hasMore, isLoading, isLoadingMore, albums.size) {
-                    snapshotFlow {
-                        if (!hasMore || isLoading || isLoadingMore || albums.isEmpty()) {
-                            false
-                        } else {
-                            val layoutInfo = listState.layoutInfo
-                            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                            lastVisibleIndex >= layoutInfo.totalItemsCount - 5
-                        }
+        AlbumViewMode.LIST -> {
+            val listState = rememberLazyListState()
+            LaunchedEffect(listState, hasMore, isLoading, isLoadingMore, albums.size) {
+                snapshotFlow {
+                    if (!hasMore || isLoading || isLoadingMore || albums.isEmpty()) {
+                        false
+                    } else {
+                        val layoutInfo = listState.layoutInfo
+                        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        lastVisibleIndex >= layoutInfo.totalItemsCount - 5
                     }
-                        .distinctUntilChanged()
-                        .filter { shouldLoad -> shouldLoad }
-                        .collect { onLoadMore() }
                 }
+                    .distinctUntilChanged()
+                    .filter { shouldLoad -> shouldLoad }
+                    .collect { onLoadMore() }
+            }
 
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                ) {
-                    when {
-                        isLoading && albums.isEmpty() -> item {
-                            LoadingStateCard(stringResource(R.string.browse_loading_albums))
-                        }
-
-                        error != null && albums.isEmpty() -> item {
-                            ErrorStateCard(error)
-                        }
-
-                        albums.isEmpty() -> item {
-                            EmptyStateCard(
-                                stringResource(R.string.browse_no_albums),
-                                stringResource(R.string.browse_no_albums_body),
-                            )
-                        }
-
-                        else -> items(albums, key = { it.id }) { album ->
-                            AlbumRow(album = album, server = server, onOpenAlbum = onOpenAlbum)
-                        }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                when {
+                    isLoading && albums.isEmpty() -> item {
+                        LoadingStateCard(stringResource(R.string.browse_loading_albums))
                     }
-                    if (isLoadingMore) {
-                        item {
-                            LoadingStateCard(stringResource(R.string.browse_loading_albums))
-                        }
+
+                    error != null && albums.isEmpty() -> item {
+                        ErrorStateCard(error)
+                    }
+
+                    albums.isEmpty() -> item {
+                        EmptyStateCard(
+                            stringResource(R.string.browse_no_albums),
+                            stringResource(R.string.browse_no_albums_body),
+                        )
+                    }
+
+                    else -> items(albums, key = { it.id }) { album ->
+                        AlbumRow(album = album, server = server, onOpenAlbum = onOpenAlbum)
+                    }
+                }
+                if (isLoadingMore) {
+                    item {
+                        LoadingStateCard(stringResource(R.string.browse_loading_albums))
                     }
                 }
             }
