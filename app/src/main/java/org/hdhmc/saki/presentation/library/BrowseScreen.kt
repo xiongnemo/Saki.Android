@@ -1,5 +1,6 @@
 package org.hdhmc.saki.presentation.library
 
+import android.view.ViewConfiguration
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +37,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerSnapDistance
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -68,13 +70,20 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 import org.hdhmc.saki.R
 import org.hdhmc.saki.domain.model.AlbumListType
 import org.hdhmc.saki.domain.model.AlbumSummary
@@ -418,6 +427,7 @@ private fun BrowsePager(
 
                             BrowseSection.ALBUMS -> AlbumsPage(
                                 albumFeeds = uiState.albumFeeds,
+                                browsePagerState = pagerState,
                                 server = currentServer,
                                 selectedFeed = uiState.selectedAlbumFeed,
                                 viewMode = uiState.appPreferences.albumViewMode,
@@ -723,6 +733,7 @@ private fun ArtistsPage(
 @Composable
 private fun AlbumsPage(
     albumFeeds: Map<AlbumListType, AlbumFeedState>,
+    browsePagerState: PagerState,
     server: ServerConfig,
     selectedFeed: AlbumListType,
     viewMode: AlbumViewMode,
@@ -741,6 +752,15 @@ private fun AlbumsPage(
     val feedPagerFlingBehavior = PagerDefaults.flingBehavior(
         state = feedPagerState,
         pagerSnapDistance = PagerSnapDistance.atMost(1),
+    )
+    val context = LocalContext.current
+    val boundaryFlingVelocityThreshold = remember(context) {
+        ViewConfiguration.get(context).scaledMinimumFlingVelocity.toFloat()
+    }
+    val feedBoundaryHandoffConnection = rememberAlbumFeedBoundaryHandoffConnection(
+        feedPagerState = feedPagerState,
+        browsePagerState = browsePagerState,
+        boundaryFlingVelocityThreshold = boundaryFlingVelocityThreshold,
     )
     val coroutineScope = rememberCoroutineScope()
     val highlightedFeed = feeds[feedPagerState.targetPage.coerceIn(0, feeds.lastIndex)]
@@ -776,7 +796,9 @@ private fun AlbumsPage(
 
         HorizontalPager(
             state = feedPagerState,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .nestedScroll(feedBoundaryHandoffConnection),
             flingBehavior = feedPagerFlingBehavior,
         ) { page ->
             val feed = feeds[page]
@@ -797,6 +819,67 @@ private fun AlbumsPage(
         }
     }
 }
+
+@Composable
+private fun rememberAlbumFeedBoundaryHandoffConnection(
+    feedPagerState: PagerState,
+    browsePagerState: PagerState,
+    boundaryFlingVelocityThreshold: Float,
+): NestedScrollConnection {
+    return remember(feedPagerState, browsePagerState, boundaryFlingVelocityThreshold) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput || available.x == 0f) {
+                    return Offset.Zero
+                }
+
+                val scrollDelta = -available.x
+                if (!feedPagerState.shouldHandOffAlbumFeedDelta(scrollDelta)) {
+                    return Offset.Zero
+                }
+
+                val consumed = browsePagerState.dispatchRawDelta(scrollDelta)
+                return Offset(x = -consumed, y = 0f)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                val scrollVelocity = -available.x
+                val browsePagerNeedsSettling = abs(browsePagerState.currentPageOffsetFraction) >
+                    PagerOffsetSettlingEpsilon
+                if (scrollVelocity != 0f && !feedPagerState.shouldHandOffAlbumFeedDelta(scrollVelocity)) {
+                    return Velocity.Zero
+                }
+                if (scrollVelocity == 0f && !browsePagerNeedsSettling) {
+                    return Velocity.Zero
+                }
+
+                val direction = if (scrollVelocity > 0f) 1 else -1
+                val targetPage = if (abs(scrollVelocity) > boundaryFlingVelocityThreshold) {
+                    browsePagerState.settledPage + direction
+                } else {
+                    browsePagerState.currentPage
+                }.coerceIn(0, browsePagerState.pageCount - 1)
+
+                val isAlreadySettled = targetPage == browsePagerState.currentPage &&
+                    abs(browsePagerState.currentPageOffsetFraction) <= PagerOffsetSettlingEpsilon
+                if (!isAlreadySettled) {
+                    browsePagerState.animateScrollToPage(targetPage)
+                }
+                return Velocity(x = available.x, y = 0f)
+            }
+        }
+    }
+}
+
+private fun PagerState.shouldHandOffAlbumFeedDelta(scrollDelta: Float): Boolean {
+    return when {
+        scrollDelta > 0f -> !canScrollForward
+        scrollDelta < 0f -> !canScrollBackward
+        else -> false
+    }
+}
+
+private const val PagerOffsetSettlingEpsilon = 0.001f
 
 @Composable
 private fun AlbumFeedPageContent(
