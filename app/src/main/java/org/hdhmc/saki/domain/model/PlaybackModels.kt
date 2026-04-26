@@ -143,6 +143,7 @@ fun normalizeCustomBufferSeconds(seconds: Int): Int {
 
 data class PlaybackPreferences(
     val streamQuality: StreamQuality = StreamQuality.ORIGINAL,
+    val downloadQuality: StreamQuality = StreamQuality.ORIGINAL,
     val adaptiveQualityEnabled: Boolean = false,
     val wifiStreamQuality: StreamQuality = StreamQuality.ORIGINAL,
     val mobileStreamQuality: StreamQuality = StreamQuality.KBPS_320,

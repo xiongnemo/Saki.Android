@@ -51,6 +51,10 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
         dataStore.edit { it[KEY_STREAM_QUALITY] = quality.storageKey }
     }
 
+    override suspend fun updateDownloadQuality(quality: StreamQuality) {
+        dataStore.edit { it[KEY_DOWNLOAD_QUALITY] = quality.storageKey }
+    }
+
     override suspend fun updateAdaptiveQuality(enabled: Boolean) {
         dataStore.edit { it[KEY_ADAPTIVE_QUALITY] = enabled }
     }
@@ -116,6 +120,7 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
 
     companion object {
         val KEY_STREAM_QUALITY = stringPreferencesKey("stream_quality")
+        val KEY_DOWNLOAD_QUALITY = stringPreferencesKey("download_quality")
         val KEY_ADAPTIVE_QUALITY = booleanPreferencesKey("adaptive_quality_enabled")
         val KEY_WIFI_STREAM_QUALITY = stringPreferencesKey("wifi_stream_quality")
         val KEY_MOBILE_STREAM_QUALITY = stringPreferencesKey("mobile_stream_quality")
@@ -133,6 +138,9 @@ class DataStorePlaybackPreferencesRepository @Inject constructor(
 private fun Preferences.toPlaybackPreferences() = PlaybackPreferences(
     streamQuality = StreamQuality.fromStorageKey(
         this[DataStorePlaybackPreferencesRepository.KEY_STREAM_QUALITY],
+    ),
+    downloadQuality = StreamQuality.fromStorageKey(
+        this[DataStorePlaybackPreferencesRepository.KEY_DOWNLOAD_QUALITY],
     ),
     adaptiveQualityEnabled = this[DataStorePlaybackPreferencesRepository.KEY_ADAPTIVE_QUALITY] ?: false,
     wifiStreamQuality = StreamQuality.fromStorageKey(

@@ -105,6 +105,7 @@ fun SettingsScreen(
     onPlayCachedQueue: (List<CachedSong>, Int) -> Unit,
     onDeleteCachedSong: (String) -> Unit,
     onClearCachedSongs: () -> Unit,
+    onUpdateDownloadQuality: (StreamQuality) -> Unit,
 ) {
     val background = rememberBrowseBackgroundBrush()
     val selectedServer = uiState.servers.firstOrNull { it.id == uiState.selectedServerId }
