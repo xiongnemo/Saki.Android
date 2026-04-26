@@ -376,7 +376,7 @@ class SakiAppViewModel @Inject constructor(
                         val addedAny = mergedAlbums.size > current.albums.size
                         current.copy(
                             albums = mergedAlbums,
-                            albumsOffset = current.albumsOffset + page.size,
+                            albumsOffset = mergedAlbums.size,
                             hasMoreAlbums = page.size >= ALBUMS_PAGE_SIZE && addedAny,
                             isLoadingMoreAlbums = false,
                             albumsError = null,
@@ -1152,7 +1152,7 @@ class SakiAppViewModel @Inject constructor(
                     mutableUiState.update {
                         it.copy(
                             albums = uniqueAlbums,
-                            albumsOffset = albums.size,
+                            albumsOffset = uniqueAlbums.size,
                             hasMoreAlbums = type.supportsPagination() && albums.size >= ALBUMS_PAGE_SIZE,
                             isAlbumsLoading = false,
                             isLoadingMoreAlbums = false,
