@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import org.hdhmc.saki.domain.model.AlbumListType
 import org.hdhmc.saki.domain.model.AlbumViewMode
@@ -61,6 +62,16 @@ class DataStoreAppPreferencesRepository @Inject constructor(
         dataStore.edit { it[KEY_DEFAULT_ALBUM_FEED] = feed.apiValue }
     }
 
+    override suspend fun updateLastSelectedServerId(serverId: Long?) {
+        dataStore.edit {
+            if (serverId == null) {
+                it.remove(KEY_LAST_SELECTED_SERVER_ID)
+            } else {
+                it[KEY_LAST_SELECTED_SERVER_ID] = serverId
+            }
+        }
+    }
+
     companion object {
         val KEY_TEXT_SCALE = stringPreferencesKey("text_scale")
         val KEY_LANGUAGE = stringPreferencesKey("app_language")
@@ -68,6 +79,7 @@ class DataStoreAppPreferencesRepository @Inject constructor(
         val KEY_ALBUM_VIEW_MODE = stringPreferencesKey("album_view_mode")
         val KEY_DEFAULT_BROWSE_TAB = stringPreferencesKey("default_browse_tab")
         val KEY_DEFAULT_ALBUM_FEED = stringPreferencesKey("default_album_feed")
+        val KEY_LAST_SELECTED_SERVER_ID = longPreferencesKey("last_selected_server_id")
     }
 }
 
@@ -80,4 +92,5 @@ private fun Preferences.toAppPreferences() = AppPreferences(
     defaultAlbumFeed = AlbumListType.fromApiValue(
         this[DataStoreAppPreferencesRepository.KEY_DEFAULT_ALBUM_FEED],
     )?.takeIf { it in AlbumListType.defaultBrowseFeeds } ?: AlbumListType.NEWEST,
+    lastSelectedServerId = this[DataStoreAppPreferencesRepository.KEY_LAST_SELECTED_SERVER_ID],
 )

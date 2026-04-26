@@ -369,6 +369,7 @@ class SakiAppViewModel @Inject constructor(
             )
         }
         viewModelScope.launch {
+            appPreferencesRepository.updateLastSelectedServerId(serverId)
             refreshCacheStorageSummary(serverId)
         }
         loadServerContent(serverId, forceRefresh = true)
@@ -980,6 +981,7 @@ class SakiAppViewModel @Inject constructor(
 
     private fun handleServerConfigsChanged(servers: List<ServerConfig>) {
         val previousServerId = uiState.value.selectedServerId
+            ?: uiState.value.appPreferences.lastSelectedServerId
         val selectedServerId = when {
             servers.isEmpty() -> null
             previousServerId != null && servers.any { it.id == previousServerId } -> previousServerId

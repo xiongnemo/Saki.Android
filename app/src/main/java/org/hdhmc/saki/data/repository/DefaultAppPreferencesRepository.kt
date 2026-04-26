@@ -58,6 +58,10 @@ class DefaultAppPreferencesRepository @Inject constructor(
     override suspend fun updateDefaultAlbumFeed(feed: AlbumListType) {
         // Default album feed preference is only supported via DataStore; no-op here
     }
+
+    override suspend fun updateLastSelectedServerId(serverId: Long?) {
+        // Last selected server is only supported via DataStore; no-op here
+    }
 }
 
 private fun AppPreferencesEntity.toDomain(): AppPreferences {
