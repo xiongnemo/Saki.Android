@@ -108,11 +108,7 @@ class SakiAppViewModel @Inject constructor(
                     }
                 }
                 // Apply saved theme mode
-                val nightMode = when (preferences.themeMode) {
-                    ThemeMode.SYSTEM -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                    ThemeMode.LIGHT -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO
-                    ThemeMode.DARK -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
-                }
+                val nightMode = preferences.themeMode.toNightMode()
                 if (androidx.appcompat.app.AppCompatDelegate.getDefaultNightMode() != nightMode) {
                     androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode)
                 }
@@ -268,17 +264,21 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    private fun ThemeMode.toNightMode(): Int = when (this) {
+        ThemeMode.SYSTEM -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        ThemeMode.LIGHT -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO
+        ThemeMode.DARK -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
+    }
+
     fun updateThemeMode(themeMode: ThemeMode) {
         viewModelScope.launch {
             runCatching {
                 appPreferencesRepository.updateThemeMode(themeMode)
             }.onSuccess {
-                val nightMode = when (themeMode) {
-                    ThemeMode.SYSTEM -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                    ThemeMode.LIGHT -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO
-                    ThemeMode.DARK -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
+                val nightMode = themeMode.toNightMode()
+                if (androidx.appcompat.app.AppCompatDelegate.getDefaultNightMode() != nightMode) {
+                    androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode)
                 }
-                androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode)
             }
         }
     }

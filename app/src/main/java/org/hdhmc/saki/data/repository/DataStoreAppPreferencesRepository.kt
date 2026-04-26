@@ -43,7 +43,7 @@ class DataStoreAppPreferencesRepository @Inject constructor(
     }
 
     override suspend fun updateThemeMode(themeMode: ThemeMode) {
-        dataStore.edit { it[KEY_THEME_MODE] = themeMode.key }
+        dataStore.edit { it[KEY_THEME_MODE] = themeMode.storageKey }
     }
 
     companion object {
@@ -56,5 +56,5 @@ class DataStoreAppPreferencesRepository @Inject constructor(
 private fun Preferences.toAppPreferences() = AppPreferences(
     textScale = TextScale.fromStorageKey(this[DataStoreAppPreferencesRepository.KEY_TEXT_SCALE]),
     language = AppLanguage.fromTag(this[DataStoreAppPreferencesRepository.KEY_LANGUAGE]),
-    themeMode = ThemeMode.fromKey(this[DataStoreAppPreferencesRepository.KEY_THEME_MODE]),
+    themeMode = ThemeMode.fromStorageKey(this[DataStoreAppPreferencesRepository.KEY_THEME_MODE]),
 )

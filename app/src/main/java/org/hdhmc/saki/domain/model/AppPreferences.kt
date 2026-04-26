@@ -55,13 +55,13 @@ enum class AppLanguage(val tag: String) {
     }
 }
 
-enum class ThemeMode(val key: String) {
+enum class ThemeMode(val storageKey: String) {
     SYSTEM("system"),
     LIGHT("light"),
     DARK("dark");
 
     companion object {
-        fun fromKey(key: String?): ThemeMode =
-            entries.firstOrNull { it.key == key } ?: SYSTEM
+        fun fromStorageKey(storageKey: String?): ThemeMode =
+            entries.firstOrNull { it.storageKey == storageKey } ?: SYSTEM
     }
 }

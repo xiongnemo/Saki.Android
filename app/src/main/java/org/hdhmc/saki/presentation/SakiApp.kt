@@ -28,7 +28,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Density
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import org.hdhmc.saki.domain.model.AppLanguage
 import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.presentation.library.BrowseScreen
 import org.hdhmc.saki.presentation.library.NowPlayingOverlay
