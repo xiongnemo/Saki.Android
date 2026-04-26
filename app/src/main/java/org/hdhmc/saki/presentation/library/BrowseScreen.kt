@@ -739,6 +739,8 @@ private fun AlbumsPage(
         state = feedPagerState,
         pagerSnapDistance = PagerSnapDistance.atMost(1),
     )
+    val coroutineScope = rememberCoroutineScope()
+    val highlightedFeed = feeds[feedPagerState.targetPage.coerceIn(0, feeds.lastIndex)]
 
     LaunchedEffect(selectedFeed) {
         val targetPage = feeds.indexOf(selectedFeed).coerceAtLeast(0)
@@ -758,9 +760,14 @@ private fun AlbumsPage(
     Column(modifier = Modifier.fillMaxSize()) {
         AlbumFeedControls(
             feeds = feeds,
-            selectedFeed = selectedFeed,
+            selectedFeed = highlightedFeed,
             viewMode = viewMode,
-            onSelectFeed = onSelectFeed,
+            onSelectFeed = { feed ->
+                val targetPage = feeds.indexOf(feed)
+                if (targetPage >= 0 && feedPagerState.targetPage != targetPage) {
+                    coroutineScope.launch { feedPagerState.animateScrollToPage(targetPage) }
+                }
+            },
             onUpdateViewMode = onUpdateViewMode,
         )
 
