@@ -738,10 +738,6 @@ private fun AlbumsPage(
         initialPage = feeds.indexOf(selectedFeed).coerceAtLeast(0),
         pageCount = { feeds.size },
     )
-    val feedPagerFlingBehavior = PagerDefaults.flingBehavior(
-        state = feedPagerState,
-        pagerSnapDistance = PagerSnapDistance.atMost(1),
-    )
     val coroutineScope = rememberCoroutineScope()
     val highlightedFeed = feeds[feedPagerState.targetPage.coerceIn(0, feeds.lastIndex)]
 
@@ -777,7 +773,8 @@ private fun AlbumsPage(
         HorizontalPager(
             state = feedPagerState,
             modifier = Modifier.weight(1f),
-            flingBehavior = feedPagerFlingBehavior,
+            // Feed chips still switch this pager, while horizontal drags stay with the outer tab pager.
+            userScrollEnabled = false,
         ) { page ->
             val feed = feeds[page]
             val feedState = albumFeeds[feed] ?: AlbumFeedState()
