@@ -10,6 +10,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +44,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ViewList
@@ -53,6 +56,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Text
@@ -566,56 +570,131 @@ private fun SearchResultsPage(
             )
         }
 
-        else -> LazyColumn(
-            modifier = modifier.fillMaxSize(),
-            contentPadding = bottomContentPadding(bottomOverlayPadding),
-        ) {
-            if (results.artists.isNotEmpty()) {
-                item {
-                    SectionTitle(
-                        title = stringResource(R.string.browse_artists),
-                        subtitle = matchCountText(results.artists.size),
-                    )
-                }
-                items(results.artists, key = { it.id }) { artist ->
-                    ArtistRow(artist = artist, onOpenArtist = onOpenArtist)
-                }
+        else -> {
+            var artistsExpanded by remember(trimmedQuery) { mutableStateOf(false) }
+            var albumsExpanded by remember(trimmedQuery) { mutableStateOf(false) }
+            var songsExpanded by remember(trimmedQuery) { mutableStateOf(false) }
+            val visibleArtists = if (artistsExpanded) {
+                results.artists
+            } else {
+                results.artists.take(SearchResultPreviewCount)
+            }
+            val visibleAlbums = if (albumsExpanded) {
+                results.albums
+            } else {
+                results.albums.take(SearchResultPreviewCount)
+            }
+            val visibleSongs = if (songsExpanded) {
+                results.songs
+            } else {
+                results.songs.take(SearchResultPreviewCount)
             }
 
-            if (results.albums.isNotEmpty()) {
-                item {
-                    SectionTitle(
-                        title = stringResource(R.string.library_albums),
-                        subtitle = matchCountText(results.albums.size),
-                    )
+            LazyColumn(
+                modifier = modifier.fillMaxSize(),
+                contentPadding = bottomContentPadding(bottomOverlayPadding),
+            ) {
+                if (results.artists.isNotEmpty()) {
+                    item(key = "artists-header") {
+                        SearchResultSectionHeader(
+                            title = stringResource(R.string.browse_artists),
+                            subtitle = matchCountText(results.artists.size),
+                            expanded = artistsExpanded,
+                            canToggle = results.artists.size > SearchResultPreviewCount,
+                            onToggle = { artistsExpanded = !artistsExpanded },
+                        )
+                    }
+                    items(visibleArtists, key = { "artist-${it.id}" }) { artist ->
+                        ArtistRow(artist = artist, onOpenArtist = onOpenArtist)
+                    }
                 }
-                items(results.albums, key = { it.id }) { album ->
-                    AlbumRow(album = album, server = currentServer, onOpenAlbum = onOpenAlbum)
-                }
-            }
 
-            if (results.songs.isNotEmpty()) {
-                item {
-                    SectionTitle(
-                        title = stringResource(R.string.browse_songs),
-                        subtitle = matchCountText(results.songs.size),
-                    )
+                if (results.albums.isNotEmpty()) {
+                    item(key = "albums-header") {
+                        SearchResultSectionHeader(
+                            title = stringResource(R.string.library_albums),
+                            subtitle = matchCountText(results.albums.size),
+                            expanded = albumsExpanded,
+                            canToggle = results.albums.size > SearchResultPreviewCount,
+                            onToggle = { albumsExpanded = !albumsExpanded },
+                        )
+                    }
+                    items(visibleAlbums, key = { "album-${it.id}" }) { album ->
+                        AlbumRow(album = album, server = currentServer, onOpenAlbum = onOpenAlbum)
+                    }
                 }
-                itemsIndexed(results.songs, key = { _, s -> s.id }) { index, song ->
-                    SongRow(
-                        song = song,
-                        server = currentServer,
-                        cachedSong = cachedSongsBySongId[song.id],
-                        isStreamCached = song.id in streamCachedSongIds,
-                        isDownloading = song.id in downloadingSongIds,
-                        onClick = { onPlaySongs(results.songs, index) },
-                        onMore = { onShowSongActions(song) },
-                    )
+
+                if (results.songs.isNotEmpty()) {
+                    item(key = "songs-header") {
+                        SearchResultSectionHeader(
+                            title = stringResource(R.string.browse_songs),
+                            subtitle = matchCountText(results.songs.size),
+                            expanded = songsExpanded,
+                            canToggle = results.songs.size > SearchResultPreviewCount,
+                            onToggle = { songsExpanded = !songsExpanded },
+                        )
+                    }
+                    itemsIndexed(visibleSongs, key = { _, s -> "song-${s.id}" }) { index, song ->
+                        SongRow(
+                            song = song,
+                            server = currentServer,
+                            cachedSong = cachedSongsBySongId[song.id],
+                            isStreamCached = song.id in streamCachedSongIds,
+                            isDownloading = song.id in downloadingSongIds,
+                            onClick = { onPlaySongs(results.songs, index) },
+                            onMore = { onShowSongActions(song) },
+                        )
+                    }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun SearchResultSectionHeader(
+    title: String,
+    subtitle: String,
+    expanded: Boolean,
+    canToggle: Boolean,
+    onToggle: () -> Unit,
+) {
+    val actionLabel = stringResource(
+        if (expanded) R.string.browse_collapse_results else R.string.browse_show_all_results,
+    )
+    val headerModifier = if (canToggle) {
+        Modifier.clickable(onClick = onToggle)
+    } else {
+        Modifier
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(headerModifier)
+            .padding(top = 8.dp, bottom = 6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = title, style = MaterialTheme.typography.headlineSmall)
+            if (canToggle) {
+                TextButton(onClick = onToggle, shape = MaterialTheme.shapes.small) {
+                    Text(actionLabel)
+                    Icon(
+                        imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = null,
+                    )
+                }
+            }
+        }
+        Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private const val SearchResultPreviewCount = 5
 
 @Composable
 private fun ArtistsPage(
