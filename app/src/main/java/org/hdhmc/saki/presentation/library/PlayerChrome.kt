@@ -396,9 +396,9 @@ fun NowPlayingOverlay(
         val background = remember(dominant, accent, colorScheme) {
             Brush.verticalGradient(
                 listOf(
-                    dominant.copy(alpha = 0.20f).compositeOver(colorScheme.background),
-                    accent.copy(alpha = 0.18f).compositeOver(colorScheme.surface),
-                    colorScheme.background,
+                    dominant.copy(alpha = 0.50f).compositeOver(colorScheme.background),
+                    accent.copy(alpha = 0.35f).compositeOver(colorScheme.surface),
+                    dominant.copy(alpha = 0.12f).compositeOver(colorScheme.background),
                 ),
             )
         }
