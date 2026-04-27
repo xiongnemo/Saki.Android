@@ -82,6 +82,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -728,13 +729,18 @@ private fun RecentSearchRow(
     onSearchQuery: (String) -> Unit,
     onRemoveRecentSearchQuery: (String) -> Unit,
 ) {
+    val searchLabel = stringResource(R.string.browse_run_recent_search, query)
+    val removeLabel = stringResource(R.string.browse_remove_recent_search, query)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
             .combinedClickable(
                 onClick = { onSearchQuery(query) },
+                onClickLabel = searchLabel,
                 onLongClick = { onRemoveRecentSearchQuery(query) },
+                onLongClickLabel = removeLabel,
+                role = Role.Button,
             )
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -757,7 +763,7 @@ private fun RecentSearchRow(
         IconButton(onClick = { onRemoveRecentSearchQuery(query) }) {
             Icon(
                 Icons.Rounded.Close,
-                contentDescription = stringResource(R.string.browse_remove_recent_search, query),
+                contentDescription = removeLabel,
             )
         }
     }

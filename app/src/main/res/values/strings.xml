@@ -183,6 +183,7 @@
     <string name="browse_search_server_body">Look up artists, albums, and songs on %1$s.</string>
     <string name="browse_recent_searches">Recent searches</string>
     <string name="browse_clear_search_history">Clear all</string>
+    <string name="browse_run_recent_search">Search for %1$s</string>
     <string name="browse_remove_recent_search">Remove %1$s from search history</string>
     <string name="browse_searching_server">Searching %1$s</string>
     <string name="browse_no_results">No results</string>
