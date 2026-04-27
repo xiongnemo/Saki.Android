@@ -15,6 +15,7 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import org.hdhmc.saki.data.remote.NetworkType
 import org.hdhmc.saki.data.remote.NetworkTypeProvider
+import org.hdhmc.saki.di.DefaultDispatcher
 import org.hdhmc.saki.di.MainDispatcher
 import org.hdhmc.saki.domain.model.CachedSong
 import org.hdhmc.saki.domain.model.PlaybackRuntimeInfo
@@ -36,8 +37,11 @@ import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,6 +57,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 class DefaultPlaybackManager @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
     @param:MainDispatcher private val mainDispatcher: CoroutineDispatcher,
+    @param:DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
     private val playbackPreferencesRepository: PlaybackPreferencesRepository,
     private val cachedSongRepository: CachedSongRepository,
     private val streamCacheRepository: StreamCacheRepository,
@@ -66,6 +71,11 @@ class DefaultPlaybackManager @Inject constructor(
     private var shuffleAnchorIndex: Int = 0
     private var shuffleDisplayOrder: List<Int>? = null // player indices in shuffle display order
     private var restoringExternalShuffleState = false
+    private var deferredQueueJob: Job? = null
+    private var queueLoadGeneration: Long = 0L
+    private var pendingDeferredShuffleEnabled: Boolean? = null
+    private var pendingDeferredShuffleSeed: Long = 0L
+    private var pendingDeferredShuffleAnchorIndex: Int = 0
 
     private val controllerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -185,27 +195,181 @@ class DefaultPlaybackManager @Inject constructor(
         startIndex: Int,
     ) {
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
-        shuffleDisplayOrder = null
-        persistShuffleState()
+        val safeStartIndex = startIndex.coerceIn(songs.indices)
+        val startSong = songs[safeStartIndex]
         val preferredQuality = effectiveQuality()
+        val startCachedSong = cachedSongRepository.getPlayableCachedSong(serverId, startSong.id, preferredQuality)
+        val startMediaItem = startSong.toPreferredMediaItem(
+            serverId = serverId,
+            preferredQuality = preferredQuality,
+            cachedSong = startCachedSong,
+        )
+
+        withController { activeController ->
+            val generation = beginDeferredQueueLoad()
+            val shouldRestoreShuffle = shuffleDisplayOrder != null || activeController.shuffleModeEnabled
+            val deferredShuffleSeed = if (shouldRestoreShuffle) System.nanoTime() else 0L
+            pendingDeferredShuffleEnabled = if (songs.size > 1) shouldRestoreShuffle else null
+            pendingDeferredShuffleSeed = deferredShuffleSeed
+            pendingDeferredShuffleAnchorIndex = safeStartIndex
+            shuffleDisplayOrder = null
+            activeController.shuffleModeEnabled = false
+            if (shouldRestoreShuffle && songs.size > 1) {
+                shuffleSeed = deferredShuffleSeed
+                shuffleAnchorIndex = safeStartIndex
+                persistShuffleState(shuffleSeed, shuffleAnchorIndex)
+            } else {
+                persistShuffleState()
+            }
+            activeController.setMediaItem(startMediaItem)
+            activeController.prepare()
+            activeController.play()
+            syncState(activeController)
+            if (songs.size > 1) {
+                scheduleDeferredQueueLoad(
+                    generation = generation,
+                    serverId = serverId,
+                    songs = songs.toList(),
+                    startIndex = safeStartIndex,
+                    preferredQuality = preferredQuality,
+                    restoreShuffle = shouldRestoreShuffle,
+                    shuffleSeedForQueue = deferredShuffleSeed,
+                )
+            }
+        }
+    }
+
+    private fun beginDeferredQueueLoad(): Long {
+        deferredQueueJob?.cancel()
+        deferredQueueJob = null
+        pendingDeferredShuffleEnabled = null
+        pendingDeferredShuffleSeed = 0L
+        pendingDeferredShuffleAnchorIndex = 0
+        queueLoadGeneration += 1
+        return queueLoadGeneration
+    }
+
+    private fun cancelDeferredQueueLoad(clearPendingShuffleState: Boolean = false) {
+        val shouldClearShuffleState = clearPendingShuffleState && pendingDeferredShuffleEnabled != null
+        beginDeferredQueueLoad()
+        if (shouldClearShuffleState) {
+            persistShuffleState()
+        }
+    }
+
+    private fun scheduleDeferredQueueLoad(
+        generation: Long,
+        serverId: Long,
+        songs: List<Song>,
+        startIndex: Int,
+        preferredQuality: StreamQuality,
+        restoreShuffle: Boolean,
+        shuffleSeedForQueue: Long,
+    ) {
+        val currentSongId = songs[startIndex].id
+        deferredQueueJob = scope.launch {
+            try {
+                val deferredItems = buildDeferredQueueItems(
+                    serverId = serverId,
+                    songs = songs,
+                    startIndex = startIndex,
+                    preferredQuality = preferredQuality,
+                )
+                withController { activeController ->
+                    if (generation != queueLoadGeneration) return@withController
+                    if (activeController.mediaItemCount != 1) return@withController
+                    if (activeController.currentMediaItem?.toPlaybackRequestOrNull()?.songId != currentSongId) {
+                        return@withController
+                    }
+
+                    if (deferredItems.before.isNotEmpty()) {
+                        activeController.addMediaItems(0, deferredItems.before)
+                    }
+                    if (deferredItems.after.isNotEmpty()) {
+                        activeController.addMediaItems(deferredItems.after)
+                    }
+                    if (activeController.currentMediaItem?.toPlaybackRequestOrNull()?.songId != currentSongId) {
+                        return@withController
+                    }
+
+                    val fullQueueSize = activeController.mediaItemCount
+                    val currentIndex = activeController.currentMediaItemIndex
+                    val enableShuffle = pendingDeferredShuffleEnabled ?: restoreShuffle
+                    val pendingShuffleSeed = pendingDeferredShuffleSeed
+                    pendingDeferredShuffleEnabled = null
+                    pendingDeferredShuffleSeed = 0L
+                    pendingDeferredShuffleAnchorIndex = 0
+                    if (enableShuffle && fullQueueSize > 1 && currentIndex in 0 until fullQueueSize) {
+                        shuffleSeed = pendingShuffleSeed.takeUnless { it == 0L }
+                            ?: shuffleSeedForQueue.takeUnless { it == 0L }
+                            ?: System.nanoTime()
+                        shuffleAnchorIndex = currentIndex
+                        sendShuffleOrderToService(activeController, fullQueueSize, shuffleSeed, shuffleAnchorIndex)
+                        activeController.shuffleModeEnabled = true
+                        shuffleDisplayOrder = SakiShuffleOrder(fullQueueSize, shuffleSeed, shuffleAnchorIndex).toDisplayOrder()
+                    } else {
+                        activeController.shuffleModeEnabled = false
+                        shuffleDisplayOrder = null
+                    }
+                    persistShuffleState()
+                    syncState(activeController)
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (_: Exception) {
+                // Keep the already-started track playing if deferred queue expansion fails.
+            } finally {
+                // Only the active deferred load may clear pending state. Cancelled or stale loads
+                // have a newer generation, and must leave the newer playback request alone.
+                if (generation == queueLoadGeneration) {
+                    val hadPendingShuffle = pendingDeferredShuffleEnabled != null
+                    deferredQueueJob = null
+                    pendingDeferredShuffleEnabled = null
+                    pendingDeferredShuffleSeed = 0L
+                    pendingDeferredShuffleAnchorIndex = 0
+                    if (hadPendingShuffle) {
+                        persistShuffleState()
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun buildDeferredQueueItems(
+        serverId: Long,
+        songs: List<Song>,
+        startIndex: Int,
+        preferredQuality: StreamQuality,
+    ): DeferredQueueItems = withContext(defaultDispatcher) {
         val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality)
-        val mediaItems = songs.map { song ->
-            song.toPreferredMediaItem(
+        val before = ArrayList<MediaItem>(startIndex)
+        for (index in 0 until startIndex) {
+            currentCoroutineContext().ensureActive()
+            val song = songs[index]
+            before += song.toPreferredMediaItem(
                 serverId = serverId,
                 preferredQuality = preferredQuality,
                 cachedSong = cachedSongsById[song.id],
             )
         }
 
-        withController { activeController ->
-            val safeStartIndex = startIndex.coerceIn(mediaItems.indices)
-            activeController.shuffleModeEnabled = false
-            activeController.setMediaItems(mediaItems, safeStartIndex, C.TIME_UNSET)
-            activeController.prepare()
-            activeController.play()
-            syncState(activeController)
+        val after = ArrayList<MediaItem>((songs.lastIndex - startIndex).coerceAtLeast(0))
+        for (index in (startIndex + 1)..songs.lastIndex) {
+            currentCoroutineContext().ensureActive()
+            val song = songs[index]
+            after += song.toPreferredMediaItem(
+                serverId = serverId,
+                preferredQuality = preferredQuality,
+                cachedSong = cachedSongsById[song.id],
+            )
         }
+        DeferredQueueItems(before = before, after = after)
     }
+
+    private data class DeferredQueueItems(
+        val before: List<MediaItem>,
+        val after: List<MediaItem>,
+    )
 
     override suspend fun restoreQueue(
         serverId: Long,
@@ -214,6 +378,7 @@ class DefaultPlaybackManager @Inject constructor(
         positionMs: Long,
     ) {
         if (songs.isEmpty()) return
+        cancelDeferredQueueLoad()
         shuffleDisplayOrder = null
         val preferredQuality = effectiveQuality()
         val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality)
@@ -251,6 +416,7 @@ class DefaultPlaybackManager @Inject constructor(
         startIndex: Int,
     ) {
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
+        cancelDeferredQueueLoad()
         shuffleDisplayOrder = null
         persistShuffleState()
         val mediaItems = songs.map(CachedSong::toCachedMediaItem)
@@ -270,6 +436,7 @@ class DefaultPlaybackManager @Inject constructor(
         songs: List<Song>,
     ) {
         if (songs.isEmpty()) return
+        cancelDeferredQueueLoad(clearPendingShuffleState = true)
         clearShuffleIfActive()
         val preferredQuality = effectiveQuality()
         val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality)
@@ -291,6 +458,7 @@ class DefaultPlaybackManager @Inject constructor(
         serverId: Long,
         song: Song,
     ) {
+        cancelDeferredQueueLoad(clearPendingShuffleState = true)
         clearShuffleIfActive()
         val preferredQuality = effectiveQuality()
         val cachedSong = cachedSongRepository.getPlayableCachedSong(serverId, song.id, preferredQuality)
@@ -378,6 +546,12 @@ class DefaultPlaybackManager @Inject constructor(
         }
     }
 
+    private fun persistShuffleState(seed: Long, anchorIndex: Int) {
+        scope.launch {
+            playbackPreferencesRepository.updateShuffleState(seed, anchorIndex)
+        }
+    }
+
     private suspend fun clearShuffleIfActive() {
         if (shuffleDisplayOrder == null) return
         shuffleDisplayOrder = null
@@ -408,6 +582,26 @@ class DefaultPlaybackManager @Inject constructor(
     override suspend fun toggleShuffle() {
         withController { activeController ->
             val count = activeController.mediaItemCount
+            pendingDeferredShuffleEnabled?.let { pendingShuffle ->
+                // While the deferred queue is still a single-item placeholder, record the user's
+                // desired shuffle state and apply it after the full queue has been inserted.
+                // If expansion has already inserted items, fall through to the normal path below.
+                if (deferredQueueJob != null && count <= 1) {
+                    val enableShuffle = !pendingShuffle
+                    pendingDeferredShuffleEnabled = enableShuffle
+                    if (enableShuffle) {
+                        val seed = pendingDeferredShuffleSeed.takeUnless { it == 0L } ?: System.nanoTime()
+                        pendingDeferredShuffleSeed = seed
+                        shuffleSeed = seed
+                        shuffleAnchorIndex = pendingDeferredShuffleAnchorIndex
+                        persistShuffleState(seed, pendingDeferredShuffleAnchorIndex)
+                    } else {
+                        persistShuffleState()
+                    }
+                    syncState(activeController)
+                    return@withController
+                }
+            }
             if (count <= 1) return@withController
 
             if (shuffleDisplayOrder == null) {
@@ -439,6 +633,7 @@ class DefaultPlaybackManager @Inject constructor(
     }
 
     override suspend fun removeQueueItem(index: Int) {
+        cancelDeferredQueueLoad(clearPendingShuffleState = true)
         withController { activeController ->
             val playerIndex = displayToPlayer(index)
             if (playerIndex !in 0 until activeController.mediaItemCount) return@withController
@@ -548,7 +743,7 @@ class DefaultPlaybackManager @Inject constructor(
                 bufferedPositionMs = player.bufferedPosition.coerceKnownTime(),
                 isStreamCached = streamCached,
                 repeatMode = player.repeatMode.toRepeatModeSetting(),
-                shuffleEnabled = shuffleDisplayOrder != null || player.shuffleModeEnabled,
+                shuffleEnabled = pendingDeferredShuffleEnabled ?: (shuffleDisplayOrder != null || player.shuffleModeEnabled),
                 runtimeInfo = player.currentAudioRuntimeInfoOrNull(),
             )
         }
