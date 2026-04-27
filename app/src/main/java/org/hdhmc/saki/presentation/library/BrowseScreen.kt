@@ -910,7 +910,7 @@ private fun ArtistsPage(
             exit = androidx.compose.animation.fadeOut(),
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .padding(vertical = 8.dp),
+                .padding(top = 8.dp, bottom = 8.dp + bottomOverlayPadding),
         ) {
             AlphabetScrollBar(
                 labels = visibleScrollLabels,
