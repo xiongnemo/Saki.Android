@@ -62,6 +62,18 @@ class DefaultAppPreferencesRepository @Inject constructor(
     override suspend fun updateLastSelectedServerId(serverId: Long?) {
         // Last selected server is only supported via DataStore; no-op here
     }
+
+    override suspend fun addRecentSearchQuery(query: String) {
+        // Recent search history is only supported via DataStore; no-op here
+    }
+
+    override suspend fun removeRecentSearchQuery(query: String) {
+        // Recent search history is only supported via DataStore; no-op here
+    }
+
+    override suspend fun clearRecentSearchQueries() {
+        // Recent search history is only supported via DataStore; no-op here
+    }
 }
 
 private fun AppPreferencesEntity.toDomain(): AppPreferences {

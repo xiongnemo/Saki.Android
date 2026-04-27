@@ -46,6 +46,7 @@ data class AppPreferences(
     val defaultBrowseTab: DefaultBrowseTab = DefaultBrowseTab.ARTISTS,
     val defaultAlbumFeed: AlbumListType = AlbumListType.NEWEST,
     val lastSelectedServerId: Long? = null,
+    val recentSearchQueries: List<String> = emptyList(),
 )
 
 enum class DefaultBrowseTab(val storageKey: String) {
