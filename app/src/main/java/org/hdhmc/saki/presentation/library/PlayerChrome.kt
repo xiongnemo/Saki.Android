@@ -17,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -452,6 +453,7 @@ fun NowPlayingOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .background(background)
+                .pointerInput(Unit) { detectTapGestures { /* consume all taps */ } }
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .imePadding(),
@@ -541,11 +543,7 @@ fun NowPlayingOverlay(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth()
-                            .clickable {
-                                if (showLyrics) showLyrics = false
-                                else if (hasLyrics) showLyrics = true
-                            },
+                            .fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
                         HorizontalPager(
@@ -566,7 +564,12 @@ fun NowPlayingOverlay(
                                     contentDescription = queueItem?.title,
                                     modifier = Modifier
                                         .aspectRatio(1f)
-                                        .fillMaxHeight(),
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(34.dp))
+                                        .clickable {
+                                            if (showLyrics) showLyrics = false
+                                            else if (hasLyrics) showLyrics = true
+                                        },
                                     cornerRadiusDp = 34,
                                 )
                             }
