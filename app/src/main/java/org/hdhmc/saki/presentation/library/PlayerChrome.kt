@@ -100,7 +100,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
@@ -659,7 +658,12 @@ fun NowPlayingOverlay(
                             )
                         }
                         Box {
-                            PlayerActionButton(Icons.Rounded.MoreVert, stringResource(R.string.player_more), { showMenu = true }, true)
+                            PressScaleIconButton(
+                                icon = Icons.Rounded.MoreVert,
+                                contentDescription = stringResource(R.string.player_more),
+                                onClick = { showMenu = true },
+                                compact = true,
+                            )
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.player_song_details)) },
@@ -1108,6 +1112,28 @@ private fun ToggleIconButton(
 ) {
     val onText = stringResource(R.string.common_on)
     val offText = stringResource(R.string.common_off)
+    PressScaleIconButton(
+        icon = icon,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        compact = compact,
+        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = if (active) 1f else 0.38f),
+        role = Role.Switch,
+        semanticStateDescription = "$contentDescription: ${if (active) onText else offText}",
+    )
+}
+
+@Composable
+private fun PressScaleIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    compact: Boolean = false,
+    tint: Color? = null,
+    role: Role = Role.Button,
+    semanticStateDescription: String? = null,
+) {
+    val iconTint = tint ?: MaterialTheme.colorScheme.onBackground
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
@@ -1116,27 +1142,37 @@ private fun ToggleIconButton(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium,
         ),
-        label = "ToggleIconButtonPressScale",
+        label = "PressScaleIconButtonPressScale",
     )
 
-    IconButton(
-        onClick = onClick,
-        interactionSource = interactionSource,
+    Box(
         modifier = Modifier
             .size(if (compact) 48.dp else 56.dp)
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
             }
-            .semantics {
-                role = Role.Switch
-                stateDescription = "$contentDescription: ${if (active) onText else offText}"
-            },
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = role,
+                onClick = onClick,
+            )
+            .then(
+                if (semanticStateDescription != null) {
+                    Modifier.semantics {
+                        stateDescription = semanticStateDescription
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = if (active) 1f else 0.38f),
+            tint = iconTint,
             modifier = if (compact) Modifier.size(20.dp) else Modifier,
         )
     }
