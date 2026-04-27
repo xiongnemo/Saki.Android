@@ -74,6 +74,8 @@ class DefaultPlaybackManager @Inject constructor(
     private var deferredQueueJob: Job? = null
     private var queueLoadGeneration: Long = 0L
     private var pendingDeferredShuffleEnabled: Boolean? = null
+    private var pendingDeferredShuffleSeed: Long = 0L
+    private var pendingDeferredShuffleAnchorIndex: Int = 0
 
     private val controllerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -208,9 +210,15 @@ class DefaultPlaybackManager @Inject constructor(
             val shouldRestoreShuffle = shuffleDisplayOrder != null || activeController.shuffleModeEnabled
             val deferredShuffleSeed = if (shouldRestoreShuffle) System.nanoTime() else 0L
             pendingDeferredShuffleEnabled = if (songs.size > 1) shouldRestoreShuffle else null
+            pendingDeferredShuffleSeed = deferredShuffleSeed
+            pendingDeferredShuffleAnchorIndex = safeStartIndex
             shuffleDisplayOrder = null
             activeController.shuffleModeEnabled = false
-            if (!shouldRestoreShuffle || songs.size == 1) {
+            if (shouldRestoreShuffle && songs.size > 1) {
+                shuffleSeed = deferredShuffleSeed
+                shuffleAnchorIndex = safeStartIndex
+                persistShuffleState(shuffleSeed, shuffleAnchorIndex)
+            } else {
                 persistShuffleState()
             }
             activeController.setMediaItem(startMediaItem)
@@ -235,6 +243,8 @@ class DefaultPlaybackManager @Inject constructor(
         deferredQueueJob?.cancel()
         deferredQueueJob = null
         pendingDeferredShuffleEnabled = null
+        pendingDeferredShuffleSeed = 0L
+        pendingDeferredShuffleAnchorIndex = 0
         queueLoadGeneration += 1
         return queueLoadGeneration
     }
@@ -285,9 +295,14 @@ class DefaultPlaybackManager @Inject constructor(
                     val fullQueueSize = activeController.mediaItemCount
                     val currentIndex = activeController.currentMediaItemIndex
                     val enableShuffle = pendingDeferredShuffleEnabled ?: restoreShuffle
+                    val pendingShuffleSeed = pendingDeferredShuffleSeed
                     pendingDeferredShuffleEnabled = null
+                    pendingDeferredShuffleSeed = 0L
+                    pendingDeferredShuffleAnchorIndex = 0
                     if (enableShuffle && fullQueueSize > 1 && currentIndex in 0 until fullQueueSize) {
-                        shuffleSeed = shuffleSeedForQueue.takeUnless { it == 0L } ?: System.nanoTime()
+                        shuffleSeed = pendingShuffleSeed.takeUnless { it == 0L }
+                            ?: shuffleSeedForQueue.takeUnless { it == 0L }
+                            ?: System.nanoTime()
                         shuffleAnchorIndex = currentIndex
                         sendShuffleOrderToService(activeController, fullQueueSize, shuffleSeed, shuffleAnchorIndex)
                         activeController.shuffleModeEnabled = true
@@ -308,6 +323,8 @@ class DefaultPlaybackManager @Inject constructor(
                     val hadPendingShuffle = pendingDeferredShuffleEnabled != null
                     deferredQueueJob = null
                     pendingDeferredShuffleEnabled = null
+                    pendingDeferredShuffleSeed = 0L
+                    pendingDeferredShuffleAnchorIndex = 0
                     if (hadPendingShuffle) {
                         persistShuffleState()
                     }
@@ -527,6 +544,12 @@ class DefaultPlaybackManager @Inject constructor(
         }
     }
 
+    private fun persistShuffleState(seed: Long, anchorIndex: Int) {
+        scope.launch {
+            playbackPreferencesRepository.updateShuffleState(seed, anchorIndex)
+        }
+    }
+
     private suspend fun clearShuffleIfActive() {
         if (shuffleDisplayOrder == null) return
         shuffleDisplayOrder = null
@@ -559,7 +582,17 @@ class DefaultPlaybackManager @Inject constructor(
             val count = activeController.mediaItemCount
             pendingDeferredShuffleEnabled?.let { pendingShuffle ->
                 if (deferredQueueJob != null && count <= 1) {
-                    pendingDeferredShuffleEnabled = !pendingShuffle
+                    val enableShuffle = !pendingShuffle
+                    pendingDeferredShuffleEnabled = enableShuffle
+                    if (enableShuffle) {
+                        val seed = pendingDeferredShuffleSeed.takeUnless { it == 0L } ?: System.nanoTime()
+                        pendingDeferredShuffleSeed = seed
+                        shuffleSeed = seed
+                        shuffleAnchorIndex = pendingDeferredShuffleAnchorIndex
+                        persistShuffleState(seed, pendingDeferredShuffleAnchorIndex)
+                    } else {
+                        persistShuffleState()
+                    }
                     syncState(activeController)
                     return@withController
                 }
