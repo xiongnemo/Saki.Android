@@ -186,6 +186,8 @@
     <string name="browse_no_results_body">Nothing matched \"%1$s\" on %2$s.</string>
     <string name="browse_artists">Artists</string>
     <string name="browse_songs">Songs</string>
+    <string name="browse_show_all_results">Show all</string>
+    <string name="browse_collapse_results">Collapse</string>
     <string name="browse_loading_artists">Loading artists</string>
     <string name="browse_no_artists">No artists</string>
     <string name="browse_no_artists_body">The server did not return artist indexes.</string>
