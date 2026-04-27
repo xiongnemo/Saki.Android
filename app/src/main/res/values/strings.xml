@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Saki.Android</string>
+    <string name="app_name" translatable="false">Saki</string>
 
 
     <string name="settings_title">Settings</string>
@@ -62,12 +62,12 @@
     <string name="settings_remove_download">Remove download</string>
 
     <string name="stream_quality_original">Original</string>
-    <string name="stream_quality_320_kbps">320 kbps</string>
-    <string name="stream_quality_256_kbps">256 kbps</string>
-    <string name="stream_quality_192_kbps">192 kbps</string>
-    <string name="stream_quality_160_kbps">160 kbps</string>
-    <string name="stream_quality_128_kbps">128 kbps</string>
-    <string name="stream_quality_96_kbps">96 kbps</string>
+    <string name="stream_quality_320_kbps" translatable="false">320 kbps</string>
+    <string name="stream_quality_256_kbps" translatable="false">256 kbps</string>
+    <string name="stream_quality_192_kbps" translatable="false">192 kbps</string>
+    <string name="stream_quality_160_kbps" translatable="false">160 kbps</string>
+    <string name="stream_quality_128_kbps" translatable="false">128 kbps</string>
+    <string name="stream_quality_96_kbps" translatable="false">96 kbps</string>
     <string name="sound_balancing_off">Off</string>
     <string name="sound_balancing_low">Low</string>
     <string name="sound_balancing_medium">Medium</string>
