@@ -141,10 +141,10 @@ private fun String?.decodeRecentSearchQueries(): List<String> {
 
     return runCatching {
         val array = JSONArray(this)
-        buildList {
+        buildList<String> {
             for (index in 0 until array.length()) {
                 val query = array.optString(index).trim()
-                if (query.isNotEmpty() && none { it.equals(query, ignoreCase = true) }) {
+                if (query.isNotEmpty() && !any { it.equals(query, ignoreCase = true) }) {
                     add(query)
                 }
             }
