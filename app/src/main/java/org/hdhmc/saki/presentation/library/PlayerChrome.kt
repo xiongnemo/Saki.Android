@@ -453,10 +453,10 @@ fun NowPlayingOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .background(background)
-                .pointerInput(Unit) { detectTapGestures { /* consume all taps */ } }
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .imePadding(),
+                .imePadding()
+                .pointerInput(Unit) { detectTapGestures { /* consume all taps */ } },
         ) {
             val playerSnackbarHostState = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
