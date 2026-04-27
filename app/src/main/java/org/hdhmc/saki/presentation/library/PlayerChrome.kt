@@ -104,6 +104,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -402,6 +404,23 @@ fun NowPlayingOverlay(
                 ),
             )
         }
+        val isDark = colorScheme.background.luminance() < 0.5f
+        val playButtonColor = remember(dominant, isDark) {
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(dominant.toArgb(), hsv)
+            hsv[1] = hsv[1].coerceAtMost(0.35f)
+            hsv[2] = if (isDark) 0.30f else 0.88f
+            Color(android.graphics.Color.HSVToColor(hsv))
+        }
+        val onPlayButtonColor = if (isDark) Color.White else Color.Black
+        val sliderActiveColor = remember(dominant, isDark) {
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(dominant.toArgb(), hsv)
+            hsv[1] = hsv[1].coerceIn(0.30f, 0.55f)
+            hsv[2] = if (isDark) 0.70f else 0.45f
+            Color(android.graphics.Color.HSVToColor(hsv))
+        }
+        val sliderInactiveColor = sliderActiveColor.copy(alpha = 0.25f)
         var sliderValue by remember(track.songId) {
             mutableFloatStateOf(playbackState.positionMs.toFloat())
         }
@@ -710,16 +729,18 @@ fun NowPlayingOverlay(
                     val isCachedTrack = track.isCached || playbackState.isStreamCached
                     val sliderColors = if (isCachedTrack) {
                         SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.tertiary,
-                            activeTrackColor = MaterialTheme.colorScheme.tertiary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                            thumbColor = sliderActiveColor,
+                            activeTrackColor = sliderActiveColor,
+                            inactiveTrackColor = sliderInactiveColor,
                         )
                     } else {
                         SliderDefaults.colors(
+                            thumbColor = sliderActiveColor,
+                            activeTrackColor = sliderActiveColor,
                             inactiveTrackColor = Color.Transparent,
                         )
                     }
-                    val bufferColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    val bufferColor = sliderActiveColor.copy(alpha = 0.3f)
                     val trackBgColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
                     Slider(
@@ -813,7 +834,7 @@ fun NowPlayingOverlay(
                                     height = if (compactControls) 64.dp else 72.dp,
                                 ),
                                 shape = MaterialTheme.shapes.medium,
-                                color = MaterialTheme.colorScheme.primaryContainer,
+                                color = playButtonColor,
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -826,7 +847,7 @@ fun NowPlayingOverlay(
                                     Icon(
                                         imageVector = if (playbackState.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        tint = onPlayButtonColor,
                                     )
                                     Text(
                                         text = if (playbackState.isPlaying) {
@@ -836,7 +857,7 @@ fun NowPlayingOverlay(
                                         },
                                         modifier = Modifier.padding(start = 10.dp),
                                         style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        color = onPlayButtonColor,
                                     )
                                 }
                             }
@@ -1093,16 +1114,11 @@ private fun PlayerActionButton(
     onClick: () -> Unit,
     compact: Boolean,
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(if (compact) 48.dp else 56.dp),
     ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier.size(if (compact) 48.dp else 56.dp),
-        ) {
-            Icon(imageVector = icon, contentDescription = label)
-        }
+        Icon(imageVector = icon, contentDescription = label)
     }
 }
 
