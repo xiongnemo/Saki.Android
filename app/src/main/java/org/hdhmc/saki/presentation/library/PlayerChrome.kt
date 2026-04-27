@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -17,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +36,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -98,7 +101,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
@@ -110,6 +112,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -627,7 +630,10 @@ fun NowPlayingOverlay(
                         val shuffleDescription = stringResource(R.string.player_shuffle)
                         val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
                         val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.offset(x = (-12).dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
                             ToggleIconButton(
                                 icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                                 active = playbackState.repeatMode != RepeatModeSetting.OFF,
@@ -655,8 +661,13 @@ fun NowPlayingOverlay(
                                 compact = true,
                             )
                         }
-                        Box {
-                            PlayerActionButton(Icons.Rounded.MoreVert, stringResource(R.string.player_more), { showMenu = true }, true)
+                        Box(modifier = Modifier.offset(x = 12.dp)) {
+                            PressScaleIconButton(
+                                icon = Icons.Rounded.MoreVert,
+                                contentDescription = stringResource(R.string.player_more),
+                                onClick = { showMenu = true },
+                                compact = true,
+                            )
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.player_song_details)) },
@@ -1105,28 +1116,69 @@ private fun ToggleIconButton(
 ) {
     val onText = stringResource(R.string.common_on)
     val offText = stringResource(R.string.common_off)
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = if (active) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
-    ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier
-                .size(if (compact) 48.dp else 56.dp)
-                .semantics {
-                    role = Role.Switch
-                    stateDescription = "$contentDescription: ${if (active) onText else offText}"
-                },
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = if (active) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = if (compact) Modifier.size(20.dp) else Modifier,
+    PressScaleIconButton(
+        icon = icon,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        compact = compact,
+        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = if (active) 1f else 0.38f),
+        role = Role.Switch,
+        semanticStateDescription = "$contentDescription: ${if (active) onText else offText}",
+    )
+}
+
+@Composable
+private fun PressScaleIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    compact: Boolean = false,
+    tint: Color? = null,
+    role: Role = Role.Button,
+    semanticStateDescription: String? = null,
+) {
+    val iconTint = tint ?: MaterialTheme.colorScheme.onBackground
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.85f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "PressScaleIconButtonPressScale",
+    )
+
+    Box(
+        modifier = Modifier
+            .size(if (compact) 48.dp else 56.dp)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = role,
+                onClick = onClick,
             )
-        }
+            .then(
+                if (semanticStateDescription != null) {
+                    Modifier.semantics {
+                        stateDescription = semanticStateDescription
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = iconTint,
+            modifier = if (compact) Modifier.size(24.dp) else Modifier,
+        )
     }
 }
 
