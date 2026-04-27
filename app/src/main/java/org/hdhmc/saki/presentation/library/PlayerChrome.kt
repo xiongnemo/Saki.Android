@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -629,7 +630,10 @@ fun NowPlayingOverlay(
                         val shuffleDescription = stringResource(R.string.player_shuffle)
                         val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
                         val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.offset(x = (-12).dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
                             ToggleIconButton(
                                 icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                                 active = playbackState.repeatMode != RepeatModeSetting.OFF,
@@ -657,7 +661,7 @@ fun NowPlayingOverlay(
                                 compact = true,
                             )
                         }
-                        Box {
+                        Box(modifier = Modifier.offset(x = 12.dp)) {
                             PressScaleIconButton(
                                 icon = Icons.Rounded.MoreVert,
                                 contentDescription = stringResource(R.string.player_more),
