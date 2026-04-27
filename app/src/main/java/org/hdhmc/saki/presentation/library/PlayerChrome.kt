@@ -1173,7 +1173,7 @@ private fun PressScaleIconButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = iconTint,
-            modifier = if (compact) Modifier.size(20.dp) else Modifier,
+            modifier = if (compact) Modifier.size(24.dp) else Modifier,
         )
     }
 }
