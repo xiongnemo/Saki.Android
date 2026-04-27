@@ -11,6 +11,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Settings
@@ -74,11 +76,13 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -118,6 +122,8 @@ fun BrowseScreen(
     onSelectBrowseSection: (BrowseSection) -> Unit,
     onSetSearchActive: (Boolean) -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
+    onRemoveRecentSearchQuery: (String) -> Unit,
+    onClearRecentSearchQueries: () -> Unit,
     onRefreshCurrentTab: () -> Unit,
     onSelectAlbumFeed: (AlbumListType) -> Unit,
     onLoadMoreAlbums: () -> Unit,
@@ -251,6 +257,8 @@ fun BrowseScreen(
                         onSelectBrowseSection = onSelectBrowseSection,
                         onSetSearchActive = onSetSearchActive,
                         onUpdateSearchQuery = onUpdateSearchQuery,
+                        onRemoveRecentSearchQuery = onRemoveRecentSearchQuery,
+                        onClearRecentSearchQueries = onClearRecentSearchQueries,
                         onRefreshCurrentTab = onRefreshCurrentTab,
                         onSelectAlbumFeed = onSelectAlbumFeed,
                         onLoadMoreAlbums = onLoadMoreAlbums,
@@ -314,6 +322,8 @@ private fun BrowsePager(
     onSelectBrowseSection: (BrowseSection) -> Unit,
     onSetSearchActive: (Boolean) -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
+    onRemoveRecentSearchQuery: (String) -> Unit,
+    onClearRecentSearchQueries: () -> Unit,
     onRefreshCurrentTab: () -> Unit,
     onSelectAlbumFeed: (AlbumListType) -> Unit,
     onLoadMoreAlbums: () -> Unit,
@@ -367,10 +377,14 @@ private fun BrowsePager(
                 results = uiState.searchResults,
                 isLoading = uiState.isSearchLoading,
                 error = uiState.searchError?.asString(),
+                recentSearchQueries = uiState.appPreferences.recentSearchQueries,
                 cachedSongsBySongId = cachedSongsBySongId,
                 streamCachedSongIds = uiState.streamCachedSongIds,
                 downloadingSongIds = uiState.downloadingSongIds,
                 bottomOverlayPadding = bottomOverlayPadding,
+                onSearchQuery = onUpdateSearchQuery,
+                onRemoveRecentSearchQuery = onRemoveRecentSearchQuery,
+                onClearRecentSearchQueries = onClearRecentSearchQueries,
                 onOpenArtist = onOpenArtist,
                 onOpenAlbum = onOpenAlbum,
                 onPlaySongs = onPlaySongs,
@@ -537,10 +551,14 @@ private fun SearchResultsPage(
     results: SearchResults,
     isLoading: Boolean,
     error: String?,
+    recentSearchQueries: List<String>,
     cachedSongsBySongId: Map<String, CachedSong>,
     streamCachedSongIds: Set<String>,
     downloadingSongIds: Set<String>,
     bottomOverlayPadding: Dp,
+    onSearchQuery: (String) -> Unit,
+    onRemoveRecentSearchQuery: (String) -> Unit,
+    onClearRecentSearchQueries: () -> Unit,
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
@@ -548,12 +566,15 @@ private fun SearchResultsPage(
 ) {
     val trimmedQuery = query.trim()
     when {
-        trimmedQuery.isBlank() -> Box(modifier = modifier) {
-            EmptyStateCard(
-                title = stringResource(R.string.browse_search_server),
-                body = stringResource(R.string.browse_search_server_body, currentServer.name),
-            )
-        }
+        trimmedQuery.isBlank() -> RecentSearchesPage(
+            modifier = modifier,
+            currentServer = currentServer,
+            recentSearchQueries = recentSearchQueries,
+            bottomOverlayPadding = bottomOverlayPadding,
+            onSearchQuery = onSearchQuery,
+            onRemoveRecentSearchQuery = onRemoveRecentSearchQuery,
+            onClearRecentSearchQueries = onClearRecentSearchQueries,
+        )
 
         isLoading -> Box(modifier = modifier) {
             LoadingStateCard(stringResource(R.string.browse_searching_server, currentServer.name))
@@ -647,6 +668,103 @@ private fun SearchResultsPage(
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun RecentSearchesPage(
+    modifier: Modifier,
+    currentServer: ServerConfig,
+    recentSearchQueries: List<String>,
+    bottomOverlayPadding: Dp,
+    onSearchQuery: (String) -> Unit,
+    onRemoveRecentSearchQuery: (String) -> Unit,
+    onClearRecentSearchQueries: () -> Unit,
+) {
+    if (recentSearchQueries.isEmpty()) {
+        Box(modifier = modifier) {
+            EmptyStateCard(
+                title = stringResource(R.string.browse_search_server),
+                body = stringResource(R.string.browse_search_server_body, currentServer.name),
+            )
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = bottomContentPadding(bottomOverlayPadding),
+    ) {
+        item(key = "recent-searches-header") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = stringResource(R.string.browse_recent_searches), style = MaterialTheme.typography.headlineSmall)
+                TextButton(onClick = onClearRecentSearchQueries, shape = MaterialTheme.shapes.small) {
+                    Text(stringResource(R.string.browse_clear_search_history))
+                }
+            }
+        }
+
+        items(recentSearchQueries, key = { it }) { query ->
+            RecentSearchRow(
+                query = query,
+                onSearchQuery = onSearchQuery,
+                onRemoveRecentSearchQuery = onRemoveRecentSearchQuery,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun RecentSearchRow(
+    query: String,
+    onSearchQuery: (String) -> Unit,
+    onRemoveRecentSearchQuery: (String) -> Unit,
+) {
+    val searchLabel = stringResource(R.string.browse_run_recent_search, query)
+    val removeLabel = stringResource(R.string.browse_remove_recent_search, query)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .combinedClickable(
+                onClick = { onSearchQuery(query) },
+                onClickLabel = searchLabel,
+                onLongClick = { onRemoveRecentSearchQuery(query) },
+                onLongClickLabel = removeLabel,
+                role = Role.Button,
+            )
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Rounded.History,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+        Text(
+            text = query,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        IconButton(onClick = { onRemoveRecentSearchQuery(query) }) {
+            Icon(
+                Icons.Rounded.Close,
+                contentDescription = removeLabel,
+            )
         }
     }
 }

@@ -264,6 +264,26 @@ class SakiAppViewModel @Inject constructor(
         searchQueryFlow.value = query
     }
 
+    fun removeRecentSearchQuery(query: String) {
+        viewModelScope.launch {
+            runCatching { appPreferencesRepository.removeRecentSearchQuery(query) }
+                .onFailure { throwable ->
+                    if (throwable is CancellationException) throw throwable
+                    Log.w("SakiApp", "Failed to remove recent search query", throwable)
+                }
+        }
+    }
+
+    fun clearRecentSearchQueries() {
+        viewModelScope.launch {
+            runCatching { appPreferencesRepository.clearRecentSearchQueries() }
+                .onFailure { throwable ->
+                    if (throwable is CancellationException) throw throwable
+                    Log.w("SakiApp", "Failed to clear recent search queries", throwable)
+                }
+        }
+    }
+
     fun updateTextScale(textScale: TextScale) {
         viewModelScope.launch {
             runCatching {
@@ -1418,6 +1438,11 @@ class SakiAppViewModel @Inject constructor(
                         searchError = null,
                     )
                 }
+                runCatching { appPreferencesRepository.addRecentSearchQuery(query) }
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        Log.w("SakiApp", "Failed to save recent search query", throwable)
+                    }
             }
         }.onFailure { throwable ->
             if (

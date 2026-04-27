@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 private val EXCLUDED_SETTING_KEYS = setOf(
     "room_migration_done",
     "onboarding_completed",
+    DataStoreAppPreferencesRepository.KEY_RECENT_SEARCH_QUERIES.name,
 )
 
 @JsonClass(generateAdapter = true)
