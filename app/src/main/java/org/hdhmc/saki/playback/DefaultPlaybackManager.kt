@@ -319,6 +319,8 @@ class DefaultPlaybackManager @Inject constructor(
             } catch (_: Exception) {
                 // Keep the already-started track playing if deferred queue expansion fails.
             } finally {
+                // Only the active deferred load may clear pending state. Cancelled or stale loads
+                // have a newer generation, and must leave the newer playback request alone.
                 if (generation == queueLoadGeneration) {
                     val hadPendingShuffle = pendingDeferredShuffleEnabled != null
                     deferredQueueJob = null
@@ -581,6 +583,9 @@ class DefaultPlaybackManager @Inject constructor(
         withController { activeController ->
             val count = activeController.mediaItemCount
             pendingDeferredShuffleEnabled?.let { pendingShuffle ->
+                // While the deferred queue is still a single-item placeholder, record the user's
+                // desired shuffle state and apply it after the full queue has been inserted.
+                // If expansion has already inserted items, fall through to the normal path below.
                 if (deferredQueueJob != null && count <= 1) {
                     val enableShuffle = !pendingShuffle
                     pendingDeferredShuffleEnabled = enableShuffle
