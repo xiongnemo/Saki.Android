@@ -4,7 +4,7 @@ import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -98,6 +98,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -139,6 +140,7 @@ import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -422,21 +424,15 @@ fun NowPlayingOverlay(
             fallbackDominant = colorScheme.primary,
             fallbackAccent = colorScheme.tertiary,
         )
-        val dominant by animateColorAsState(
+        val dominant = rememberFixedMotionColor(
             targetValue = artworkColors.dominant,
-            animationSpec = tween(
-                durationMillis = ARTWORK_BACKGROUND_COLOR_SMOOTH_MS,
-                easing = FastOutSlowInEasing,
-            ),
-            label = "NowPlayingDominantColor",
+            durationMillis = ARTWORK_BACKGROUND_COLOR_SMOOTH_MS,
+            easing = FastOutSlowInEasing,
         )
-        val accent by animateColorAsState(
+        val accent = rememberFixedMotionColor(
             targetValue = artworkColors.accent,
-            animationSpec = tween(
-                durationMillis = ARTWORK_BACKGROUND_COLOR_SMOOTH_MS,
-                easing = FastOutSlowInEasing,
-            ),
-            label = "NowPlayingAccentColor",
+            durationMillis = ARTWORK_BACKGROUND_COLOR_SMOOTH_MS,
+            easing = FastOutSlowInEasing,
         )
         val background = remember(dominant, accent, colorScheme) {
             Brush.verticalGradient(
@@ -1440,6 +1436,31 @@ private data class ArtworkPresentationRequest(
 )
 
 @Composable
+private fun rememberFixedMotionColor(
+    targetValue: Color,
+    durationMillis: Int,
+    easing: Easing,
+): Color {
+    var color by remember { mutableStateOf(targetValue) }
+    LaunchedEffect(targetValue, durationMillis, easing) {
+        if (durationMillis <= 0) {
+            color = targetValue
+            return@LaunchedEffect
+        }
+        val startColor = color
+        val startNanos = withFrameNanos { it }
+        var fraction: Float
+        do {
+            val frameNanos = withFrameNanos { it }
+            fraction = ((frameNanos - startNanos) / 1_000_000f / durationMillis)
+                .coerceIn(0f, 1f)
+            color = lerp(startColor, targetValue, easing.transform(fraction))
+        } while (fraction < 1f)
+    }
+    return color
+}
+
+@Composable
 private fun rememberMotionArtworkColors(
     queue: List<PlaybackQueueItem>,
     serversById: Map<Long, ServerConfig>,
@@ -1568,10 +1589,12 @@ private fun NowPlayingArtworkPagerHost(
                 val distancePages = abs(
                     targetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
                 )
-                artworkPagerState.animateScrollToPage(
-                    page = targetPage,
-                    animationSpec = programmaticArtworkScrollSpec(distancePages),
-                )
+                withContext(FixedArtworkMotionDurationScale) {
+                    artworkPagerState.animateScrollToPage(
+                        page = targetPage,
+                        animationSpec = programmaticArtworkScrollSpec(distancePages),
+                    )
+                }
             } finally {
                 lastProgrammaticSettledPage = artworkPagerState.settledPage
                 programmaticPagerSync = false
@@ -1681,6 +1704,11 @@ private const val PROGRAMMATIC_ARTWORK_SCROLL_MAX_MS = 680
 private const val PROGRAMMATIC_ARTWORK_SCROLL_BASE_MS = 210
 private const val PROGRAMMATIC_ARTWORK_SCROLL_DISTANCE_MS = 280
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
+
+private object FixedArtworkMotionDurationScale : MotionDurationScale {
+    override val key: CoroutineContext.Key<*> = MotionDurationScale.Key
+    override val scaleFactor: Float = 1f
+}
 
 private fun programmaticArtworkScrollSpec(distancePages: Float) = tween<Float>(
     durationMillis = (
