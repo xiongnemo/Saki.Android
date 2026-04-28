@@ -401,13 +401,14 @@ private fun NowPlayingOverlayHost(
     onReprobeEndpoints: () -> Unit,
     onForceEndpoint: (Long) -> Unit,
 ) {
+    val hasValidQueuedTrack = playbackState.currentIndex in playbackState.queue.indices
     val activeTrack = playbackState.currentItem
         ?: playbackState.queue.getOrNull(playbackState.currentIndex)
     var stableTrack by remember { mutableStateOf(activeTrack) }
-    LaunchedEffect(visible, activeTrack) {
+    LaunchedEffect(visible, activeTrack, hasValidQueuedTrack) {
         if (activeTrack != null) {
             stableTrack = activeTrack
-        } else if (!visible) {
+        } else if (!visible || !hasValidQueuedTrack) {
             stableTrack = null
         }
     }
