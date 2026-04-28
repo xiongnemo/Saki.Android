@@ -109,6 +109,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.compositeOver
@@ -330,6 +331,8 @@ fun NowPlayingOverlay(
     onReprobeEndpoints: () -> Unit = {},
     onForceEndpoint: (Long) -> Unit = {},
     lyrics: SongLyrics? = null,
+    useDynamicArtworkColors: Boolean = true,
+    useGradientBackground: Boolean = true,
 ) {
     val serversById = remember(servers) { servers.associateBy { it.id } }
     var showDetails by remember(track.songId) { mutableStateOf(false) }
@@ -343,7 +346,7 @@ fun NowPlayingOverlay(
     val currentIdx = playbackState.currentIndex
     val prevSongId = queue.getOrNull(currentIdx - 1)?.songId
     val nextSongId = queue.getOrNull(currentIdx + 1)?.songId
-    LaunchedEffect(visible, track.songId, prevSongId, nextSongId, currentServer) {
+    LaunchedEffect(visible, track.songId, prevSongId, nextSongId, currentServer, useDynamicArtworkColors) {
         if (!visible) return@LaunchedEffect
         val adjacentIndices = listOfNotNull(
             if (currentIdx > 0) currentIdx - 1 else null,
@@ -358,7 +361,9 @@ fun NowPlayingOverlay(
                 .size(FULL_COVER_ART_SIZE_PX)
                 .build()
             context.imageLoader.enqueue(request)
-            prewarmArtworkPresentation(context.applicationContext, model)
+            if (useDynamicArtworkColors) {
+                prewarmArtworkPresentation(context.applicationContext, model)
+            }
         }
     }
 
@@ -400,18 +405,23 @@ fun NowPlayingOverlay(
     ) {
         val artwork = rememberArtworkPresentation(
             fallbackModel = track.queueArtworkModel(currentServer),
+            enabled = useDynamicArtworkColors,
         )
         val colorScheme = MaterialTheme.colorScheme
         val dominant = artwork.dominantColor ?: colorScheme.primary
         val accent = artwork.accentColor ?: colorScheme.tertiary
-        val background = remember(dominant, accent, colorScheme) {
-            Brush.verticalGradient(
-                listOf(
-                    dominant.copy(alpha = 0.50f).compositeOver(colorScheme.background),
-                    accent.copy(alpha = 0.35f).compositeOver(colorScheme.surface),
-                    dominant.copy(alpha = 0.12f).compositeOver(colorScheme.background),
-                ),
-            )
+        val background = remember(dominant, accent, colorScheme, useGradientBackground) {
+            if (useGradientBackground) {
+                Brush.verticalGradient(
+                    listOf(
+                        dominant.copy(alpha = 0.50f).compositeOver(colorScheme.background),
+                        accent.copy(alpha = 0.35f).compositeOver(colorScheme.surface),
+                        dominant.copy(alpha = 0.12f).compositeOver(colorScheme.background),
+                    ),
+                )
+            } else {
+                SolidColor(colorScheme.background)
+            }
         }
         val isDark = colorScheme.background.luminance() < 0.5f
         val playButtonColor = remember(dominant, isDark) {
@@ -1423,13 +1433,19 @@ private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ART
 @Composable
 private fun rememberArtworkPresentation(
     fallbackModel: Any?,
+    enabled: Boolean,
 ): ArtworkPresentation {
     val context = LocalContext.current.applicationContext
     return produceState(
         initialValue = ArtworkPresentation(),
         key1 = fallbackModel,
+        key2 = enabled,
     ) {
-        value = loadArtworkPresentation(context, fallbackModel)
+        value = if (enabled) {
+            loadArtworkPresentation(context, fallbackModel)
+        } else {
+            ArtworkPresentation()
+        }
     }.value
 }
 

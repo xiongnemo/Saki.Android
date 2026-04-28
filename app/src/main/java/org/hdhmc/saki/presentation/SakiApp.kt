@@ -402,6 +402,7 @@ private fun NowPlayingOverlayHost(
     onForceEndpoint: (Long) -> Unit,
 ) {
     val track = playbackState.currentItem ?: return
+    val visualEffectsPolicy = rememberVisualEffectsPolicy()
     val availableArtistIds = remember(libraryIndexes) {
         libraryIndexes
             ?.let { indexes ->
@@ -460,6 +461,8 @@ private fun NowPlayingOverlayHost(
         onReprobeEndpoints = onReprobeEndpoints,
         onForceEndpoint = onForceEndpoint,
         lyrics = lyrics,
+        useDynamicArtworkColors = visualEffectsPolicy.useNowPlayingDynamicArtworkColors,
+        useGradientBackground = visualEffectsPolicy.useNowPlayingGradientBackground,
     )
 }
 
