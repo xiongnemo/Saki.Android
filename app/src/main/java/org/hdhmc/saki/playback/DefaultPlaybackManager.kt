@@ -18,6 +18,7 @@ import org.hdhmc.saki.data.remote.NetworkTypeProvider
 import org.hdhmc.saki.di.DefaultDispatcher
 import org.hdhmc.saki.di.MainDispatcher
 import org.hdhmc.saki.domain.model.CachedSong
+import org.hdhmc.saki.domain.model.PlaybackProgressState
 import org.hdhmc.saki.domain.model.PlaybackRuntimeInfo
 import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.RepeatModeSetting
@@ -86,9 +87,11 @@ class DefaultPlaybackManager @Inject constructor(
 
     private var controller: MediaController? = null
     private val mutablePlaybackState = MutableStateFlow(PlaybackSessionState())
+    private val mutablePlaybackProgress = MutableStateFlow(PlaybackProgressState())
     @Volatile private var cacheReady = false
 
     override val playbackState: StateFlow<PlaybackSessionState> = mutablePlaybackState.asStateFlow()
+    override val playbackProgress: StateFlow<PlaybackProgressState> = mutablePlaybackProgress.asStateFlow()
 
     private fun effectiveQuality(): StreamQuality {
         val prefs = playbackState.value.preferences
@@ -150,21 +153,33 @@ class DefaultPlaybackManager @Inject constructor(
 
     init {
         scope.launch {
-            streamCacheRepository.observeCacheVersion().collect { if (it > 0L) cacheReady = true }
+            streamCacheRepository.observeCacheVersion().collect {
+                if (it > 0L) cacheReady = true
+                controller?.let(::syncState)
+            }
         }
         scope.launch {
             playbackPreferencesRepository.observePreferences().collect { preferences ->
                 mutablePlaybackState.update { state ->
                     state.copy(preferences = preferences)
                 }
+                controller?.let(::syncState)
+            }
+        }
+        scope.launch {
+            networkTypeProvider.networkType.collect {
+                controller?.let(::syncState)
             }
         }
         scope.launch {
             runCatching { ensureControllerConnected() }
             while (isActive) {
                 controller?.let { activeController ->
-                    syncExternalShuffleState(activeController)
-                    syncState(activeController)
+                    if (syncExternalShuffleState(activeController)) {
+                        syncState(activeController)
+                    } else {
+                        syncProgress(activeController)
+                    }
                 }
                 delay(if (mutablePlaybackState.value.isPlaying) 500L else 1_000L)
             }
@@ -715,6 +730,8 @@ class DefaultPlaybackManager @Inject constructor(
             )
         } else null
         val streamCached = cachedQualityKey != null
+        val progress = player.toProgressState()
+        mutablePlaybackProgress.value = progress
 
         mutablePlaybackState.update { state ->
             val currentDisplayItem = displayQueue.getOrNull(displayIndex)?.let { item ->
@@ -736,11 +753,9 @@ class DefaultPlaybackManager @Inject constructor(
                 currentItem = currentDisplayItem,
                 currentIndex = displayIndex,
                 queue = displayQueue,
-                positionMs = player.currentPosition.coerceKnownTime(),
-                durationMs = player.duration.coerceKnownTime().takeIf { it > 0 }
-                    ?: player.currentMediaItem?.metadataDurationMs()
-                    ?: 0L,
-                bufferedPositionMs = player.bufferedPosition.coerceKnownTime(),
+                positionMs = progress.positionMs,
+                durationMs = progress.durationMs,
+                bufferedPositionMs = progress.bufferedPositionMs,
                 isStreamCached = streamCached,
                 repeatMode = player.repeatMode.toRepeatModeSetting(),
                 shuffleEnabled = pendingDeferredShuffleEnabled ?: (shuffleDisplayOrder != null || player.shuffleModeEnabled),
@@ -749,16 +764,21 @@ class DefaultPlaybackManager @Inject constructor(
         }
     }
 
-    private fun syncExternalShuffleState(player: Player) {
+    private fun syncProgress(player: Player) {
+        mutablePlaybackProgress.value = player.toProgressState()
+    }
+
+    private fun syncExternalShuffleState(player: Player): Boolean {
         if (!player.shuffleModeEnabled) {
             restoringExternalShuffleState = false
             if (shuffleDisplayOrder != null) {
                 shuffleDisplayOrder = null
                 scope.launch { playbackPreferencesRepository.clearShuffleState() }
+                return true
             }
-            return
+            return false
         }
-        if (shuffleDisplayOrder != null || player.mediaItemCount <= 1 || restoringExternalShuffleState) return
+        if (shuffleDisplayOrder != null || player.mediaItemCount <= 1 || restoringExternalShuffleState) return false
 
         restoringExternalShuffleState = true
         scope.launch {
@@ -775,6 +795,7 @@ class DefaultPlaybackManager @Inject constructor(
                 restoringExternalShuffleState = false
             }
         }
+        return false
     }
 
     private suspend fun readExternalShuffleState(): Pair<Long, Int>? {
@@ -810,6 +831,16 @@ private suspend fun ListenableFuture<MediaController>.await(
 
 private fun Long.coerceKnownTime(): Long {
     return if (this == C.TIME_UNSET || this < 0L) 0L else this
+}
+
+private fun Player.toProgressState(): PlaybackProgressState {
+    return PlaybackProgressState(
+        positionMs = currentPosition.coerceKnownTime(),
+        durationMs = duration.coerceKnownTime().takeIf { it > 0 }
+            ?: currentMediaItem?.metadataDurationMs()
+            ?: 0L,
+        bufferedPositionMs = bufferedPosition.coerceKnownTime(),
+    )
 }
 
 private fun Int.toRepeatModeSetting(): RepeatModeSetting {

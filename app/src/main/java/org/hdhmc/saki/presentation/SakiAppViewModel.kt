@@ -20,6 +20,7 @@ import org.hdhmc.saki.domain.model.CachedSong
 import org.hdhmc.saki.domain.model.DefaultBrowseTab
 import org.hdhmc.saki.domain.model.LibraryIndexes
 import org.hdhmc.saki.domain.model.regroupByLocale
+import org.hdhmc.saki.domain.model.PlaybackProgressState
 import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.Playlist
 import org.hdhmc.saki.domain.model.PlaylistSummary
@@ -88,6 +89,7 @@ class SakiAppViewModel @Inject constructor(
     val endpointStatus: StateFlow<EndpointStatus> = mutableEndpointStatus.asStateFlow()
 
     val uiState = mutableUiState.asStateFlow()
+    val playbackProgress: StateFlow<PlaybackProgressState> = playbackManager.playbackProgress
     val messages = snackbarMessages.asSharedFlow()
     val openNowPlayingRequests = openNowPlayingRequestsFlow.asSharedFlow()
 

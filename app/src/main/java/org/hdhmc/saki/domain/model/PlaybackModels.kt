@@ -240,6 +240,12 @@ data class PlaybackRuntimeInfo(
     val language: String? = null,
 )
 
+data class PlaybackProgressState(
+    val positionMs: Long = 0,
+    val durationMs: Long = 0,
+    val bufferedPositionMs: Long = 0,
+)
+
 data class PlaybackSessionState(
     val isConnected: Boolean = false,
     val isPlaying: Boolean = false,

@@ -32,13 +32,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import org.hdhmc.saki.domain.model.PlaybackProgressState
+import org.hdhmc.saki.domain.model.PlaybackSessionState
+import org.hdhmc.saki.domain.model.ServerConfig
+import org.hdhmc.saki.domain.model.SongLyrics
 import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.presentation.library.BrowseScreen
-import org.hdhmc.saki.presentation.library.NowPlayingOverlay
 import org.hdhmc.saki.presentation.library.NowPlayingCapsule
+import org.hdhmc.saki.presentation.library.NowPlayingOverlay
 import org.hdhmc.saki.presentation.serverconfig.ServerConfigRoute
 import org.hdhmc.saki.presentation.settings.SettingsScreen
-import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun SakiApp(
@@ -51,6 +56,7 @@ fun SakiApp(
     val context = LocalContext.current
     var showServerManager by rememberSaveable { mutableStateOf(false) }
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     val density = LocalDensity.current
     val appDensity = remember(density, uiState.textScale) {
         Density(
@@ -95,14 +101,14 @@ fun SakiApp(
                     RootShell(
                         uiState = uiState,
                         snackbarHostState = snackbarHostState,
-                        showNowPlaying = showNowPlaying,
+                        showSettings = showSettings,
+                        onShowSettingsChange = { showSettings = it },
                         onManageServers = { showServerManager = true },
                         onOpenNowPlaying = {
                             if (uiState.playbackState.currentItem != null) {
                                 showNowPlaying = true
                             }
                         },
-                        onDismissNowPlaying = { showNowPlaying = false },
                         onSelectBrowseSection = viewModel::selectBrowseSection,
                         onSelectServer = viewModel::selectServer,
                         onSetSearchActive = viewModel::setSearchActive,
@@ -147,6 +153,22 @@ fun SakiApp(
                         onUpdateCustomBufferSeconds = viewModel::updateCustomBufferSeconds,
                         onExportConfig = viewModel::exportConfig,
                         onImportConfig = { uri -> viewModel.importConfig(uri) },
+                        onPausePlayback = viewModel::pausePlayback,
+                        onResumePlayback = viewModel::resumePlayback,
+                        onSkipToNext = viewModel::skipToNext,
+                        onSkipToPrevious = viewModel::skipToPrevious,
+                    )
+                    NowPlayingOverlayHost(
+                        visible = showNowPlaying,
+                        playbackState = uiState.playbackState,
+                        playbackProgressFlow = viewModel.playbackProgress,
+                        servers = uiState.servers,
+                        selectedServerId = uiState.selectedServerId,
+                        libraryIndexes = uiState.libraryIndexes,
+                        endpointStatus = endpointStatus,
+                        lyrics = uiState.currentLyrics,
+                        onDismiss = { showNowPlaying = false },
+                        onCloseSettings = { showSettings = false },
                         onOpenArtistFromPlayback = viewModel::openArtistFromPlayback,
                         onOpenAlbumFromPlayback = viewModel::openAlbumFromPlayback,
                         onPausePlayback = viewModel::pausePlayback,
@@ -158,7 +180,6 @@ fun SakiApp(
                         onToggleShuffle = viewModel::toggleShuffle,
                         onSkipToQueueItem = viewModel::skipToQueueItem,
                         onRemoveQueueItem = viewModel::removeQueueItem,
-                        endpointStatus = endpointStatus,
                         onReprobeEndpoints = viewModel::reprobeEndpoints,
                         onForceEndpoint = viewModel::forceEndpoint,
                     )
@@ -181,10 +202,10 @@ fun SakiApp(
 private fun RootShell(
     uiState: SakiAppUiState,
     snackbarHostState: SnackbarHostState,
-    showNowPlaying: Boolean,
+    showSettings: Boolean,
+    onShowSettingsChange: (Boolean) -> Unit,
     onManageServers: () -> Unit,
     onOpenNowPlaying: () -> Unit,
-    onDismissNowPlaying: () -> Unit,
     onSelectBrowseSection: (BrowseSection) -> Unit,
     onSelectServer: (Long) -> Unit,
     onSetSearchActive: (Boolean) -> Unit,
@@ -229,45 +250,20 @@ private fun RootShell(
     onUpdateCustomBufferSeconds: (Int) -> Unit,
     onExportConfig: (android.net.Uri) -> Unit,
     onImportConfig: (android.net.Uri) -> Unit,
-    onOpenArtistFromPlayback: (Long?, String?) -> Unit,
-    onOpenAlbumFromPlayback: (Long?, String?) -> Unit,
     onPausePlayback: () -> Unit,
     onResumePlayback: () -> Unit,
     onSkipToNext: () -> Unit,
     onSkipToPrevious: () -> Unit,
-    onSeekTo: (Long) -> Unit,
-    onCycleRepeatMode: () -> Unit,
-    onToggleShuffle: () -> Unit,
-    onSkipToQueueItem: (Int) -> Unit,
-    onRemoveQueueItem: (Int) -> Unit,
-    endpointStatus: EndpointStatus = EndpointStatus(),
-    onReprobeEndpoints: () -> Unit = {},
-    onForceEndpoint: (Long) -> Unit = {},
 ) {
     val currentOrQueuedTrack = uiState.playbackState.currentItem ?: uiState.playbackState.queue.firstOrNull()
     val shellBackgroundBrush = rememberBrowseBackgroundBrush()
-    var showSettings by rememberSaveable { mutableStateOf(false) }
     val density = LocalDensity.current
     val defaultCapsuleHeightPx = with(density) { 72.dp.roundToPx() }
     var capsuleHeightPx by remember { mutableIntStateOf(defaultCapsuleHeightPx) }
     val capsuleOverlayPadding = with(density) { capsuleHeightPx.toDp() }
-    val availableArtistIds = remember(uiState.libraryIndexes) {
-        uiState.libraryIndexes
-            ?.let { indexes ->
-                (
-                    indexes.shortcuts.map { it.id } +
-                        indexes.sections.flatMap { section -> section.artists.map { artist -> artist.id } }
-                    ).toSet()
-            }
-            .orEmpty()
-    }
 
-    BackHandler(enabled = showNowPlaying) {
-        onDismissNowPlaying()
-    }
-
-    BackHandler(enabled = !showNowPlaying && showSettings) {
-        showSettings = false
+    BackHandler(enabled = showSettings) {
+        onShowSettingsChange(false)
     }
 
     Box(
@@ -334,7 +330,7 @@ private fun RootShell(
                         onQueueSong = onQueueSong,
                         onPlaySongNext = onPlaySongNext,
                         onToggleSongDownload = onToggleSongDownload,
-                        onOpenSettings = { showSettings = true },
+                        onOpenSettings = { onShowSettingsChange(true) },
                         onImportConfig = onImportConfig,
                     )
                 }
@@ -373,50 +369,104 @@ private fun RootShell(
             }
         }
     }
+}
 
-    uiState.playbackState.currentItem?.let { track ->
-        val canOpenArtistFromNowPlaying = track.artistId != null && (
-            uiState.libraryIndexes == null ||
-                track.serverId == null ||
-                track.serverId != uiState.selectedServerId ||
-                track.artistId in availableArtistIds
-            )
-        NowPlayingOverlay(
-            visible = showNowPlaying,
-            playbackState = uiState.playbackState,
-            track = track,
-            onDismiss = onDismissNowPlaying,
-            canOpenArtist = canOpenArtistFromNowPlaying,
-            onOpenArtist = {
-                showSettings = false
-                onOpenArtistFromPlayback(track.serverId, track.artistId)
-                onDismissNowPlaying()
-            },
-            onOpenAlbum = {
-                showSettings = false
-                onOpenAlbumFromPlayback(track.serverId, track.albumId)
-                onDismissNowPlaying()
-            },
-            onPlayPause = {
-                if (uiState.playbackState.isPlaying) onPausePlayback() else onResumePlayback()
-            },
-            onSkipToNext = onSkipToNext,
-            onSkipToPrevious = onSkipToPrevious,
-            onSeekTo = onSeekTo,
-            onCycleRepeatMode = onCycleRepeatMode,
-            onToggleShuffle = onToggleShuffle,
-            onSkipToQueueItem = onSkipToQueueItem,
-            onRemoveQueueItem = onRemoveQueueItem,
-            currentServer = uiState.servers.firstOrNull { it.id == track.serverId },
-            servers = uiState.servers,
-            activeEndpointLabel = endpointStatus.activeEndpointLabel,
-            activeEndpointId = endpointStatus.activeEndpointId,
-            isEndpointForced = endpointStatus.isForced,
-            endpointProbeResults = endpointStatus.probeResults,
-            isProbing = endpointStatus.isProbing,
-            onReprobeEndpoints = onReprobeEndpoints,
-            onForceEndpoint = onForceEndpoint,
-            lyrics = uiState.currentLyrics,
-        )
+/**
+ * Isolates [playbackProgressFlow] collection so progress ticks only recompose
+ * the overlay subtree, not [RootShell].
+ */
+@Composable
+private fun NowPlayingOverlayHost(
+    visible: Boolean,
+    playbackState: PlaybackSessionState,
+    playbackProgressFlow: StateFlow<PlaybackProgressState>,
+    servers: List<ServerConfig>,
+    selectedServerId: Long?,
+    libraryIndexes: org.hdhmc.saki.domain.model.LibraryIndexes?,
+    endpointStatus: EndpointStatus,
+    lyrics: SongLyrics?,
+    onDismiss: () -> Unit,
+    onCloseSettings: () -> Unit,
+    onOpenArtistFromPlayback: (Long?, String?) -> Unit,
+    onOpenAlbumFromPlayback: (Long?, String?) -> Unit,
+    onPausePlayback: () -> Unit,
+    onResumePlayback: () -> Unit,
+    onSkipToNext: () -> Unit,
+    onSkipToPrevious: () -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onSkipToQueueItem: (Int) -> Unit,
+    onRemoveQueueItem: (Int) -> Unit,
+    onReprobeEndpoints: () -> Unit,
+    onForceEndpoint: (Long) -> Unit,
+) {
+    val track = playbackState.currentItem ?: return
+    val availableArtistIds = remember(libraryIndexes) {
+        libraryIndexes
+            ?.let { indexes ->
+                (
+                    indexes.shortcuts.map { it.id } +
+                        indexes.sections.flatMap { section -> section.artists.map { artist -> artist.id } }
+                    ).toSet()
+            }
+            .orEmpty()
     }
+    val canOpenArtist = track.artistId != null && (
+        libraryIndexes == null ||
+            track.serverId == null ||
+            track.serverId != selectedServerId ||
+            track.artistId in availableArtistIds
+        )
+    val progress = if (visible) {
+        playbackProgressFlow.collectAsStateWithLifecycle().value
+    } else {
+        playbackState.toProgressState()
+    }
+    NowPlayingOverlay(
+        visible = visible,
+        playbackState = playbackState,
+        playbackProgress = progress,
+        track = track,
+        onDismiss = onDismiss,
+        canOpenArtist = canOpenArtist,
+        onOpenArtist = {
+            onCloseSettings()
+            onOpenArtistFromPlayback(track.serverId, track.artistId)
+            onDismiss()
+        },
+        onOpenAlbum = {
+            onCloseSettings()
+            onOpenAlbumFromPlayback(track.serverId, track.albumId)
+            onDismiss()
+        },
+        onPlayPause = {
+            if (playbackState.isPlaying) onPausePlayback() else onResumePlayback()
+        },
+        onSkipToNext = onSkipToNext,
+        onSkipToPrevious = onSkipToPrevious,
+        onSeekTo = onSeekTo,
+        onCycleRepeatMode = onCycleRepeatMode,
+        onToggleShuffle = onToggleShuffle,
+        onSkipToQueueItem = onSkipToQueueItem,
+        onRemoveQueueItem = onRemoveQueueItem,
+        currentServer = servers.firstOrNull { it.id == track.serverId },
+        servers = servers,
+        activeEndpointLabel = endpointStatus.activeEndpointLabel,
+        activeEndpointId = endpointStatus.activeEndpointId,
+        isEndpointForced = endpointStatus.isForced,
+        endpointProbeResults = endpointStatus.probeResults,
+        isProbing = endpointStatus.isProbing,
+        onReprobeEndpoints = onReprobeEndpoints,
+        onForceEndpoint = onForceEndpoint,
+        lyrics = lyrics,
+    )
+}
+
+private fun PlaybackSessionState.toProgressState(): PlaybackProgressState {
+    return PlaybackProgressState(
+        positionMs = positionMs,
+        durationMs = durationMs,
+        bufferedPositionMs = bufferedPositionMs,
+    )
 }
