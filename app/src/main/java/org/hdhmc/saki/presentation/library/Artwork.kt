@@ -11,13 +11,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import org.hdhmc.saki.domain.model.CachedSong
 import org.hdhmc.saki.domain.model.ServerConfig
 import org.hdhmc.saki.domain.model.ServerEndpoint
@@ -36,6 +39,7 @@ fun ArtworkCard(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     cornerRadiusDp: Int = 24,
+    requestSizePx: Int? = null,
 ) {
     val fallbackBrush = Brush.linearGradient(
         listOf(
@@ -43,15 +47,26 @@ fun ArtworkCard(
             MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
         ),
     )
+    val context = LocalContext.current
+    val imageModel = remember(model, requestSizePx, context) {
+        if (model != null && requestSizePx != null) {
+            ImageRequest.Builder(context)
+                .data(model)
+                .size(requestSizePx.coerceAtLeast(1))
+                .build()
+        } else {
+            model
+        }
+    }
 
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(cornerRadiusDp.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
     ) {
-        if (model != null) {
+        if (imageModel != null) {
             AsyncImage(
-                model = model,
+                model = imageModel,
                 contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
@@ -79,23 +94,21 @@ fun resolveArtworkModel(
     server: ServerConfig?,
     coverArtId: String?,
     cachedSong: CachedSong?,
-    sizePx: Int = FULL_COVER_ART_SIZE_PX,
 ): Any? {
     val localCoverPath = cachedSong?.coverArtPath
     if (!localCoverPath.isNullOrBlank() && File(localCoverPath).exists()) {
         return File(localCoverPath)
     }
-    return server?.buildCoverArtUrl(coverArtId, sizePx)
+    return server?.buildCoverArtUrl(coverArtId)
 }
 
 /**
  * Builds a deterministic cover art URL using the first endpoint by order and a salt derived
- * from the cover art ID. Stable for a fixed (server configuration, coverArtId, sizePx) tuple,
- * enabling Coil's disk cache to reuse entries. Different [sizePx] values produce different
- * URLs and therefore separate cache entries. At request time, [CoverArtEndpointInterceptor]
- * rewrites the base URL to the current best endpoint.
+ * from the cover art ID. Stable for a fixed server configuration and coverArtId, enabling
+ * Coil's disk cache to reuse entries across thumbnail and full-size UI requests. At request
+ * time, [CoverArtEndpointInterceptor] rewrites the base URL to the current best endpoint.
  */
-private fun ServerConfig.buildCoverArtUrl(coverArtId: String?, sizePx: Int): String? {
+private fun ServerConfig.buildCoverArtUrl(coverArtId: String?): String? {
     if (coverArtId.isNullOrBlank()) return null
     val endpoint = endpoints.sortedBy(ServerEndpoint::order).firstOrNull() ?: return null
     val baseUrl = endpoint.baseUrl.toHttpUrlOrNull() ?: return null
@@ -105,7 +118,7 @@ private fun ServerConfig.buildCoverArtUrl(coverArtId: String?, sizePx: Int): Str
     return baseUrl.newBuilder()
         .addPathSegments("rest/getCoverArt.view")
         .addQueryParameter("id", coverArtId)
-        .addQueryParameter("size", sizePx.coerceAtLeast(1).toString())
+        .addQueryParameter("size", FULL_COVER_ART_SIZE_PX.toString())
         .addQueryParameter("u", username)
         .addQueryParameter("t", hash)
         .addQueryParameter("s", salt)
