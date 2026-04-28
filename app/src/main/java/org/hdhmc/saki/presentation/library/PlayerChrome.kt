@@ -248,7 +248,7 @@ fun NowPlayingCapsule(
             ) {
                 AnimatedContent(
                     targetState = Pair(
-                        track?.queueArtworkModel(currentServer, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
+                        track?.queueArtworkModel(currentServer),
                         track?.title,
                     ),
                     transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
@@ -259,6 +259,7 @@ fun NowPlayingCapsule(
                         contentDescription = title,
                         modifier = Modifier.size(46.dp),
                         cornerRadiusDp = 14,
+                        requestSizePx = THUMBNAIL_COVER_ART_SIZE_PX,
                     )
                 }
                 Column(
@@ -347,7 +348,7 @@ fun NowPlayingOverlay(
         for (i in adjacentIndices) {
             val item = queue[i]
             val server = item.serverId?.let { serversById[it] }
-            val model = item.queueArtworkModel(server, sizePx = FULL_COVER_ART_SIZE_PX) ?: continue
+            val model = item.queueArtworkModel(server) ?: continue
             val request = ImageRequest.Builder(context)
                 .data(model)
                 .size(FULL_COVER_ART_SIZE_PX)
@@ -393,7 +394,7 @@ fun NowPlayingOverlay(
         ),
     ) {
         val artwork = rememberArtworkPresentation(
-            fallbackModel = track.queueArtworkModel(currentServer, sizePx = PALETTE_COVER_ART_SIZE_PX),
+            fallbackModel = track.queueArtworkModel(currentServer),
         )
         val colorScheme = MaterialTheme.colorScheme
         val dominant = artwork.dominantColor ?: colorScheme.primary
@@ -1314,10 +1315,11 @@ private fun QueueRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ArtworkCard(
-                model = item.queueArtworkModel(currentServer, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
+                model = item.queueArtworkModel(currentServer),
                 contentDescription = item.title,
                 modifier = Modifier.size(48.dp),
                 cornerRadiusDp = 16,
+                requestSizePx = THUMBNAIL_COVER_ART_SIZE_PX,
             )
             Column(
                 modifier = Modifier
@@ -1376,13 +1378,10 @@ private fun DetailLine(label: String, value: String?) {
     )
 }
 
-private fun PlaybackQueueItem.queueArtworkModel(
-    server: ServerConfig?,
-    sizePx: Int = FULL_COVER_ART_SIZE_PX,
-): Any? {
+private fun PlaybackQueueItem.queueArtworkModel(server: ServerConfig?): Any? {
     return when {
         !coverArtPath.isNullOrBlank() -> File(coverArtPath)
-        server != null -> resolveArtworkModel(server, coverArtId, null, sizePx = sizePx)
+        server != null -> resolveArtworkModel(server, coverArtId, null)
         !artworkUri.isNullOrBlank() -> artworkUri
         else -> null
     }

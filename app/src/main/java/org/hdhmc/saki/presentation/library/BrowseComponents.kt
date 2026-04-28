@@ -298,7 +298,8 @@ fun PlaylistCard(playlist: PlaylistSummary, server: ServerConfig, onOpenPlaylist
     RowCard(
         title = playlist.name,
         subtitle = subtitle,
-        artwork = resolveArtworkModel(server, playlist.coverArtId, null, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
+        artwork = resolveArtworkModel(server, playlist.coverArtId, null),
+        artworkRequestSizePx = THUMBNAIL_COVER_ART_SIZE_PX,
         onClick = { onOpenPlaylist(playlist.id) },
     )
 }
@@ -314,7 +315,8 @@ fun AlbumRow(album: AlbumSummary, server: ServerConfig, onOpenAlbum: (String) ->
     RowCard(
         title = album.name,
         subtitle = subtitle,
-        artwork = resolveArtworkModel(server, album.coverArtId, null, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
+        artwork = resolveArtworkModel(server, album.coverArtId, null),
+        artworkRequestSizePx = THUMBNAIL_COVER_ART_SIZE_PX,
         onClick = { onOpenAlbum(album.id) },
     )
 }
@@ -357,12 +359,13 @@ fun AlbumCard(album: AlbumSummary, server: ServerConfig, onOpenAlbum: (String) -
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             ArtworkCard(
-                model = resolveArtworkModel(server, album.coverArtId, null, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
+                model = resolveArtworkModel(server, album.coverArtId, null),
                 contentDescription = album.name,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(170.dp),
                 cornerRadiusDp = 24,
+                requestSizePx = THUMBNAIL_COVER_ART_SIZE_PX,
             )
             Text(text = album.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 10.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
@@ -388,12 +391,13 @@ private fun AlbumMiniCard(album: AlbumSummary, server: ServerConfig, onOpenAlbum
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             ArtworkCard(
-                model = resolveArtworkModel(server, album.coverArtId, null, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
+                model = resolveArtworkModel(server, album.coverArtId, null),
                 contentDescription = album.name,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(124.dp),
                 cornerRadiusDp = 18,
+                requestSizePx = THUMBNAIL_COVER_ART_SIZE_PX,
             )
             Text(text = album.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
@@ -426,10 +430,11 @@ fun SongRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ArtworkCard(
-            model = resolveArtworkModel(server, song.coverArtId, cachedSong, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
+            model = resolveArtworkModel(server, song.coverArtId, cachedSong),
             contentDescription = song.title,
             modifier = Modifier.size(60.dp),
             cornerRadiusDp = 18,
+            requestSizePx = THUMBNAIL_COVER_ART_SIZE_PX,
         )
         Column(
             modifier = Modifier
@@ -644,7 +649,13 @@ fun EmptyStateCard(title: String, body: String, icon: androidx.compose.ui.graphi
 }
 
 @Composable
-private fun RowCard(title: String, subtitle: String?, artwork: Any?, onClick: () -> Unit) {
+private fun RowCard(
+    title: String,
+    subtitle: String?,
+    artwork: Any?,
+    artworkRequestSizePx: Int? = null,
+    onClick: () -> Unit,
+) {
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -655,7 +666,13 @@ private fun RowCard(title: String, subtitle: String?, artwork: Any?, onClick: ()
     ) {
         Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             if (artwork != null) {
-                ArtworkCard(model = artwork, contentDescription = title, modifier = Modifier.size(72.dp), cornerRadiusDp = 22)
+                ArtworkCard(
+                    model = artwork,
+                    contentDescription = title,
+                    modifier = Modifier.size(72.dp),
+                    cornerRadiusDp = 22,
+                    requestSizePx = artworkRequestSizePx,
+                )
             }
             Column(
                 modifier = Modifier

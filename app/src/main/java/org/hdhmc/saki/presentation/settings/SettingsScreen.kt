@@ -881,10 +881,11 @@ private fun CachedSongRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ArtworkCard(
-            model = resolveArtworkModel(server, song.coverArtId, song, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
+            model = resolveArtworkModel(server, song.coverArtId, song),
             contentDescription = song.title,
             modifier = Modifier.size(60.dp),
             cornerRadiusDp = 18,
+            requestSizePx = THUMBNAIL_COVER_ART_SIZE_PX,
         )
         Column(
             modifier = Modifier
