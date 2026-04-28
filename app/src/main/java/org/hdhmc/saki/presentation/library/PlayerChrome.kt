@@ -23,7 +23,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -1642,6 +1641,11 @@ private fun NowPlayingArtworkPagerHost(
                         page = visualTargetPage,
                         motionState = motionState,
                         distancePages = distancePages,
+                        velocityBoostPagesPerSecond = if (visualTargetPage > artworkPagerState.currentArtworkPosition()) {
+                            ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES
+                        } else {
+                            -ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES
+                        },
                     )
                 }
             } finally {
@@ -1797,8 +1801,10 @@ private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
 private const val ARTWORK_PREWARM_RADIUS_PAGES = 3
 private const val ARTWORK_BACKGROUND_SETTLE_MS = 180
 private const val ARTWORK_BUTTON_SKIP_CONFIRM_TIMEOUT_MS = 900L
+private const val ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES = 3.5f
 private const val PROGRAMMATIC_ARTWORK_SPRING_BASE_STIFFNESS = 140f
 private const val PROGRAMMATIC_ARTWORK_SPRING_DISTANCE_STIFFNESS = 60f
+private const val PROGRAMMATIC_ARTWORK_MAX_INITIAL_VELOCITY_PAGES = 8f
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
 
 private object FixedArtworkMotionDurationScale : MotionDurationScale {
@@ -1810,16 +1816,27 @@ private suspend fun PagerState.animateArtworkMotionToPage(
     page: Int,
     motionState: NowPlayingArtworkMotionState,
     distancePages: Float,
+    velocityBoostPagesPerSecond: Float = 0f,
 ) {
     val safePageCount = pageCount.coerceAtLeast(1)
     val targetPage = page.coerceIn(0, safePageCount - 1)
     val targetPosition = targetPage.toFloat()
-    val startPosition = (currentPage + currentPageOffsetFraction)
-        .coerceIn(0f, (safePageCount - 1).toFloat())
-    val startVelocity = motionState.velocity
+    val startPosition = currentArtworkPosition(safePageCount)
+    val inheritedVelocity = motionState.velocity
         .takeUnless { it.isNaN() || it.isInfinite() }
         ?: 0f
+    val boostedVelocity = when {
+        velocityBoostPagesPerSecond == 0f -> inheritedVelocity
+        inheritedVelocity * velocityBoostPagesPerSecond > 0f -> inheritedVelocity + velocityBoostPagesPerSecond
+        else -> velocityBoostPagesPerSecond
+    }
+    val startVelocity = boostedVelocity
+        .coerceIn(
+            -PROGRAMMATIC_ARTWORK_MAX_INITIAL_VELOCITY_PAGES,
+            PROGRAMMATIC_ARTWORK_MAX_INITIAL_VELOCITY_PAGES,
+        )
     val pagerState = this
+    var previousPosition = startPosition
 
     scroll {
         updateTargetPage(targetPage)
@@ -1830,26 +1847,38 @@ private suspend fun PagerState.animateArtworkMotionToPage(
             animationSpec = programmaticArtworkScrollSpec(distancePages),
         ) { value, velocity ->
             val position = value.coerceIn(0f, (safePageCount - 1).toFloat())
-            motionState.position = position
+            val deltaPx = (position - previousPosition) * pagerState.artworkPageDistancePx()
+            if (deltaPx != 0f) {
+                scrollBy(deltaPx)
+            }
+            previousPosition = position
+            motionState.position = pagerState.currentArtworkPosition(safePageCount)
             motionState.velocity = velocity
-            pagerState.updateArtworkPagerPosition(this, position, safePageCount)
+        }
+        val remainingPx = (targetPosition - pagerState.currentArtworkPosition(safePageCount)) *
+            pagerState.artworkPageDistancePx()
+        if (abs(remainingPx) > 0.5f) {
+            scrollBy(remainingPx)
         }
         motionState.position = targetPosition
         motionState.velocity = 0f
-        pagerState.updateArtworkPagerPosition(this, targetPosition, safePageCount)
     }
 }
 
-private fun PagerState.updateArtworkPagerPosition(
-    scrollScope: ScrollScope,
-    absolutePosition: Float,
-    pageCount: Int,
-) {
-    val page = absolutePosition.roundToInt().coerceIn(0, pageCount - 1)
-    val offset = (absolutePosition - page).coerceIn(-0.5f, 0.5f)
-    with(scrollScope) {
-        updateCurrentPage(page, offset)
+private fun PagerState.currentArtworkPosition(pageCount: Int = this.pageCount.coerceAtLeast(1)): Float {
+    return (currentPage + currentPageOffsetFraction)
+        .coerceIn(0f, (pageCount - 1).coerceAtLeast(0).toFloat())
+}
+
+private fun PagerState.artworkPageDistancePx(): Float {
+    val visiblePages = layoutInfo.visiblePagesInfo.sortedBy { page -> page.index }
+    val adjacentPages = visiblePages
+        .zipWithNext()
+        .firstOrNull { (first, second) -> second.index == first.index + 1 }
+    val measuredDistance = adjacentPages?.let { (first, second) ->
+        abs(second.offset - first.offset).toFloat()
     }
+    return (measuredDistance ?: layoutInfo.pageSize.toFloat()).coerceAtLeast(1f)
 }
 
 private fun programmaticArtworkScrollSpec(distancePages: Float) = spring<Float>(
