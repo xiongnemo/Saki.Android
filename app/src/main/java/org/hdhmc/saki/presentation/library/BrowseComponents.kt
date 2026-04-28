@@ -298,7 +298,7 @@ fun PlaylistCard(playlist: PlaylistSummary, server: ServerConfig, onOpenPlaylist
     RowCard(
         title = playlist.name,
         subtitle = subtitle,
-        artwork = resolveArtworkModel(server, playlist.coverArtId, null),
+        artwork = resolveArtworkModel(server, playlist.coverArtId, null, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
         onClick = { onOpenPlaylist(playlist.id) },
     )
 }
@@ -314,7 +314,7 @@ fun AlbumRow(album: AlbumSummary, server: ServerConfig, onOpenAlbum: (String) ->
     RowCard(
         title = album.name,
         subtitle = subtitle,
-        artwork = resolveArtworkModel(server, album.coverArtId, null),
+        artwork = resolveArtworkModel(server, album.coverArtId, null, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
         onClick = { onOpenAlbum(album.id) },
     )
 }
@@ -357,7 +357,7 @@ fun AlbumCard(album: AlbumSummary, server: ServerConfig, onOpenAlbum: (String) -
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             ArtworkCard(
-                model = resolveArtworkModel(server, album.coverArtId, null),
+                model = resolveArtworkModel(server, album.coverArtId, null, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
                 contentDescription = album.name,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -388,7 +388,7 @@ private fun AlbumMiniCard(album: AlbumSummary, server: ServerConfig, onOpenAlbum
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             ArtworkCard(
-                model = resolveArtworkModel(server, album.coverArtId, null),
+                model = resolveArtworkModel(server, album.coverArtId, null, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
                 contentDescription = album.name,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -426,7 +426,7 @@ fun SongRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ArtworkCard(
-            model = resolveArtworkModel(server, song.coverArtId, cachedSong),
+            model = resolveArtworkModel(server, song.coverArtId, cachedSong, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
             contentDescription = song.title,
             modifier = Modifier.size(60.dp),
             cornerRadiusDp = 18,

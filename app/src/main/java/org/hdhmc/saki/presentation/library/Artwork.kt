@@ -26,6 +26,10 @@ import java.security.MessageDigest
 import java.util.Locale
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
+const val THUMBNAIL_COVER_ART_SIZE_PX = 256
+const val PALETTE_COVER_ART_SIZE_PX = 300
+const val FULL_COVER_ART_SIZE_PX = 768
+
 @Composable
 fun ArtworkCard(
     model: Any?,
@@ -75,12 +79,13 @@ fun resolveArtworkModel(
     server: ServerConfig?,
     coverArtId: String?,
     cachedSong: CachedSong?,
+    sizePx: Int = FULL_COVER_ART_SIZE_PX,
 ): Any? {
     val localCoverPath = cachedSong?.coverArtPath
     if (!localCoverPath.isNullOrBlank() && File(localCoverPath).exists()) {
         return File(localCoverPath)
     }
-    return server?.buildCoverArtUrl(coverArtId)
+    return server?.buildCoverArtUrl(coverArtId, sizePx)
 }
 
 /**
@@ -89,7 +94,7 @@ fun resolveArtworkModel(
  * Coil's disk cache to reuse entries. At request time, [CoverArtEndpointInterceptor] rewrites
  * the base URL to the current best endpoint.
  */
-private fun ServerConfig.buildCoverArtUrl(coverArtId: String?): String? {
+private fun ServerConfig.buildCoverArtUrl(coverArtId: String?, sizePx: Int): String? {
     if (coverArtId.isNullOrBlank()) return null
     val endpoint = endpoints.sortedBy(ServerEndpoint::order).firstOrNull() ?: return null
     val baseUrl = endpoint.baseUrl.toHttpUrlOrNull() ?: return null
@@ -99,7 +104,7 @@ private fun ServerConfig.buildCoverArtUrl(coverArtId: String?): String? {
     return baseUrl.newBuilder()
         .addPathSegments("rest/getCoverArt.view")
         .addQueryParameter("id", coverArtId)
-        .addQueryParameter("size", "768")
+        .addQueryParameter("size", sizePx.coerceAtLeast(1).toString())
         .addQueryParameter("u", username)
         .addQueryParameter("t", hash)
         .addQueryParameter("s", salt)

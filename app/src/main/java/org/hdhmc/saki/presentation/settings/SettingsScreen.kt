@@ -76,6 +76,7 @@ import org.hdhmc.saki.domain.model.TextScale
 import org.hdhmc.saki.presentation.SakiAppUiState
 import org.hdhmc.saki.presentation.labelRes
 import org.hdhmc.saki.presentation.library.ArtworkCard
+import org.hdhmc.saki.presentation.library.THUMBNAIL_COVER_ART_SIZE_PX
 import org.hdhmc.saki.presentation.library.resolveArtworkModel
 import org.hdhmc.saki.presentation.bottomContentPadding
 import org.hdhmc.saki.presentation.rememberBrowseBackgroundBrush
@@ -880,7 +881,7 @@ private fun CachedSongRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ArtworkCard(
-            model = resolveArtworkModel(server, song.coverArtId, song),
+            model = resolveArtworkModel(server, song.coverArtId, song, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
             contentDescription = song.title,
             modifier = Modifier.size(60.dp),
             cornerRadiusDp = 18,

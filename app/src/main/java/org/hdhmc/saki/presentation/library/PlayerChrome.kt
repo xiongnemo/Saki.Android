@@ -110,8 +110,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -248,7 +246,10 @@ fun NowPlayingCapsule(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AnimatedContent(
-                    targetState = Pair(track?.queueArtworkModel(currentServer), track?.title),
+                    targetState = Pair(
+                        track?.queueArtworkModel(currentServer, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
+                        track?.title,
+                    ),
                     transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
                     label = "capsule-artwork",
                 ) { (model, title) ->
@@ -325,9 +326,6 @@ fun NowPlayingOverlay(
     lyrics: SongLyrics? = null,
 ) {
     val serversById = remember(servers) { servers.associateBy { it.id } }
-    val artwork = rememberArtworkPresentation(
-        fallbackModel = track.queueArtworkModel(currentServer),
-    )
     var showDetails by remember(track.songId) { mutableStateOf(false) }
     var showMenu by remember(track.songId) { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
@@ -339,7 +337,8 @@ fun NowPlayingOverlay(
     val currentIdx = playbackState.currentIndex
     val prevSongId = queue.getOrNull(currentIdx - 1)?.songId
     val nextSongId = queue.getOrNull(currentIdx + 1)?.songId
-    LaunchedEffect(track.songId, prevSongId, nextSongId, currentServer) {
+    LaunchedEffect(visible, track.songId, prevSongId, nextSongId, currentServer) {
+        if (!visible) return@LaunchedEffect
         val adjacentIndices = listOfNotNull(
             if (currentIdx > 0) currentIdx - 1 else null,
             if (currentIdx < queue.lastIndex) currentIdx + 1 else null,
@@ -347,10 +346,10 @@ fun NowPlayingOverlay(
         for (i in adjacentIndices) {
             val item = queue[i]
             val server = item.serverId?.let { serversById[it] }
-            val model = item.queueArtworkModel(server) ?: continue
+            val model = item.queueArtworkModel(server, sizePx = FULL_COVER_ART_SIZE_PX) ?: continue
             val request = ImageRequest.Builder(context)
                 .data(model)
-                .size(coil3.size.Size.ORIGINAL)
+                .size(FULL_COVER_ART_SIZE_PX)
                 .build()
             context.imageLoader.enqueue(request)
         }
@@ -392,6 +391,9 @@ fun NowPlayingOverlay(
             targetOffsetY = { fullHeight -> fullHeight / 3 },
         ),
     ) {
+        val artwork = rememberArtworkPresentation(
+            fallbackModel = track.queueArtworkModel(currentServer, sizePx = PALETTE_COVER_ART_SIZE_PX),
+        )
         val colorScheme = MaterialTheme.colorScheme
         val dominant = artwork.dominantColor ?: colorScheme.primary
         val accent = artwork.accentColor ?: colorScheme.tertiary
@@ -1311,7 +1313,7 @@ private fun QueueRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ArtworkCard(
-                model = item.queueArtworkModel(currentServer),
+                model = item.queueArtworkModel(currentServer, sizePx = THUMBNAIL_COVER_ART_SIZE_PX),
                 contentDescription = item.title,
                 modifier = Modifier.size(48.dp),
                 cornerRadiusDp = 16,
@@ -1373,17 +1375,19 @@ private fun DetailLine(label: String, value: String?) {
     )
 }
 
-private fun PlaybackQueueItem.queueArtworkModel(server: ServerConfig?): Any? {
+private fun PlaybackQueueItem.queueArtworkModel(
+    server: ServerConfig?,
+    sizePx: Int = FULL_COVER_ART_SIZE_PX,
+): Any? {
     return when {
         !coverArtPath.isNullOrBlank() -> File(coverArtPath)
-        server != null -> resolveArtworkModel(server, coverArtId, null)
+        server != null -> resolveArtworkModel(server, coverArtId, null, sizePx = sizePx)
         !artworkUri.isNullOrBlank() -> artworkUri
         else -> null
     }
 }
 
 private data class ArtworkPresentation(
-    val image: ImageBitmap? = null,
     val dominantColor: Color? = null,
     val accentColor: Color? = null,
 )
@@ -1408,15 +1412,15 @@ private suspend fun loadArtworkPresentation(
     if (model == null) return@withContext ArtworkPresentation()
     val request = coil3.request.ImageRequest.Builder(context)
         .data(model)
-        .size(300)
+        .size(PALETTE_COVER_ART_SIZE_PX)
+        .allowHardware(false)
         .build()
     val image = context.imageLoader.execute(request).image
         ?: return@withContext ArtworkPresentation()
-    val bitmap = image.toBitmap().copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+    val bitmap = image.toBitmap()
 
     val palette = Palette.from(bitmap).clearFilters().generate()
     ArtworkPresentation(
-        image = bitmap.asImageBitmap(),
         dominantColor = palette.getDominantColor(0).takeIf { it != 0 }?.let(::Color),
         accentColor = palette.getVibrantColor(0).takeIf { it != 0 }?.let(::Color),
     )
