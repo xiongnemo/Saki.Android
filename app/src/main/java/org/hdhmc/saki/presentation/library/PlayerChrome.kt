@@ -945,22 +945,12 @@ fun NowPlayingOverlay(
                         }
                         // Tech info bar
                         val runtimeInfo = playbackState.runtimeInfo
-                        val codec = runtimeInfo?.sampleMimeType?.let { mime ->
-                            when {
-                                "flac" in mime -> "FLAC"
-                                "opus" in mime -> "Opus"
-                                "vorbis" in mime -> "Vorbis"
-                                "mp4a" in mime || "aac" in mime -> "AAC"
-                                "mp3" in mime || "mpeg" in mime -> "MP3"
-                                "wav" in mime || "raw" in mime -> "WAV"
-                                else -> mime.substringAfter("/")
-                            }
-                        } ?: runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
+                        val format = track.stableFormatLabel()
                         val sampleRate = track.sampleRate?.let(::formatSampleRateShort)
                         val metadataBitrate = track.bitRateKbps?.let { "$it kbps" }
                         val runtimeBitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
                         val bitrate = metadataBitrate ?: runtimeBitrate
-                        val techParts = listOfNotNull(codec, sampleRate, bitrate)
+                        val techParts = listOfNotNull(format, sampleRate, bitrate)
                         if (techParts.isNotEmpty()) {
                             Text(
                                 text = techParts.joinToString(" | "),
@@ -2049,6 +2039,29 @@ private fun PlaybackQueueItem.displayBitrate(runtimeInfo: PlaybackRuntimeInfo?):
 
 private fun PlaybackQueueItem.prefersMetadataBitrate(): Boolean {
     return !qualityLabel.equals("Original", ignoreCase = true) && bitRateKbps != null
+}
+
+private fun PlaybackQueueItem.stableFormatLabel(): String? {
+    suffix?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?.let { return it.uppercase(java.util.Locale.ROOT) }
+
+    return contentType?.substringAfter("/")
+        ?.substringBefore(";")
+        ?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?.let { subtype ->
+            when (subtype.lowercase(java.util.Locale.ROOT)) {
+                "mpeg", "mp3" -> "MP3"
+                "mp4", "x-m4a", "m4a" -> "M4A"
+                "flac" -> "FLAC"
+                "ogg", "oga" -> "OGG"
+                "opus" -> "Opus"
+                "vorbis" -> "Vorbis"
+                "wav", "x-wav" -> "WAV"
+                else -> subtype.uppercase(java.util.Locale.ROOT)
+            }
+        }
 }
 
 private fun formatSampleRateShort(sampleRate: Int): String {
