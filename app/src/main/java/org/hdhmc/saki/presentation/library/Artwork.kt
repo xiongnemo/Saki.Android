@@ -90,9 +90,10 @@ fun resolveArtworkModel(
 
 /**
  * Builds a deterministic cover art URL using the first endpoint by order and a salt derived
- * from the cover art ID. Stable for a fixed server configuration and coverArtId, enabling
- * Coil's disk cache to reuse entries. At request time, [CoverArtEndpointInterceptor] rewrites
- * the base URL to the current best endpoint.
+ * from the cover art ID. Stable for a fixed (server configuration, coverArtId, sizePx) tuple,
+ * enabling Coil's disk cache to reuse entries. Different [sizePx] values produce different
+ * URLs and therefore separate cache entries. At request time, [CoverArtEndpointInterceptor]
+ * rewrites the base URL to the current best endpoint.
  */
 private fun ServerConfig.buildCoverArtUrl(coverArtId: String?, sizePx: Int): String? {
     if (coverArtId.isNullOrBlank()) return null
