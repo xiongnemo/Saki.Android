@@ -186,7 +186,8 @@ class DefaultSubsonicRepositoryTest {
                               "albumId": "album-1",
                               "artist": "Portishead",
                               "artistId": "artist-1",
-                              "bitRate": 320
+                              "bitRate": 320,
+                              "samplingRate": 44100
                             }
                           ]
                         }
@@ -211,6 +212,7 @@ class DefaultSubsonicRepositoryTest {
         assertEquals("Portishead", result.data.artists.first().name)
         assertEquals("Dummy", result.data.albums.first().name)
         assertEquals("Roads", result.data.songs.first().title)
+        assertEquals(44_100, result.data.songs.first().sampleRate)
 
         val request = primaryServer.takeRequest()
         val url = request.requestUrl

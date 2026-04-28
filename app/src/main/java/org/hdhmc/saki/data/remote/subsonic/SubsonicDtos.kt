@@ -118,6 +118,7 @@ data class SongDto(
     val year: Int? = null,
     val genre: String? = null,
     val bitRate: Int? = null,
+    val samplingRate: Int? = null,
     val suffix: String? = null,
     val contentType: String? = null,
     val size: Long? = null,

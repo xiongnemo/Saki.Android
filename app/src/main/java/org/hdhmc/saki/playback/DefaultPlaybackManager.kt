@@ -148,6 +148,8 @@ class DefaultPlaybackManager @Inject constructor(
             streamCacheKey = streamCacheRepository.buildCacheKey(serverId, songId, quality),
             maxBitRate = quality.maxBitRate,
             format = quality.format,
+            bitRate = displayBitRateKbps(sourceBitRate ?: bitRate, quality.maxBitRate),
+            sourceBitRate = sourceBitRate ?: bitRate,
         ).toLogicalMediaItem()
     }
 
@@ -737,12 +739,18 @@ class DefaultPlaybackManager @Inject constructor(
             val currentDisplayItem = displayQueue.getOrNull(displayIndex)?.let { item ->
                 if (item.isCached) return@let item
                 if (state.preferences.adaptiveQualityEnabled) {
-                    val label = if (streamCached) {
-                        org.hdhmc.saki.domain.model.StreamQuality.fromStorageKey(cachedQualityKey!!).label
+                    val quality = if (streamCached) {
+                        org.hdhmc.saki.domain.model.StreamQuality.fromStorageKey(cachedQualityKey!!)
                     } else {
-                        effectiveQuality().label
+                        effectiveQuality()
                     }
-                    item.copy(qualityLabel = label)
+                    item.copy(
+                        qualityLabel = quality.label,
+                        bitRateKbps = displayBitRateKbps(
+                            sourceBitRate = item.sourceBitRateKbps ?: item.bitRateKbps,
+                            maxBitRate = quality.maxBitRate,
+                        ),
+                    )
                 } else {
                     item
                 }

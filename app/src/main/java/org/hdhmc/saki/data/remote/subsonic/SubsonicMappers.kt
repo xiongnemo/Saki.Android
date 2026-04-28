@@ -185,6 +185,7 @@ private fun SongDto.toSong(): Song {
         year = year,
         genre = genre,
         bitRate = bitRate,
+        sampleRate = samplingRate,
         suffix = suffix,
         contentType = contentType,
         sizeBytes = size,

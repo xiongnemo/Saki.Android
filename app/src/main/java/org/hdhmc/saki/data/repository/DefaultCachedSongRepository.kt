@@ -82,7 +82,11 @@ class DefaultCachedSongRepository @Inject constructor(
             existing.qualityKey == quality.storageKey &&
             File(existing.localPath).exists()
         ) {
-            return@withContext existing.toDomain()
+            val enriched = existing.withPlaybackMetadataFrom(song, quality)
+            if (enriched != existing) {
+                cachedSongDao.upsertCachedSong(enriched)
+            }
+            return@withContext enriched.toDomain()
         }
 
         val audioDirectory = File(appContext.filesDir, "offline/audio/$serverId").apply {
@@ -125,6 +129,8 @@ class DefaultCachedSongRepository @Inject constructor(
             discNumber = song.discNumber,
             suffix = audioDownload.suffix ?: song.suffix,
             contentType = audioDownload.contentType ?: song.contentType,
+            bitRate = song.cachedBitRateKbps(quality),
+            sampleRate = song.sampleRate,
             qualityKey = quality.storageKey,
             fileSizeBytes = audioDownload.file.length(),
             downloadedAt = System.currentTimeMillis(),
@@ -333,6 +339,8 @@ private fun CachedSongEntity.toDomain(): CachedSong {
         discNumber = discNumber,
         suffix = suffix,
         contentType = contentType,
+        bitRateKbps = bitRate,
+        sampleRate = sampleRate,
         quality = StreamQuality.fromStorageKey(qualityKey),
         fileSizeBytes = fileSizeBytes,
         downloadedAt = downloadedAt,
@@ -341,6 +349,22 @@ private fun CachedSongEntity.toDomain(): CachedSong {
 
 private fun CachedSong.canPlayAt(preferredQuality: StreamQuality): Boolean {
     return File(localPath).isFile && quality.isAtLeast(preferredQuality)
+}
+
+private fun Song.cachedBitRateKbps(quality: StreamQuality): Int? {
+    return quality.maxBitRate
+        ?.takeIf { bitrate -> bitrate > 0 && !quality.preferOriginalDownload }
+        ?: bitRate
+}
+
+private fun CachedSongEntity.withPlaybackMetadataFrom(
+    song: Song,
+    quality: StreamQuality,
+): CachedSongEntity {
+    return copy(
+        bitRate = bitRate ?: song.cachedBitRateKbps(quality),
+        sampleRate = sampleRate ?: song.sampleRate,
+    )
 }
 
 private fun StreamQuality.isAtLeast(preferredQuality: StreamQuality): Boolean {

@@ -118,6 +118,7 @@ data class Song(
     val year: Int?,
     val genre: String?,
     val bitRate: Int?,
+    val sampleRate: Int?,
     val suffix: String?,
     val contentType: String?,
     val sizeBytes: Long?,
