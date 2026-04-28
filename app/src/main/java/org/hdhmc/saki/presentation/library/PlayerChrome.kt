@@ -1589,8 +1589,6 @@ private fun NowPlayingArtworkPagerHost(
     LaunchedEffect(targetPage, currentTrack.songId, queueIdentity) {
         if (currentTrack.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
             val startPage = artworkPagerState.currentPage
-            stableQueue = queue
-            withFrameNanos { }
             while (artworkPagerState.isScrollInProgress) {
                 withFrameNanos { }
             }
@@ -1600,12 +1598,16 @@ private fun NowPlayingArtworkPagerHost(
             if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
                 programmaticPagerSync = true
                 try {
+                    stableQueue = queue
                     artworkPagerState.scrollToPage(targetPage)
+                    motionState.position = targetPage.toFloat()
                     withFrameNanos { }
                 } finally {
                     lastProgrammaticSettledPage = artworkPagerState.settledPage
                     programmaticPagerSync = false
                 }
+            } else {
+                stableQueue = queue
             }
         } else {
             stableQueue = queue
