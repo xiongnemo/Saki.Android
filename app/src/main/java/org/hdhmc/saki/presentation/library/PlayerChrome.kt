@@ -550,7 +550,8 @@ fun NowPlayingOverlay(
             val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
             var showQueueSheet by remember { mutableStateOf(false) }
             val latestOpenQueueSheet by rememberUpdatedState { showQueueSheet = true }
-            val dismissSwipeModifier = Modifier.pointerInput(Unit) {
+            val dismissSwipeModifier = Modifier.pointerInput(visible) {
+                if (!visible) return@pointerInput
                 val dismissThresholdPx = 72.dp.toPx()
                 val velocityThresholdDpPerSecond = 300f
                 var downwardDistance = 0f
@@ -558,7 +559,7 @@ fun NowPlayingOverlay(
                 var didDismiss = false
 
                 fun dismissFromSwipe() {
-                    if (!didDismiss) {
+                    if (visible && !didDismiss) {
                         didDismiss = true
                         latestOnDismiss()
                     }
