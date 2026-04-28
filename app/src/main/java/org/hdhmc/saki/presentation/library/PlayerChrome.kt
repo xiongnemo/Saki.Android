@@ -1405,8 +1405,13 @@ private fun List<PlaybackQueueItem>.withVisualCurrentItem(
     currentIndex: Int,
     currentTrack: PlaybackQueueItem,
 ): List<PlaybackQueueItem> {
-    if (getOrNull(currentIndex) == currentTrack) return this
+    val currentItem = getOrNull(currentIndex) ?: return this
+    if (currentItem == currentTrack || currentItem.hasSameArtworkVisual(currentTrack)) return this
     return toMutableList().also { it[currentIndex] = currentTrack }
+}
+
+private fun PlaybackQueueItem.hasSameArtworkVisual(other: PlaybackQueueItem): Boolean {
+    return title == other.title && artworkIdentityKey() == other.artworkIdentityKey()
 }
 
 private class NowPlayingArtworkMotionState(initialPosition: Float) {
