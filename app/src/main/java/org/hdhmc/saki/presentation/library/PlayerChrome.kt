@@ -451,15 +451,19 @@ fun NowPlayingOverlay(
         // Sync pager when track changes externally (button skip, queue tap)
         var lastTrackId by remember { mutableStateOf(track.songId) }
         // A settled page is a playback intent only after a real user drag.
-        // Programmatic sync keeps the pager animated but never drives playback.
+        // Programmatic sync keeps pager state aligned but never drives playback.
+        // A separate cover transition handles button/notification skip animation.
         var programmaticPagerSync by remember { mutableStateOf(false) }
         var userPagerDragSeen by remember { mutableStateOf(false) }
         var currentArtworkKeyPage by remember { mutableStateOf(playbackState.currentIndex.coerceAtLeast(0)) }
         var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
+        var artworkTransitionSequence by remember { mutableStateOf(0) }
+        var programmaticArtworkTransition by remember { mutableStateOf<ProgrammaticArtworkTransition?>(null) }
         val isArtworkPagerDragged by artworkPagerState.interactionSource.collectIsDraggedAsState()
         LaunchedEffect(isArtworkPagerDragged, programmaticPagerSync) {
             if (isArtworkPagerDragged && !programmaticPagerSync) {
                 userPagerDragSeen = true
+                programmaticArtworkTransition = null
             }
         }
         // Stabilize artwork during deferred queue expansion:
@@ -502,19 +506,21 @@ fun NowPlayingOverlay(
                 currentArtworkKeyPage = targetPage
             }
             if (track.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
+                val startPage = artworkPagerState.currentPage
+                val direction = (targetPage - startPage).coerceIn(-1, 1)
+                if (direction != 0) {
+                    artworkTransitionSequence += 1
+                    programmaticArtworkTransition = ProgrammaticArtworkTransition(
+                        sequence = artworkTransitionSequence,
+                        from = stableQueue.getOrNull(startPage),
+                        to = playbackState.queue.getOrNull(targetPage) ?: track,
+                        direction = direction,
+                    )
+                }
                 programmaticPagerSync = true
                 userPagerDragSeen = false
                 try {
-                    artworkPagerState.animateScrollToPage(
-                        page = targetPage,
-                        animationSpec = tween(durationMillis = PROGRAMMATIC_ARTWORK_SCROLL_MS),
-                    )
-                    if (
-                        artworkPagerState.currentPage != targetPage ||
-                        artworkPagerState.settledPage != targetPage
-                    ) {
-                        artworkPagerState.scrollToPage(targetPage)
-                    }
+                    artworkPagerState.scrollToPage(targetPage)
                     withFrameNanos { }
                 } finally {
                     programmaticPagerSync = false
@@ -674,6 +680,20 @@ fun NowPlayingOverlay(
                                     cornerRadiusDp = 34,
                                 )
                             }
+                        }
+                        programmaticArtworkTransition?.let { transition ->
+                            ProgrammaticArtworkTransitionOverlay(
+                                transition = transition,
+                                serversById = serversById,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(34.dp)),
+                                onFinished = {
+                                    if (programmaticArtworkTransition?.sequence == transition.sequence) {
+                                        programmaticArtworkTransition = null
+                                    }
+                                },
+                            )
                         }
                         // Lyrics overlay on artwork
                         androidx.compose.animation.AnimatedVisibility(
@@ -1438,8 +1458,79 @@ private data class ArtworkPresentation(
         get() = dominantColor != null || accentColor != null
 }
 
+private data class ProgrammaticArtworkTransition(
+    val sequence: Int,
+    val from: PlaybackQueueItem?,
+    val to: PlaybackQueueItem,
+    val direction: Int,
+)
+
+@Composable
+private fun ProgrammaticArtworkTransitionOverlay(
+    transition: ProgrammaticArtworkTransition,
+    serversById: Map<Long, ServerConfig>,
+    modifier: Modifier = Modifier,
+    onFinished: () -> Unit,
+) {
+    val latestOnFinished by rememberUpdatedState(onFinished)
+    var started by remember(transition.sequence) { mutableStateOf(false) }
+    val progress by animateFloatAsState(
+        targetValue = if (started) 1f else 0f,
+        animationSpec = tween(durationMillis = PROGRAMMATIC_ARTWORK_TRANSITION_MS),
+        label = "ProgrammaticArtworkTransitionProgress",
+        finishedListener = { latestOnFinished() },
+    )
+
+    LaunchedEffect(transition.sequence) {
+        started = true
+    }
+
+    BoxWithConstraints(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        val widthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        val direction = transition.direction.coerceIn(-1, 1)
+        transition.from?.let { item ->
+            ProgrammaticArtworkTransitionCard(
+                item = item,
+                serversById = serversById,
+                modifier = Modifier.graphicsLayer {
+                    alpha = 1f - progress * 0.18f
+                    translationX = -direction * progress * widthPx
+                },
+            )
+        }
+        ProgrammaticArtworkTransitionCard(
+            item = transition.to,
+            serversById = serversById,
+            modifier = Modifier.graphicsLayer {
+                alpha = 0.82f + progress * 0.18f
+                translationX = direction * (1f - progress) * widthPx
+            },
+        )
+    }
+}
+
+@Composable
+private fun ProgrammaticArtworkTransitionCard(
+    item: PlaybackQueueItem,
+    serversById: Map<Long, ServerConfig>,
+    modifier: Modifier = Modifier,
+) {
+    ArtworkCard(
+        model = item.queueArtworkModel(item.serverId?.let { serversById[it] }),
+        contentDescription = item.title,
+        modifier = modifier
+            .aspectRatio(1f)
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(34.dp)),
+        cornerRadiusDp = 34,
+    )
+}
+
 private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
-private const val PROGRAMMATIC_ARTWORK_SCROLL_MS = 220
+private const val PROGRAMMATIC_ARTWORK_TRANSITION_MS = 360
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
 
 @Composable
