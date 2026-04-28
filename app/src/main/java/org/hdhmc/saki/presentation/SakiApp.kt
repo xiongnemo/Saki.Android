@@ -35,7 +35,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import org.hdhmc.saki.domain.model.PlaybackProgressState
+import org.hdhmc.saki.domain.model.PlaybackQueueItem
 import org.hdhmc.saki.domain.model.PlaybackSessionState
+import org.hdhmc.saki.domain.model.ServerConfig
+import org.hdhmc.saki.domain.model.SongLyrics
 import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.presentation.library.BrowseScreen
 import org.hdhmc.saki.presentation.library.NowPlayingCapsule
@@ -97,7 +100,7 @@ fun SakiApp(
                 else -> {
                     RootShell(
                         uiState = uiState,
-                        playbackProgress = viewModel.playbackProgress,
+                        playbackProgressFlow = viewModel.playbackProgress,
                         snackbarHostState = snackbarHostState,
                         showNowPlaying = showNowPlaying,
                         onManageServers = { showServerManager = true },
@@ -184,7 +187,7 @@ fun SakiApp(
 @Composable
 private fun RootShell(
     uiState: SakiAppUiState,
-    playbackProgress: StateFlow<PlaybackProgressState>,
+    playbackProgressFlow: StateFlow<PlaybackProgressState>,
     snackbarHostState: SnackbarHostState,
     showNowPlaying: Boolean,
     onManageServers: () -> Unit,
@@ -386,15 +389,10 @@ private fun RootShell(
                 track.serverId != uiState.selectedServerId ||
                 track.artistId in availableArtistIds
             )
-        val progress = if (showNowPlaying) {
-            playbackProgress.collectAsStateWithLifecycle().value
-        } else {
-            uiState.playbackState.toProgressState()
-        }
-        NowPlayingOverlay(
+        NowPlayingOverlayHost(
             visible = showNowPlaying,
             playbackState = uiState.playbackState,
-            playbackProgress = progress,
+            playbackProgressFlow = playbackProgressFlow,
             track = track,
             onDismiss = onDismissNowPlaying,
             canOpenArtist = canOpenArtistFromNowPlaying,
@@ -430,6 +428,74 @@ private fun RootShell(
             lyrics = uiState.currentLyrics,
         )
     }
+}
+
+/**
+ * Isolates [playbackProgressFlow] collection so progress ticks only recompose
+ * the overlay subtree, not the parent [RootShell].
+ */
+@Composable
+private fun NowPlayingOverlayHost(
+    visible: Boolean,
+    playbackState: PlaybackSessionState,
+    playbackProgressFlow: StateFlow<PlaybackProgressState>,
+    track: PlaybackQueueItem,
+    onDismiss: () -> Unit,
+    canOpenArtist: Boolean,
+    onOpenArtist: () -> Unit,
+    onOpenAlbum: () -> Unit,
+    onPlayPause: () -> Unit,
+    onSkipToNext: () -> Unit,
+    onSkipToPrevious: () -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onSkipToQueueItem: (Int) -> Unit,
+    onRemoveQueueItem: (Int) -> Unit,
+    currentServer: ServerConfig?,
+    servers: List<ServerConfig>,
+    activeEndpointLabel: String?,
+    activeEndpointId: Long?,
+    isEndpointForced: Boolean,
+    endpointProbeResults: List<EndpointProbeInfo>,
+    isProbing: Boolean,
+    onReprobeEndpoints: () -> Unit,
+    onForceEndpoint: (Long) -> Unit,
+    lyrics: SongLyrics?,
+) {
+    val progress = if (visible) {
+        playbackProgressFlow.collectAsStateWithLifecycle().value
+    } else {
+        playbackState.toProgressState()
+    }
+    NowPlayingOverlay(
+        visible = visible,
+        playbackState = playbackState,
+        playbackProgress = progress,
+        track = track,
+        onDismiss = onDismiss,
+        canOpenArtist = canOpenArtist,
+        onOpenArtist = onOpenArtist,
+        onOpenAlbum = onOpenAlbum,
+        onPlayPause = onPlayPause,
+        onSkipToNext = onSkipToNext,
+        onSkipToPrevious = onSkipToPrevious,
+        onSeekTo = onSeekTo,
+        onCycleRepeatMode = onCycleRepeatMode,
+        onToggleShuffle = onToggleShuffle,
+        onSkipToQueueItem = onSkipToQueueItem,
+        onRemoveQueueItem = onRemoveQueueItem,
+        currentServer = currentServer,
+        servers = servers,
+        activeEndpointLabel = activeEndpointLabel,
+        activeEndpointId = activeEndpointId,
+        isEndpointForced = isEndpointForced,
+        endpointProbeResults = endpointProbeResults,
+        isProbing = isProbing,
+        onReprobeEndpoints = onReprobeEndpoints,
+        onForceEndpoint = onForceEndpoint,
+        lyrics = lyrics,
+    )
 }
 
 private fun PlaybackSessionState.toProgressState(): PlaybackProgressState {
