@@ -32,13 +32,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import org.hdhmc.saki.domain.model.PlaybackProgressState
+import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.ThemeMode
 import org.hdhmc.saki.presentation.library.BrowseScreen
-import org.hdhmc.saki.presentation.library.NowPlayingOverlay
 import org.hdhmc.saki.presentation.library.NowPlayingCapsule
+import org.hdhmc.saki.presentation.library.NowPlayingOverlay
 import org.hdhmc.saki.presentation.serverconfig.ServerConfigRoute
 import org.hdhmc.saki.presentation.settings.SettingsScreen
-import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun SakiApp(
@@ -94,6 +97,7 @@ fun SakiApp(
                 else -> {
                     RootShell(
                         uiState = uiState,
+                        playbackProgress = viewModel.playbackProgress,
                         snackbarHostState = snackbarHostState,
                         showNowPlaying = showNowPlaying,
                         onManageServers = { showServerManager = true },
@@ -180,6 +184,7 @@ fun SakiApp(
 @Composable
 private fun RootShell(
     uiState: SakiAppUiState,
+    playbackProgress: StateFlow<PlaybackProgressState>,
     snackbarHostState: SnackbarHostState,
     showNowPlaying: Boolean,
     onManageServers: () -> Unit,
@@ -381,9 +386,15 @@ private fun RootShell(
                 track.serverId != uiState.selectedServerId ||
                 track.artistId in availableArtistIds
             )
+        val progress = if (showNowPlaying) {
+            playbackProgress.collectAsStateWithLifecycle().value
+        } else {
+            uiState.playbackState.toProgressState()
+        }
         NowPlayingOverlay(
             visible = showNowPlaying,
             playbackState = uiState.playbackState,
+            playbackProgress = progress,
             track = track,
             onDismiss = onDismissNowPlaying,
             canOpenArtist = canOpenArtistFromNowPlaying,
@@ -419,4 +430,12 @@ private fun RootShell(
             lyrics = uiState.currentLyrics,
         )
     }
+}
+
+private fun PlaybackSessionState.toProgressState(): PlaybackProgressState {
+    return PlaybackProgressState(
+        positionMs = positionMs,
+        durationMs = durationMs,
+        bufferedPositionMs = bufferedPositionMs,
+    )
 }

@@ -1,12 +1,14 @@
 package org.hdhmc.saki.domain.repository
 
 import org.hdhmc.saki.domain.model.CachedSong
+import org.hdhmc.saki.domain.model.PlaybackProgressState
 import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.Song
 import kotlinx.coroutines.flow.StateFlow
 
 interface PlaybackManager {
     val playbackState: StateFlow<PlaybackSessionState>
+    val playbackProgress: StateFlow<PlaybackProgressState>
 
     suspend fun playSong(
         serverId: Long,

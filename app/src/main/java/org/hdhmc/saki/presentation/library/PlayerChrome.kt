@@ -125,6 +125,7 @@ import androidx.palette.graphics.Palette
 import org.hdhmc.saki.R
 import org.hdhmc.saki.presentation.EndpointProbeInfo
 import org.hdhmc.saki.domain.model.PlaybackQueueItem
+import org.hdhmc.saki.domain.model.PlaybackProgressState
 import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.RepeatModeSetting
 import org.hdhmc.saki.domain.model.ServerConfig
@@ -303,6 +304,7 @@ fun NowPlayingCapsule(
 fun NowPlayingOverlay(
     visible: Boolean,
     playbackState: PlaybackSessionState,
+    playbackProgress: PlaybackProgressState,
     track: PlaybackQueueItem,
     onDismiss: () -> Unit,
     canOpenArtist: Boolean,
@@ -426,13 +428,13 @@ fun NowPlayingOverlay(
         }
         val sliderInactiveColor = sliderActiveColor.copy(alpha = 0.25f)
         var sliderValue by remember(track.songId) {
-            mutableFloatStateOf(playbackState.positionMs.toFloat())
+            mutableFloatStateOf(playbackProgress.positionMs.toFloat())
         }
         var isDragging by remember(track.songId) { mutableStateOf(false) }
 
-        LaunchedEffect(playbackState.positionMs, track.songId) {
+        LaunchedEffect(playbackProgress.positionMs, track.songId) {
             if (!isDragging) {
-                sliderValue = playbackState.positionMs.toFloat()
+                sliderValue = playbackProgress.positionMs.toFloat()
             }
         }
 
@@ -665,7 +667,7 @@ fun NowPlayingOverlay(
                                 if (lyrics != null && lyrics.lines.isNotEmpty()) {
                                     SyncedLyricsView(
                                         lyrics = lyrics,
-                                        positionMs = playbackState.positionMs,
+                                        positionMs = playbackProgress.positionMs,
                                         isPlaying = playbackState.isPlaying,
                                         onSeekTo = onSeekTo,
                                         modifier = Modifier
@@ -775,9 +777,9 @@ fun NowPlayingOverlay(
                         onOpenArtist = onOpenArtist,
                         onOpenAlbum = onOpenAlbum,
                     )
-                    val duration = playbackState.durationMs.coerceAtLeast(1L).toFloat()
-                    val bufferFraction = if (playbackState.durationMs > 0) {
-                        (playbackState.bufferedPositionMs.toFloat() / duration).coerceIn(0f, 1f)
+                    val duration = playbackProgress.durationMs.coerceAtLeast(1L).toFloat()
+                    val bufferFraction = if (playbackProgress.durationMs > 0) {
+                        (playbackProgress.bufferedPositionMs.toFloat() / duration).coerceIn(0f, 1f)
                     } else 0f
                     val isCachedTrack = track.isCached || playbackState.isStreamCached
                     val sliderColors = if (isCachedTrack) {
@@ -867,7 +869,7 @@ fun NowPlayingOverlay(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(text = formatDuration(sliderValue.roundToLong()), color = MaterialTheme.colorScheme.onBackground)
-                            Text(text = formatDuration(playbackState.durationMs), color = MaterialTheme.colorScheme.onBackground)
+                            Text(text = formatDuration(playbackProgress.durationMs), color = MaterialTheme.colorScheme.onBackground)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
