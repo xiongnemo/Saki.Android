@@ -352,6 +352,32 @@ fun NowPlayingOverlay(
         currentTrack = track,
     )
     val artworkMotionState = rememberNowPlayingArtworkMotionState(visualSnapshot.currentIndex, visible)
+    var visualSkipRequest by remember { mutableStateOf<ArtworkPageRequest?>(null) }
+    fun requestVisualSkip(delta: Int) {
+        val queue = visualSnapshot.queue
+        val basePage = visualSkipRequest
+            ?.page
+            ?.takeIf { it in queue.indices }
+            ?: visualSnapshot.currentIndex
+        val targetPage = basePage + delta
+        if (targetPage in queue.indices) {
+            visualSkipRequest = ArtworkPageRequest(
+                page = targetPage,
+                sequence = (visualSkipRequest?.sequence ?: 0) + 1,
+            ).takeUnless { targetPage == visualSnapshot.currentIndex }
+        }
+    }
+    LaunchedEffect(visualSkipRequest, visualSnapshot.currentIndex) {
+        val request = visualSkipRequest ?: return@LaunchedEffect
+        if (visualSnapshot.currentIndex == request.page) {
+            visualSkipRequest = null
+            return@LaunchedEffect
+        }
+        delay(ARTWORK_BUTTON_SKIP_CONFIRM_TIMEOUT_MS)
+        if (visualSkipRequest == request && visualSnapshot.currentIndex != request.page) {
+            visualSkipRequest = null
+        }
+    }
     val visualCurrentServer = visualSnapshot.currentTrack.serverId?.let { serversById[it] }
         ?: currentServer.takeIf { it?.id == visualSnapshot.currentTrack.serverId }
 
@@ -571,6 +597,7 @@ fun NowPlayingOverlay(
                             currentTrack = visualSnapshot.currentTrack,
                             serversById = serversById,
                             motionState = artworkMotionState,
+                            visualSkipRequest = visualSkipRequest,
                             modifier = Modifier.fillMaxSize(),
                             onArtworkClick = {
                                 if (showLyrics) showLyrics = false
@@ -804,10 +831,13 @@ fun NowPlayingOverlay(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             PlayerActionButton(
-                                Icons.Rounded.SkipPrevious,
-                                stringResource(R.string.player_previous),
-                                onSkipToPrevious,
-                                compactControls,
+                                icon = Icons.Rounded.SkipPrevious,
+                                label = stringResource(R.string.player_previous),
+                                onClick = {
+                                    requestVisualSkip(-1)
+                                    onSkipToPrevious()
+                                },
+                                compact = compactControls,
                             )
                             Spacer(Modifier.width(14.dp))
                             Surface(
@@ -845,10 +875,13 @@ fun NowPlayingOverlay(
                             }
                             Spacer(Modifier.width(14.dp))
                             PlayerActionButton(
-                                Icons.Rounded.SkipNext,
-                                stringResource(R.string.player_next),
-                                onSkipToNext,
-                                compactControls,
+                                icon = Icons.Rounded.SkipNext,
+                                label = stringResource(R.string.player_next),
+                                onClick = {
+                                    requestVisualSkip(1)
+                                    onSkipToNext()
+                                },
+                                compact = compactControls,
                             )
                         }
                         // Tech info bar
@@ -1437,6 +1470,11 @@ private data class ArtworkColors(
     val accent: Color,
 )
 
+private data class ArtworkPageRequest(
+    val page: Int,
+    val sequence: Int,
+)
+
 private data class ArtworkPresentationRequest(
     val key: String,
     val model: Any?,
@@ -1562,11 +1600,15 @@ private fun NowPlayingArtworkPagerHost(
     currentTrack: PlaybackQueueItem,
     serversById: Map<Long, ServerConfig>,
     motionState: NowPlayingArtworkMotionState,
+    visualSkipRequest: ArtworkPageRequest?,
     modifier: Modifier = Modifier,
     onArtworkClick: () -> Unit,
     onUserSelectQueueItem: (Int) -> Unit,
 ) {
     val targetPage = currentIndex.coerceAtLeast(0)
+    val requestedVisualPage = visualSkipRequest?.page?.takeIf { it in queue.indices }
+    val visualTargetPage = requestedVisualPage ?: targetPage
+    val visualSkipSequence = visualSkipRequest?.sequence
     val queueIdentity = remember(queue) { queue.map { it.artworkIdentityKey() } }
     val latestOnArtworkClick by rememberUpdatedState(onArtworkClick)
     val latestOnUserSelectQueueItem by rememberUpdatedState(onUserSelectQueueItem)
@@ -1586,8 +1628,28 @@ private fun NowPlayingArtworkPagerHost(
     // update the page count first, then move after any insertion before the
     // current item. Track changes use the pager's own animation so there is
     // only one artwork render path and no overlay handoff frame.
-    LaunchedEffect(targetPage, currentTrack.songId, queueIdentity) {
-        if (currentTrack.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
+    LaunchedEffect(visualTargetPage, visualSkipSequence, currentTrack.songId, queueIdentity) {
+        val isLocalVisualSkip = requestedVisualPage != null && requestedVisualPage != targetPage
+        if (isLocalVisualSkip && artworkPagerState.currentPage != visualTargetPage) {
+            stableQueue = queue
+            programmaticPagerSync = true
+            try {
+                val distancePages = abs(
+                    visualTargetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
+                )
+                withContext(FixedArtworkMotionDurationScale) {
+                    artworkPagerState.animateArtworkMotionToPage(
+                        page = visualTargetPage,
+                        motionState = motionState,
+                        distancePages = distancePages,
+                    )
+                }
+            } finally {
+                lastProgrammaticSettledPage = artworkPagerState.settledPage
+                programmaticPagerSync = false
+            }
+        }
+        if (!isLocalVisualSkip && currentTrack.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
             val startPage = artworkPagerState.currentPage
             while (artworkPagerState.isScrollInProgress) {
                 withFrameNanos { }
@@ -1612,7 +1674,7 @@ private fun NowPlayingArtworkPagerHost(
         } else {
             stableQueue = queue
         }
-        if (currentTrack.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
+        if (!isLocalVisualSkip && currentTrack.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
             stableQueue = queue
             withFrameNanos { }
             programmaticPagerSync = true
@@ -1734,6 +1796,7 @@ private fun NowPlayingArtworkFrame(
 private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
 private const val ARTWORK_PREWARM_RADIUS_PAGES = 3
 private const val ARTWORK_BACKGROUND_SETTLE_MS = 180
+private const val ARTWORK_BUTTON_SKIP_CONFIRM_TIMEOUT_MS = 900L
 private const val PROGRAMMATIC_ARTWORK_SPRING_BASE_STIFFNESS = 140f
 private const val PROGRAMMATIC_ARTWORK_SPRING_DISTANCE_STIFFNESS = 60f
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
