@@ -460,107 +460,6 @@ fun NowPlayingOverlay(
             }
         }
 
-        // Artwork pager state synced with playback queue
-        var stableQueue by remember { mutableStateOf(playbackState.queue) }
-        val artworkPagerState = rememberPagerState(
-            initialPage = playbackState.currentIndex.coerceAtLeast(0),
-            pageCount = { stableQueue.size.coerceAtLeast(1) },
-        )
-        // Sync pager when track changes externally (button skip, queue tap)
-        var lastTrackId by remember { mutableStateOf(track.songId) }
-        // Programmatic sync keeps pager state aligned but never drives playback.
-        // Any other settled page change comes from the user's pager gesture.
-        // A separate cover transition handles button/notification skip animation.
-        var programmaticPagerSync by remember { mutableStateOf(false) }
-        var currentArtworkKeyPage by remember { mutableStateOf(playbackState.currentIndex.coerceAtLeast(0)) }
-        var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
-        var artworkTransitionSequence by remember { mutableStateOf(0) }
-        var programmaticArtworkTransition by remember { mutableStateOf<ProgrammaticArtworkTransition?>(null) }
-        var programmaticArtworkTransitionCoversPager by remember { mutableStateOf(false) }
-        val isArtworkPagerDragged by artworkPagerState.interactionSource.collectIsDraggedAsState()
-        LaunchedEffect(isArtworkPagerDragged, programmaticPagerSync) {
-            if (isArtworkPagerDragged && !programmaticPagerSync) {
-                programmaticArtworkTransition = null
-                programmaticArtworkTransitionCoversPager = false
-            }
-        }
-        // Stabilize artwork during deferred queue expansion:
-        // keep the current artwork keyed to the visible page until the pager can
-        // move after any page-count change caused by queue item insertion. If
-        // the user starts swiping during this handoff, do not force it back.
-        val targetPage = playbackState.currentIndex.coerceAtLeast(0)
-        LaunchedEffect(targetPage, track.songId, playbackState.queue) {
-            if (track.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
-                val startPage = artworkPagerState.currentPage
-                pinnedCurrentArtworkPage = startPage
-                currentArtworkKeyPage = startPage
-                try {
-                    stableQueue = playbackState.queue
-                    withFrameNanos { }
-                    while (artworkPagerState.isScrollInProgress) {
-                        withFrameNanos { }
-                    }
-                    val userMovedPager =
-                        artworkPagerState.currentPage != startPage ||
-                        artworkPagerState.settledPage != startPage
-                    if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
-                        programmaticPagerSync = true
-                        try {
-                            artworkPagerState.scrollToPage(targetPage)
-                            withFrameNanos { }
-                        } finally {
-                            programmaticPagerSync = false
-                        }
-                    }
-                    currentArtworkKeyPage = if (userMovedPager) targetPage else artworkPagerState.currentPage
-                    pinnedCurrentArtworkPage = null
-                    withFrameNanos { }
-                } finally {
-                    pinnedCurrentArtworkPage = null
-                }
-            } else {
-                stableQueue = playbackState.queue
-                currentArtworkKeyPage = targetPage
-            }
-            if (track.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
-                val startPage = artworkPagerState.currentPage
-                val direction = (targetPage - startPage).coerceIn(-1, 1)
-                val fromItem = programmaticArtworkTransition?.to ?: stableQueue.getOrNull(startPage)
-                val toItem = playbackState.queue.getOrNull(targetPage) ?: track
-                if (direction != 0) {
-                    artworkTransitionSequence += 1
-                    programmaticArtworkTransition = ProgrammaticArtworkTransition(
-                        sequence = artworkTransitionSequence,
-                        from = fromItem,
-                        to = toItem,
-                        direction = direction,
-                    )
-                    programmaticArtworkTransitionCoversPager = true
-                }
-                programmaticPagerSync = true
-                try {
-                    artworkPagerState.scrollToPage(targetPage)
-                    withFrameNanos { }
-                } finally {
-                    programmaticPagerSync = false
-                }
-            }
-            lastTrackId = track.songId
-        }
-        // When user swipes pager, trigger skip
-        val currentPlaybackIndex by rememberUpdatedState(playbackState.currentIndex)
-        val currentQueueSize by rememberUpdatedState(playbackState.queue.size)
-        LaunchedEffect(artworkPagerState) {
-            snapshotFlow { artworkPagerState.settledPage }
-                .distinctUntilChanged()
-                .collect { page ->
-                    if (programmaticPagerSync) return@collect
-                    if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
-                        onSkipToQueueItem(page)
-                    }
-                }
-        }
-
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
@@ -658,61 +557,18 @@ fun NowPlayingOverlay(
                             .fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        HorizontalPager(
-                            state = artworkPagerState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    alpha = if (programmaticArtworkTransitionCoversPager) 0f else 1f
-                                }
-                                .clip(RoundedCornerShape(34.dp)),
-                            pageSpacing = 16.dp,
-                            beyondViewportPageCount = 1,
-                            key = { page ->
-                                if (page == currentArtworkKeyPage) {
-                                    "current-${track.mediaId}"
-                                } else {
-                                    stableQueue.getOrNull(page)?.let { "queue-${it.mediaId}-$page" }
-                                        ?: "empty-$page"
-                                }
+                        NowPlayingArtworkPagerHost(
+                            queue = playbackState.queue,
+                            currentIndex = playbackState.currentIndex,
+                            currentTrack = track,
+                            serversById = serversById,
+                            modifier = Modifier.fillMaxSize(),
+                            onArtworkClick = {
+                                if (showLyrics) showLyrics = false
+                                else if (hasLyrics) showLyrics = true
                             },
-                        ) { page ->
-                            val queueItem = stableQueue.getOrNull(page)
-                            val artworkItem = if (page == pinnedCurrentArtworkPage) {
-                                track
-                            } else {
-                                queueItem
-                            }
-                            NowPlayingArtworkFrame(
-                                item = artworkItem,
-                                serversById = serversById,
-                                modifier = Modifier.fillMaxSize(),
-                                onClick = {
-                                    if (showLyrics) showLyrics = false
-                                    else if (hasLyrics) showLyrics = true
-                                },
-                            )
-                        }
-                        programmaticArtworkTransition?.let { transition ->
-                            ProgrammaticArtworkTransitionOverlay(
-                                transition = transition,
-                                serversById = serversById,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(34.dp)),
-                                onRevealPager = {
-                                    if (programmaticArtworkTransition?.sequence == transition.sequence) {
-                                        programmaticArtworkTransitionCoversPager = false
-                                    }
-                                },
-                                onFinished = {
-                                    if (programmaticArtworkTransition?.sequence == transition.sequence) {
-                                        programmaticArtworkTransition = null
-                                        programmaticArtworkTransitionCoversPager = false
-                                    }
-                                },
-                            )
-                        }
+                            onUserSelectQueueItem = onSkipToQueueItem,
+                        )
                         // Lyrics overlay on artwork
                         androidx.compose.animation.AnimatedVisibility(
                             visible = showLyrics && hasLyrics,
@@ -1468,12 +1324,197 @@ private fun PlaybackQueueItem.queueArtworkModel(server: ServerConfig?): Any? {
     }
 }
 
+private fun PlaybackQueueItem.artworkIdentityKey(): String {
+    return listOf(
+        mediaId,
+        serverId?.toString().orEmpty(),
+        coverArtId.orEmpty(),
+        coverArtPath.orEmpty(),
+        artworkUri.orEmpty(),
+    ).joinToString("|")
+}
+
 private data class ArtworkPresentation(
     val dominantColor: Color? = null,
     val accentColor: Color? = null,
 ) {
     val hasColors: Boolean
         get() = dominantColor != null || accentColor != null
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NowPlayingArtworkPagerHost(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+    serversById: Map<Long, ServerConfig>,
+    modifier: Modifier = Modifier,
+    onArtworkClick: () -> Unit,
+    onUserSelectQueueItem: (Int) -> Unit,
+) {
+    val targetPage = currentIndex.coerceAtLeast(0)
+    val queueIdentity = remember(queue) { queue.map { it.artworkIdentityKey() } }
+    val latestOnArtworkClick by rememberUpdatedState(onArtworkClick)
+    val latestOnUserSelectQueueItem by rememberUpdatedState(onUserSelectQueueItem)
+    var stableQueue by remember { mutableStateOf(queue) }
+    val artworkPagerState = rememberPagerState(
+        initialPage = targetPage,
+        pageCount = { stableQueue.size.coerceAtLeast(1) },
+    )
+
+    var lastTrackId by remember { mutableStateOf(currentTrack.songId) }
+    // Programmatic sync keeps pager state aligned but never drives playback.
+    // Any other settled page change comes from the user's pager gesture.
+    // A separate cover transition handles button/notification skip animation.
+    var programmaticPagerSync by remember { mutableStateOf(false) }
+    var currentArtworkKeyPage by remember { mutableStateOf(targetPage) }
+    var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
+    var artworkTransitionSequence by remember { mutableStateOf(0) }
+    var programmaticArtworkTransition by remember { mutableStateOf<ProgrammaticArtworkTransition?>(null) }
+    var programmaticArtworkTransitionCoversPager by remember { mutableStateOf(false) }
+    val isArtworkPagerDragged by artworkPagerState.interactionSource.collectIsDraggedAsState()
+
+    LaunchedEffect(isArtworkPagerDragged, programmaticPagerSync) {
+        if (isArtworkPagerDragged && !programmaticPagerSync) {
+            programmaticArtworkTransition = null
+            programmaticArtworkTransitionCoversPager = false
+        }
+    }
+
+    // Stabilize artwork during deferred queue expansion:
+    // keep the current artwork keyed to the visible page until the pager can
+    // move after any page-count change caused by queue item insertion. If
+    // the user starts swiping during this handoff, do not force it back.
+    LaunchedEffect(targetPage, currentTrack.songId, queueIdentity) {
+        if (currentTrack.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
+            val startPage = artworkPagerState.currentPage
+            pinnedCurrentArtworkPage = startPage
+            currentArtworkKeyPage = startPage
+            try {
+                stableQueue = queue
+                withFrameNanos { }
+                while (artworkPagerState.isScrollInProgress) {
+                    withFrameNanos { }
+                }
+                val userMovedPager =
+                    artworkPagerState.currentPage != startPage ||
+                    artworkPagerState.settledPage != startPage
+                if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
+                    programmaticPagerSync = true
+                    try {
+                        artworkPagerState.scrollToPage(targetPage)
+                        withFrameNanos { }
+                    } finally {
+                        programmaticPagerSync = false
+                    }
+                }
+                currentArtworkKeyPage = if (userMovedPager) targetPage else artworkPagerState.currentPage
+                pinnedCurrentArtworkPage = null
+                withFrameNanos { }
+            } finally {
+                pinnedCurrentArtworkPage = null
+            }
+        } else {
+            stableQueue = queue
+            currentArtworkKeyPage = targetPage
+        }
+        if (currentTrack.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
+            val startPage = artworkPagerState.currentPage
+            val direction = (targetPage - startPage).coerceIn(-1, 1)
+            val fromItem = programmaticArtworkTransition?.to ?: stableQueue.getOrNull(startPage)
+            val toItem = queue.getOrNull(targetPage) ?: currentTrack
+            if (direction != 0) {
+                artworkTransitionSequence += 1
+                programmaticArtworkTransition = ProgrammaticArtworkTransition(
+                    sequence = artworkTransitionSequence,
+                    from = fromItem,
+                    to = toItem,
+                    direction = direction,
+                )
+                programmaticArtworkTransitionCoversPager = true
+            }
+            programmaticPagerSync = true
+            try {
+                artworkPagerState.scrollToPage(targetPage)
+                withFrameNanos { }
+            } finally {
+                programmaticPagerSync = false
+            }
+        }
+        lastTrackId = currentTrack.songId
+    }
+
+    val currentPlaybackIndex by rememberUpdatedState(currentIndex)
+    val currentQueueSize by rememberUpdatedState(queue.size)
+    LaunchedEffect(artworkPagerState) {
+        snapshotFlow { artworkPagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                if (programmaticPagerSync) return@collect
+                if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
+                    latestOnUserSelectQueueItem(page)
+                }
+            }
+    }
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        HorizontalPager(
+            state = artworkPagerState,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    alpha = if (programmaticArtworkTransitionCoversPager) 0f else 1f
+                }
+                .clip(RoundedCornerShape(34.dp)),
+            pageSpacing = 16.dp,
+            beyondViewportPageCount = 1,
+            key = { page ->
+                if (page == currentArtworkKeyPage) {
+                    "current-${currentTrack.mediaId}"
+                } else {
+                    stableQueue.getOrNull(page)?.let { "queue-${it.mediaId}-$page" }
+                        ?: "empty-$page"
+                }
+            },
+        ) { page ->
+            val queueItem = stableQueue.getOrNull(page)
+            val artworkItem = if (page == pinnedCurrentArtworkPage) {
+                currentTrack
+            } else {
+                queueItem
+            }
+            NowPlayingArtworkFrame(
+                item = artworkItem,
+                serversById = serversById,
+                modifier = Modifier.fillMaxSize(),
+                onClick = { latestOnArtworkClick() },
+            )
+        }
+        programmaticArtworkTransition?.let { transition ->
+            ProgrammaticArtworkTransitionOverlay(
+                transition = transition,
+                serversById = serversById,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(34.dp)),
+                onRevealPager = {
+                    if (programmaticArtworkTransition?.sequence == transition.sequence) {
+                        programmaticArtworkTransitionCoversPager = false
+                    }
+                },
+                onFinished = {
+                    if (programmaticArtworkTransition?.sequence == transition.sequence) {
+                        programmaticArtworkTransition = null
+                        programmaticArtworkTransitionCoversPager = false
+                    }
+                },
+            )
+        }
+    }
 }
 
 private data class ProgrammaticArtworkTransition(
