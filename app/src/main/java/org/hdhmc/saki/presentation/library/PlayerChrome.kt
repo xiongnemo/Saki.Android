@@ -1,5 +1,6 @@
 package org.hdhmc.saki.presentation.library
 
+import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -136,6 +137,7 @@ import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
 import kotlin.math.roundToLong
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -335,7 +337,7 @@ fun NowPlayingOverlay(
     var showLyrics by remember { mutableStateOf(false) }
     var showEndpointStatus by remember { mutableStateOf(false) }
 
-    // Preload adjacent cover art into Coil cache
+    // Preload adjacent artwork into Coil and palette caches.
     val context = LocalContext.current
     val queue = playbackState.queue
     val currentIdx = playbackState.currentIndex
@@ -346,7 +348,7 @@ fun NowPlayingOverlay(
         val adjacentIndices = listOfNotNull(
             if (currentIdx > 0) currentIdx - 1 else null,
             if (currentIdx < queue.lastIndex) currentIdx + 1 else null,
-        )
+        ).distinct()
         for (i in adjacentIndices) {
             val item = queue[i]
             val server = item.serverId?.let { serversById[it] }
@@ -356,6 +358,7 @@ fun NowPlayingOverlay(
                 .size(FULL_COVER_ART_SIZE_PX)
                 .build()
             context.imageLoader.enqueue(request)
+            prewarmArtworkPresentation(context.applicationContext, model)
         }
     }
 
@@ -1409,7 +1412,13 @@ private fun PlaybackQueueItem.queueArtworkModel(server: ServerConfig?): Any? {
 private data class ArtworkPresentation(
     val dominantColor: Color? = null,
     val accentColor: Color? = null,
-)
+) {
+    val hasColors: Boolean
+        get() = dominantColor != null || accentColor != null
+}
+
+private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
+private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
 
 @Composable
 private fun rememberArtworkPresentation(
@@ -1427,22 +1436,54 @@ private fun rememberArtworkPresentation(
 private suspend fun loadArtworkPresentation(
     context: android.content.Context,
     model: Any?,
-): ArtworkPresentation = withContext(Dispatchers.IO) {
-    if (model == null) return@withContext ArtworkPresentation()
-    val request = coil3.request.ImageRequest.Builder(context)
-        .data(model)
-        .size(PALETTE_COVER_ART_SIZE_PX)
-        .allowHardware(false)
-        .build()
-    val image = context.imageLoader.execute(request).image
-        ?: return@withContext ArtworkPresentation()
-    val bitmap = image.toBitmap()
+): ArtworkPresentation {
+    val key = model?.artworkPresentationCacheKey() ?: return ArtworkPresentation()
+    artworkPresentationCache.get(key)?.let { return it }
+    val presentation = decodeArtworkPresentation(context, model)
+    if (presentation.hasColors) {
+        artworkPresentationCache.put(key, presentation)
+    }
+    return presentation
+}
 
-    val palette = Palette.from(bitmap).clearFilters().generate()
-    ArtworkPresentation(
-        dominantColor = palette.getDominantColor(0).takeIf { it != 0 }?.let(::Color),
-        accentColor = palette.getVibrantColor(0).takeIf { it != 0 }?.let(::Color),
-    )
+private suspend fun prewarmArtworkPresentation(
+    context: android.content.Context,
+    model: Any?,
+) {
+    loadArtworkPresentation(context, model)
+}
+
+private fun Any.artworkPresentationCacheKey(): String {
+    return when (this) {
+        is File -> "file:$absolutePath"
+        else -> "model:${this}"
+    }
+}
+
+private suspend fun decodeArtworkPresentation(
+    context: android.content.Context,
+    model: Any,
+): ArtworkPresentation = withContext(Dispatchers.IO) {
+    try {
+        val request = coil3.request.ImageRequest.Builder(context)
+            .data(model)
+            .size(PALETTE_COVER_ART_SIZE_PX)
+            .allowHardware(false)
+            .build()
+        val image = context.imageLoader.execute(request).image
+            ?: return@withContext ArtworkPresentation()
+        val bitmap = image.toBitmap()
+
+        val palette = Palette.from(bitmap).clearFilters().generate()
+        ArtworkPresentation(
+            dominantColor = palette.getDominantColor(0).takeIf { it != 0 }?.let(::Color),
+            accentColor = palette.getVibrantColor(0).takeIf { it != 0 }?.let(::Color),
+        )
+    } catch (exception: CancellationException) {
+        throw exception
+    } catch (_: Exception) {
+        ArtworkPresentation()
+    }
 }
 
 private fun formatDuration(durationMs: Long): String {
