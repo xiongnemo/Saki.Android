@@ -4,6 +4,8 @@ import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -403,8 +405,24 @@ fun NowPlayingOverlay(
             fallbackModel = track.queueArtworkModel(currentServer),
         )
         val colorScheme = MaterialTheme.colorScheme
-        val dominant = artwork.dominantColor ?: colorScheme.primary
-        val accent = artwork.accentColor ?: colorScheme.tertiary
+        val targetDominant = artwork.dominantColor ?: colorScheme.primary
+        val targetAccent = artwork.accentColor ?: colorScheme.tertiary
+        val dominant by animateColorAsState(
+            targetValue = targetDominant,
+            animationSpec = tween(
+                durationMillis = ARTWORK_COLOR_TRANSITION_MS,
+                easing = FastOutSlowInEasing,
+            ),
+            label = "NowPlayingDominantColor",
+        )
+        val accent by animateColorAsState(
+            targetValue = targetAccent,
+            animationSpec = tween(
+                durationMillis = ARTWORK_COLOR_TRANSITION_MS,
+                easing = FastOutSlowInEasing,
+            ),
+            label = "NowPlayingAccentColor",
+        )
         val background = remember(dominant, accent, colorScheme) {
             Brush.verticalGradient(
                 listOf(
@@ -644,6 +662,9 @@ fun NowPlayingOverlay(
                             state = artworkPagerState,
                             modifier = Modifier
                                 .fillMaxSize()
+                                .graphicsLayer {
+                                    alpha = if (programmaticArtworkTransition == null) 1f else 0f
+                                }
                                 .clip(RoundedCornerShape(34.dp)),
                             pageSpacing = 16.dp,
                             beyondViewportPageCount = 1,
@@ -1476,7 +1497,10 @@ private fun ProgrammaticArtworkTransitionOverlay(
     var started by remember(transition.sequence) { mutableStateOf(false) }
     val progress by animateFloatAsState(
         targetValue = if (started) 1f else 0f,
-        animationSpec = tween(durationMillis = PROGRAMMATIC_ARTWORK_TRANSITION_MS),
+        animationSpec = tween(
+            durationMillis = PROGRAMMATIC_ARTWORK_TRANSITION_MS,
+            easing = FastOutSlowInEasing,
+        ),
         label = "ProgrammaticArtworkTransitionProgress",
         finishedListener = { latestOnFinished() },
     )
@@ -1489,15 +1513,20 @@ private fun ProgrammaticArtworkTransitionOverlay(
         modifier = modifier,
         contentAlignment = Alignment.Center,
     ) {
-        val widthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        val density = LocalDensity.current
+        val cardTravelPx = with(density) {
+            minOf(maxWidth.toPx(), maxHeight.toPx()) + PROGRAMMATIC_ARTWORK_PAGE_SPACING_DP.dp.toPx()
+        }
         val direction = transition.direction.coerceIn(-1, 1)
         transition.from?.let { item ->
             ProgrammaticArtworkTransitionCard(
                 item = item,
                 serversById = serversById,
                 modifier = Modifier.graphicsLayer {
-                    alpha = 1f - progress * 0.18f
-                    translationX = -direction * progress * widthPx
+                    alpha = 1f
+                    scaleX = 1f - progress * 0.03f
+                    scaleY = 1f - progress * 0.03f
+                    translationX = -direction * progress * cardTravelPx
                 },
             )
         }
@@ -1505,8 +1534,10 @@ private fun ProgrammaticArtworkTransitionOverlay(
             item = transition.to,
             serversById = serversById,
             modifier = Modifier.graphicsLayer {
-                alpha = 0.82f + progress * 0.18f
-                translationX = direction * (1f - progress) * widthPx
+                alpha = 1f
+                scaleX = 0.97f + progress * 0.03f
+                scaleY = 0.97f + progress * 0.03f
+                translationX = direction * (1f - progress) * cardTravelPx
             },
         )
     }
@@ -1530,7 +1561,9 @@ private fun ProgrammaticArtworkTransitionCard(
 }
 
 private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
-private const val PROGRAMMATIC_ARTWORK_TRANSITION_MS = 360
+private const val ARTWORK_COLOR_TRANSITION_MS = 520
+private const val PROGRAMMATIC_ARTWORK_TRANSITION_MS = 420
+private const val PROGRAMMATIC_ARTWORK_PAGE_SPACING_DP = 16
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
 
 @Composable
@@ -1538,12 +1571,11 @@ private fun rememberArtworkPresentation(
     fallbackModel: Any?,
 ): ArtworkPresentation {
     val context = LocalContext.current.applicationContext
-    return produceState(
-        initialValue = ArtworkPresentation(),
-        key1 = fallbackModel,
-    ) {
-        value = loadArtworkPresentation(context, fallbackModel)
-    }.value
+    var presentation by remember { mutableStateOf(ArtworkPresentation()) }
+    LaunchedEffect(fallbackModel) {
+        presentation = loadArtworkPresentation(context, fallbackModel)
+    }
+    return presentation
 }
 
 private suspend fun loadArtworkPresentation(
