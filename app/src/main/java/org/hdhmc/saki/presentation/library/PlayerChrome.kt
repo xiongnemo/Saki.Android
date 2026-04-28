@@ -1341,6 +1341,22 @@ private fun PlaybackQueueItem.artworkIdentityKey(): String {
     ).joinToString("|")
 }
 
+private fun PlaybackQueueItem.artworkVisualIdentityKey(): String {
+    val hasArtwork =
+        !coverArtPath.isNullOrBlank() ||
+        !coverArtId.isNullOrBlank() ||
+        !artworkUri.isNullOrBlank()
+    if (!hasArtwork) {
+        return "fallback:${serverId?.toString().orEmpty()}"
+    }
+    return listOf(
+        serverId?.toString().orEmpty(),
+        coverArtId.orEmpty(),
+        coverArtPath.orEmpty(),
+        artworkUri.orEmpty(),
+    ).joinToString("|")
+}
+
 private data class NowPlayingVisualSnapshot(
     val queue: List<PlaybackQueueItem>,
     val currentIndex: Int,
@@ -1501,7 +1517,9 @@ private fun NowPlayingArtworkPagerHost(
             val direction = (targetPage - startPage).coerceIn(-1, 1)
             val fromItem = programmaticArtworkTransition?.to ?: stableQueue.getOrNull(startPage)
             val toItem = queue.getOrNull(targetPage) ?: currentTrack
-            if (direction != 0) {
+            val artworkVisualChanged =
+                fromItem?.artworkVisualIdentityKey() != toItem.artworkVisualIdentityKey()
+            if (direction != 0 && artworkVisualChanged) {
                 artworkTransitionSequence += 1
                 programmaticArtworkTransition = ProgrammaticArtworkTransition(
                     sequence = artworkTransitionSequence,
@@ -1510,6 +1528,9 @@ private fun NowPlayingArtworkPagerHost(
                     direction = direction,
                 )
                 programmaticArtworkTransitionCoversPager = true
+            } else {
+                programmaticArtworkTransition = null
+                programmaticArtworkTransitionCoversPager = false
             }
             programmaticPagerSync = true
             try {
@@ -1551,9 +1572,9 @@ private fun NowPlayingArtworkPagerHost(
             beyondViewportPageCount = 1,
             key = { page ->
                 if (page == currentArtworkKeyPage) {
-                    "current-${currentTrack.mediaId}"
+                    "current-${currentTrack.artworkVisualIdentityKey()}"
                 } else {
-                    stableQueue.getOrNull(page)?.let { "queue-${it.mediaId}-$page" }
+                    stableQueue.getOrNull(page)?.let { "queue-${it.artworkVisualIdentityKey()}-$page" }
                         ?: "empty-$page"
                 }
             },
@@ -1691,8 +1712,13 @@ private fun NowPlayingArtworkFrame(
         modifier = modifier,
         contentAlignment = Alignment.Center,
     ) {
+        val clickInteractionSource = remember { MutableInteractionSource() }
         val clickModifier = if (onClick != null) {
-            Modifier.clickable(onClick = onClick)
+            Modifier.clickable(
+                interactionSource = clickInteractionSource,
+                indication = null,
+                onClick = onClick,
+            )
         } else {
             Modifier
         }
