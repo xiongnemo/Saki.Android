@@ -4,6 +4,8 @@ import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -336,14 +338,21 @@ fun NowPlayingOverlay(
     var showMenu by remember(track.songId) { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showEndpointStatus by remember { mutableStateOf(false) }
+    val visualSnapshot = rememberNowPlayingVisualSnapshot(
+        queue = playbackState.queue,
+        currentIndex = playbackState.currentIndex,
+        currentTrack = track,
+    )
+    val visualCurrentServer = visualSnapshot.currentTrack.serverId?.let { serversById[it] }
+        ?: currentServer.takeIf { it?.id == visualSnapshot.currentTrack.serverId }
 
     // Preload adjacent artwork into Coil and palette caches.
     val context = LocalContext.current
-    val queue = playbackState.queue
-    val currentIdx = playbackState.currentIndex
+    val queue = visualSnapshot.queue
+    val currentIdx = visualSnapshot.currentIndex
     val prevSongId = queue.getOrNull(currentIdx - 1)?.songId
     val nextSongId = queue.getOrNull(currentIdx + 1)?.songId
-    LaunchedEffect(visible, track.songId, prevSongId, nextSongId, currentServer) {
+    LaunchedEffect(visible, visualSnapshot.currentTrack.songId, prevSongId, nextSongId, visualCurrentServer) {
         if (!visible) return@LaunchedEffect
         val adjacentIndices = listOfNotNull(
             if (currentIdx > 0) currentIdx - 1 else null,
@@ -399,11 +408,27 @@ fun NowPlayingOverlay(
         ),
     ) {
         val artwork = rememberArtworkPresentation(
-            fallbackModel = track.queueArtworkModel(currentServer),
+            fallbackModel = visualSnapshot.currentTrack.queueArtworkModel(visualCurrentServer),
         )
         val colorScheme = MaterialTheme.colorScheme
-        val dominant = artwork.dominantColor ?: colorScheme.primary
-        val accent = artwork.accentColor ?: colorScheme.tertiary
+        val targetDominant = artwork.dominantColor ?: colorScheme.primary
+        val targetAccent = artwork.accentColor ?: colorScheme.tertiary
+        val dominant by animateColorAsState(
+            targetValue = targetDominant,
+            animationSpec = tween(
+                durationMillis = ARTWORK_COLOR_TRANSITION_MS,
+                easing = FastOutSlowInEasing,
+            ),
+            label = "NowPlayingDominantColor",
+        )
+        val accent by animateColorAsState(
+            targetValue = targetAccent,
+            animationSpec = tween(
+                durationMillis = ARTWORK_COLOR_TRANSITION_MS,
+                easing = FastOutSlowInEasing,
+            ),
+            label = "NowPlayingAccentColor",
+        )
         val background = remember(dominant, accent, colorScheme) {
             Brush.verticalGradient(
                 listOf(
@@ -439,81 +464,6 @@ fun NowPlayingOverlay(
             if (!isDragging) {
                 sliderValue = playbackProgress.positionMs.toFloat()
             }
-        }
-
-        // Artwork pager state synced with playback queue
-        var stableQueue by remember { mutableStateOf(playbackState.queue) }
-        val artworkPagerState = rememberPagerState(
-            initialPage = playbackState.currentIndex.coerceAtLeast(0),
-            pageCount = { stableQueue.size.coerceAtLeast(1) },
-        )
-        // Sync pager when track changes externally (button skip, queue tap)
-        var lastTrackId by remember { mutableStateOf(track.songId) }
-        // Guard: suppress pager-driven skips during programmatic scroll
-        var suppressPagerSkip by remember { mutableStateOf(false) }
-        var programmaticPagerTargetPage by remember { mutableStateOf<Int?>(null) }
-        var currentArtworkKeyPage by remember { mutableStateOf(playbackState.currentIndex.coerceAtLeast(0)) }
-        var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
-        // Stabilize artwork during deferred queue expansion:
-        // keep the current artwork keyed to the visible page until the pager can
-        // move after any page-count change caused by queue item insertion. If
-        // the user starts swiping during this handoff, do not force it back.
-        val targetPage = playbackState.currentIndex.coerceAtLeast(0)
-        LaunchedEffect(targetPage, track.songId, playbackState.queue) {
-            if (track.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
-                val startPage = artworkPagerState.currentPage
-                suppressPagerSkip = true
-                programmaticPagerTargetPage = targetPage
-                pinnedCurrentArtworkPage = startPage
-                currentArtworkKeyPage = startPage
-                try {
-                    stableQueue = playbackState.queue
-                    withFrameNanos { }
-                    while (artworkPagerState.isScrollInProgress) {
-                        withFrameNanos { }
-                    }
-                    val userMovedPager =
-                        artworkPagerState.currentPage != startPage ||
-                        artworkPagerState.settledPage != startPage
-                    if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
-                        artworkPagerState.scrollToPage(targetPage)
-                    }
-                    currentArtworkKeyPage = if (userMovedPager) targetPage else artworkPagerState.currentPage
-                    pinnedCurrentArtworkPage = null
-                    withFrameNanos { }
-                } finally {
-                    pinnedCurrentArtworkPage = null
-                    programmaticPagerTargetPage = null
-                    suppressPagerSkip = false
-                }
-            } else {
-                stableQueue = playbackState.queue
-                currentArtworkKeyPage = targetPage
-            }
-            if (track.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
-                suppressPagerSkip = true
-                programmaticPagerTargetPage = targetPage
-                try {
-                    artworkPagerState.animateScrollToPage(targetPage)
-                } finally {
-                    programmaticPagerTargetPage = null
-                    suppressPagerSkip = false
-                }
-            }
-            lastTrackId = track.songId
-        }
-        // When user swipes pager, trigger skip
-        val currentPlaybackIndex by rememberUpdatedState(playbackState.currentIndex)
-        val currentQueueSize by rememberUpdatedState(playbackState.queue.size)
-        LaunchedEffect(artworkPagerState) {
-            snapshotFlow { artworkPagerState.settledPage }
-                .distinctUntilChanged()
-                .collect { page ->
-                    if (suppressPagerSkip && page == programmaticPagerTargetPage) return@collect
-                    if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
-                        onSkipToQueueItem(page)
-                    }
-                }
         }
 
         BoxWithConstraints(
@@ -613,47 +563,18 @@ fun NowPlayingOverlay(
                             .fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        HorizontalPager(
-                            state = artworkPagerState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(34.dp)),
-                            pageSpacing = 16.dp,
-                            beyondViewportPageCount = 1,
-                            key = { page ->
-                                if (page == currentArtworkKeyPage) {
-                                    "current-${track.mediaId}"
-                                } else {
-                                    stableQueue.getOrNull(page)?.let { "queue-${it.mediaId}-$page" }
-                                        ?: "empty-$page"
-                                }
+                        NowPlayingArtworkPagerHost(
+                            queue = visualSnapshot.queue,
+                            currentIndex = visualSnapshot.currentIndex,
+                            currentTrack = visualSnapshot.currentTrack,
+                            serversById = serversById,
+                            modifier = Modifier.fillMaxSize(),
+                            onArtworkClick = {
+                                if (showLyrics) showLyrics = false
+                                else if (hasLyrics) showLyrics = true
                             },
-                        ) { page ->
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                val queueItem = stableQueue.getOrNull(page)
-                                val artworkItem = if (page == pinnedCurrentArtworkPage) {
-                                    track
-                                } else {
-                                    queueItem
-                                }
-                                ArtworkCard(
-                                    model = artworkItem?.queueArtworkModel(artworkItem.serverId?.let { serversById[it] }),
-                                    contentDescription = artworkItem?.title,
-                                    modifier = Modifier
-                                        .aspectRatio(1f)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(34.dp))
-                                        .clickable {
-                                            if (showLyrics) showLyrics = false
-                                            else if (hasLyrics) showLyrics = true
-                                        },
-                                    cornerRadiusDp = 34,
-                                )
-                            }
-                        }
+                            onUserSelectQueueItem = onSkipToQueueItem,
+                        )
                         // Lyrics overlay on artwork
                         androidx.compose.animation.AnimatedVisibility(
                             visible = showLyrics && hasLyrics,
@@ -1409,6 +1330,86 @@ private fun PlaybackQueueItem.queueArtworkModel(server: ServerConfig?): Any? {
     }
 }
 
+private fun PlaybackQueueItem.artworkIdentityKey(): String {
+    return listOf(
+        mediaId,
+        serverId?.toString().orEmpty(),
+        coverArtId.orEmpty(),
+        coverArtPath.orEmpty(),
+        artworkUri.orEmpty(),
+    ).joinToString("|")
+}
+
+private data class NowPlayingVisualSnapshot(
+    val queue: List<PlaybackQueueItem>,
+    val currentIndex: Int,
+    val currentTrack: PlaybackQueueItem,
+)
+
+@Composable
+private fun rememberNowPlayingVisualSnapshot(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): NowPlayingVisualSnapshot {
+    val candidate = remember(queue, currentIndex, currentTrack) {
+        buildNowPlayingVisualSnapshot(queue, currentIndex, currentTrack)
+    }
+    var snapshot by remember {
+        mutableStateOf(candidate ?: fallbackNowPlayingVisualSnapshot(queue, currentIndex, currentTrack))
+    }
+
+    LaunchedEffect(candidate) {
+        if (candidate != null) {
+            snapshot = candidate
+        }
+    }
+
+    return candidate ?: snapshot
+}
+
+private fun buildNowPlayingVisualSnapshot(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): NowPlayingVisualSnapshot? {
+    if (currentIndex !in queue.indices) return null
+    if (queue[currentIndex].songId != currentTrack.songId) return null
+    return NowPlayingVisualSnapshot(
+        queue = queue.withVisualCurrentItem(currentIndex, currentTrack),
+        currentIndex = currentIndex,
+        currentTrack = currentTrack,
+    )
+}
+
+private fun fallbackNowPlayingVisualSnapshot(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): NowPlayingVisualSnapshot {
+    val safeIndex = currentIndex.takeIf { it in queue.indices }
+    if (safeIndex != null && queue[safeIndex].songId == currentTrack.songId) {
+        return NowPlayingVisualSnapshot(
+            queue = queue.withVisualCurrentItem(safeIndex, currentTrack),
+            currentIndex = safeIndex,
+            currentTrack = currentTrack,
+        )
+    }
+    return NowPlayingVisualSnapshot(
+        queue = listOf(currentTrack),
+        currentIndex = 0,
+        currentTrack = currentTrack,
+    )
+}
+
+private fun List<PlaybackQueueItem>.withVisualCurrentItem(
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): List<PlaybackQueueItem> {
+    if (getOrNull(currentIndex) == currentTrack) return this
+    return toMutableList().also { it[currentIndex] = currentTrack }
+}
+
 private data class ArtworkPresentation(
     val dominantColor: Color? = null,
     val accentColor: Color? = null,
@@ -1417,7 +1418,164 @@ private data class ArtworkPresentation(
         get() = dominantColor != null || accentColor != null
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NowPlayingArtworkPagerHost(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+    serversById: Map<Long, ServerConfig>,
+    modifier: Modifier = Modifier,
+    onArtworkClick: () -> Unit,
+    onUserSelectQueueItem: (Int) -> Unit,
+) {
+    val targetPage = currentIndex.coerceAtLeast(0)
+    val queueIdentity = remember(queue) { queue.map { it.artworkIdentityKey() } }
+    val latestOnArtworkClick by rememberUpdatedState(onArtworkClick)
+    val latestOnUserSelectQueueItem by rememberUpdatedState(onUserSelectQueueItem)
+    var stableQueue by remember { mutableStateOf(queue) }
+    val artworkPagerState = rememberPagerState(
+        initialPage = targetPage,
+        pageCount = { stableQueue.size.coerceAtLeast(1) },
+    )
+
+    var lastTrackId by remember { mutableStateOf(currentTrack.songId) }
+    // Programmatic sync keeps pager state aligned but never drives playback.
+    // Any other settled page change comes from the user's pager gesture.
+    var programmaticPagerSync by remember { mutableStateOf(false) }
+    var lastProgrammaticSettledPage by remember { mutableStateOf<Int?>(null) }
+
+    // Stabilize artwork during deferred queue expansion:
+    // update the page count first, then move after any insertion before the
+    // current item. Track changes use the pager's own animation so there is
+    // only one artwork render path and no overlay handoff frame.
+    LaunchedEffect(targetPage, currentTrack.songId, queueIdentity) {
+        if (currentTrack.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
+            val startPage = artworkPagerState.currentPage
+            stableQueue = queue
+            withFrameNanos { }
+            while (artworkPagerState.isScrollInProgress) {
+                withFrameNanos { }
+            }
+            val userMovedPager =
+                artworkPagerState.currentPage != startPage ||
+                    artworkPagerState.settledPage != startPage
+            if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
+                programmaticPagerSync = true
+                try {
+                    artworkPagerState.scrollToPage(targetPage)
+                    withFrameNanos { }
+                } finally {
+                    lastProgrammaticSettledPage = artworkPagerState.settledPage
+                    programmaticPagerSync = false
+                }
+            }
+        } else {
+            stableQueue = queue
+        }
+        if (currentTrack.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
+            stableQueue = queue
+            withFrameNanos { }
+            programmaticPagerSync = true
+            try {
+                artworkPagerState.animateScrollToPage(
+                    page = targetPage,
+                    animationSpec = tween(
+                        durationMillis = PROGRAMMATIC_ARTWORK_SCROLL_MS,
+                        easing = FastOutSlowInEasing,
+                    ),
+                )
+            } finally {
+                lastProgrammaticSettledPage = artworkPagerState.settledPage
+                programmaticPagerSync = false
+            }
+        }
+        lastTrackId = currentTrack.songId
+    }
+
+    val currentPlaybackIndex by rememberUpdatedState(currentIndex)
+    val currentQueueSize by rememberUpdatedState(queue.size)
+    LaunchedEffect(artworkPagerState) {
+        snapshotFlow { artworkPagerState.settledPage to programmaticPagerSync }
+            .distinctUntilChanged()
+            .collect { (page, isProgrammatic) ->
+                if (isProgrammatic) {
+                    lastProgrammaticSettledPage = page
+                    return@collect
+                }
+                if (lastProgrammaticSettledPage == page) {
+                    lastProgrammaticSettledPage = null
+                    return@collect
+                }
+                if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
+                    latestOnUserSelectQueueItem(page)
+                }
+            }
+    }
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        HorizontalPager(
+            state = artworkPagerState,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(34.dp)),
+            pageSpacing = 16.dp,
+            beyondViewportPageCount = 1,
+            key = { page ->
+                stableQueue.getOrNull(page)?.let { "queue-${it.mediaId}-$page" } ?: "empty-$page"
+            },
+        ) { page ->
+            NowPlayingArtworkFrame(
+                item = stableQueue.getOrNull(page),
+                serversById = serversById,
+                modifier = Modifier.fillMaxSize(),
+                onClick = { latestOnArtworkClick() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun NowPlayingArtworkFrame(
+    item: PlaybackQueueItem?,
+    serversById: Map<Long, ServerConfig>,
+    modifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        val clickInteractionSource = remember { MutableInteractionSource() }
+        val clickModifier = if (onClick != null) {
+            Modifier.clickable(
+                interactionSource = clickInteractionSource,
+                indication = null,
+                onClick = onClick,
+            )
+        } else {
+            Modifier
+        }
+        ArtworkCard(
+            model = item?.queueArtworkModel(item.serverId?.let { serversById[it] }),
+            contentDescription = item?.title,
+            modifier = contentModifier
+                .aspectRatio(1f)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(34.dp))
+                .then(clickModifier),
+            cornerRadiusDp = 34,
+        )
+    }
+}
+
 private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
+private const val ARTWORK_COLOR_TRANSITION_MS = 520
+private const val PROGRAMMATIC_ARTWORK_SCROLL_MS = 520
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
 
 @Composable
@@ -1425,12 +1583,11 @@ private fun rememberArtworkPresentation(
     fallbackModel: Any?,
 ): ArtworkPresentation {
     val context = LocalContext.current.applicationContext
-    return produceState(
-        initialValue = ArtworkPresentation(),
-        key1 = fallbackModel,
-    ) {
-        value = loadArtworkPresentation(context, fallbackModel)
-    }.value
+    var presentation by remember { mutableStateOf(ArtworkPresentation()) }
+    LaunchedEffect(fallbackModel) {
+        presentation = loadArtworkPresentation(context, fallbackModel)
+    }
+    return presentation
 }
 
 private suspend fun loadArtworkPresentation(
