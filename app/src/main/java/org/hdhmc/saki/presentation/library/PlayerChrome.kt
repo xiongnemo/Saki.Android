@@ -409,6 +409,7 @@ fun NowPlayingOverlay(
     BackHandler(enabled = visible) {
         onDismiss()
     }
+    val latestOnDismiss by rememberUpdatedState(onDismiss)
 
     // Reset lyrics overlay when Now Playing is dismissed
     LaunchedEffect(visible) {
@@ -548,6 +549,72 @@ fun NowPlayingOverlay(
             // Queue bottom sheet state
             val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
             var showQueueSheet by remember { mutableStateOf(false) }
+            val latestOpenQueueSheet by rememberUpdatedState { showQueueSheet = true }
+            val dismissSwipeModifier = Modifier.pointerInput(visible) {
+                if (!visible) return@pointerInput
+                val dismissThresholdPx = 72.dp.toPx()
+                val velocityThresholdDpPerSecond = 300f
+                var downwardDistance = 0f
+                var dragStartedAtNanos = 0L
+                var didDismiss = false
+
+                fun dismissFromSwipe() {
+                    if (visible && !didDismiss) {
+                        didDismiss = true
+                        latestOnDismiss()
+                    }
+                }
+
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        downwardDistance = 0f
+                        dragStartedAtNanos = System.nanoTime()
+                        didDismiss = false
+                    },
+                    onVerticalDrag = { _, dragAmount ->
+                        if (dragAmount > 0f) {
+                            downwardDistance += dragAmount
+                            if (downwardDistance >= dismissThresholdPx) {
+                                dismissFromSwipe()
+                            }
+                        } else {
+                            downwardDistance = (downwardDistance + dragAmount).coerceAtLeast(0f)
+                        }
+                    },
+                    onDragEnd = {
+                        val elapsedSeconds = (System.nanoTime() - dragStartedAtNanos) / 1_000_000_000f
+                        if (elapsedSeconds > 0f) {
+                            val downwardVelocityDpPerSecond = (downwardDistance / elapsedSeconds).toDp().value
+                            if (downwardVelocityDpPerSecond >= velocityThresholdDpPerSecond) {
+                                dismissFromSwipe()
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        downwardDistance = 0f
+                        didDismiss = false
+                    },
+                )
+            }
+            val queueSwipeModifier = Modifier.pointerInput(showQueueAffordance) {
+                if (!showQueueAffordance) return@pointerInput
+                val thresholdPx = 80.dp.toPx()
+                var accumulated = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { accumulated = 0f },
+                    onVerticalDrag = { _, dragAmount ->
+                        if (dragAmount < 0f) {
+                            accumulated -= dragAmount
+                            if (accumulated >= thresholdPx) {
+                                accumulated = 0f
+                                latestOpenQueueSheet()
+                            }
+                        } else {
+                            accumulated = 0f
+                        }
+                    },
+                )
+            }
 
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
                 Column(
@@ -645,92 +712,99 @@ fun NowPlayingOverlay(
                             }
                         }
                     }
-                    // Repeat / Shuffle / More row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val repeatDescription = stringResource(R.string.player_repeat)
-                        val repeatOneLabel = stringResource(R.string.player_repeat_one)
-                        val repeatAllLabel = stringResource(R.string.player_repeat_all)
-                        val repeatOffLabel = stringResource(R.string.player_repeat_off)
-                        val shuffleDescription = stringResource(R.string.player_shuffle)
-                        val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
-                        val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
-                        Row(
-                            modifier = Modifier.offset(x = (-12).dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            ToggleIconButton(
-                                icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                                active = playbackState.repeatMode != RepeatModeSetting.OFF,
-                                contentDescription = repeatDescription,
-                                onClick = {
-                                    onCycleRepeatMode()
-                                    val label = when (playbackState.repeatMode) {
-                                        RepeatModeSetting.OFF -> repeatAllLabel
-                                        RepeatModeSetting.ALL -> repeatOneLabel
-                                        RepeatModeSetting.ONE -> repeatOffLabel
-                                    }
-                                    showPlayerSnackbar(label)
-                                },
-                                compact = true,
-                            )
-                            ToggleIconButton(
-                                icon = Icons.Rounded.Shuffle,
-                                active = playbackState.shuffleEnabled,
-                                contentDescription = shuffleDescription,
-                                onClick = {
-                                    onToggleShuffle()
-                                    val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
-                                    showPlayerSnackbar(label)
-                                },
-                                compact = true,
-                            )
-                        }
-                        Box(modifier = Modifier.offset(x = 12.dp)) {
-                            PressScaleIconButton(
-                                icon = Icons.Rounded.MoreVert,
-                                contentDescription = stringResource(R.string.player_more),
-                                onClick = { showMenu = true },
-                                compact = true,
-                            )
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.player_song_details)) },
-                                    onClick = {
-                                        showMenu = false
-                                        showDetails = true
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
-                                    onClick = {
-                                        showMenu = false
-                                        showEndpointStatus = true
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    Text(
-                        text = track.title,
-                        style = titleStyle,
-                        color = MaterialTheme.colorScheme.onBackground,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .basicMarquee(iterations = Int.MAX_VALUE),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    MetadataLinkRow(
-                        track = track,
-                        textStyle = metadataStyle,
-                        canOpenArtist = canOpenArtist,
-                        onOpenArtist = onOpenArtist,
-                        onOpenAlbum = onOpenAlbum,
-                    )
+                            .then(dismissSwipeModifier),
+                        verticalArrangement = Arrangement.spacedBy(verticalSpacing),
+                    ) {
+                        // Repeat / Shuffle / More row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val repeatDescription = stringResource(R.string.player_repeat)
+                            val repeatOneLabel = stringResource(R.string.player_repeat_one)
+                            val repeatAllLabel = stringResource(R.string.player_repeat_all)
+                            val repeatOffLabel = stringResource(R.string.player_repeat_off)
+                            val shuffleDescription = stringResource(R.string.player_shuffle)
+                            val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
+                            val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
+                            Row(
+                                modifier = Modifier.offset(x = (-12).dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                ToggleIconButton(
+                                    icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                                    active = playbackState.repeatMode != RepeatModeSetting.OFF,
+                                    contentDescription = repeatDescription,
+                                    onClick = {
+                                        onCycleRepeatMode()
+                                        val label = when (playbackState.repeatMode) {
+                                            RepeatModeSetting.OFF -> repeatAllLabel
+                                            RepeatModeSetting.ALL -> repeatOneLabel
+                                            RepeatModeSetting.ONE -> repeatOffLabel
+                                        }
+                                        showPlayerSnackbar(label)
+                                    },
+                                    compact = true,
+                                )
+                                ToggleIconButton(
+                                    icon = Icons.Rounded.Shuffle,
+                                    active = playbackState.shuffleEnabled,
+                                    contentDescription = shuffleDescription,
+                                    onClick = {
+                                        onToggleShuffle()
+                                        val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
+                                        showPlayerSnackbar(label)
+                                    },
+                                    compact = true,
+                                )
+                            }
+                            Box(modifier = Modifier.offset(x = 12.dp)) {
+                                PressScaleIconButton(
+                                    icon = Icons.Rounded.MoreVert,
+                                    contentDescription = stringResource(R.string.player_more),
+                                    onClick = { showMenu = true },
+                                    compact = true,
+                                )
+                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.player_song_details)) },
+                                        onClick = {
+                                            showMenu = false
+                                            showDetails = true
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
+                                        onClick = {
+                                            showMenu = false
+                                            showEndpointStatus = true
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = track.title,
+                            style = titleStyle,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .basicMarquee(iterations = Int.MAX_VALUE),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        MetadataLinkRow(
+                            track = track,
+                            textStyle = metadataStyle,
+                            canOpenArtist = canOpenArtist,
+                            onOpenArtist = onOpenArtist,
+                            onOpenAlbum = onOpenAlbum,
+                        )
+                    }
                     val duration = playbackProgress.durationMs.coerceAtLeast(1L).toFloat()
                     val bufferFraction = if (playbackProgress.durationMs > 0) {
                         (playbackProgress.bufferedPositionMs.toFloat() / duration).coerceIn(0f, 1f)
@@ -797,25 +871,9 @@ fun NowPlayingOverlay(
                         } else Modifier,
                     )
                     Column(
-                        modifier = Modifier.pointerInput(showQueueAffordance) {
-                            if (!showQueueAffordance) return@pointerInput
-                            val thresholdPx = 80.dp.toPx()
-                            var accumulated = 0f
-                            detectVerticalDragGestures(
-                                onDragStart = { accumulated = 0f },
-                                onVerticalDrag = { _, dragAmount ->
-                                    if (dragAmount < 0f) {
-                                        accumulated -= dragAmount
-                                        if (accumulated >= thresholdPx) {
-                                            accumulated = 0f
-                                            showQueueSheet = true
-                                        }
-                                    } else {
-                                        accumulated = 0f
-                                    }
-                                },
-                            )
-                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(queueSwipeModifier),
                         verticalArrangement = Arrangement.spacedBy(verticalSpacing),
                     ) {
                         Row(
