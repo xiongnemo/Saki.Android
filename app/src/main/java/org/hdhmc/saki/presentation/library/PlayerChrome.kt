@@ -4,8 +4,7 @@ import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Easing
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -24,6 +23,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -47,6 +47,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -146,7 +147,6 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
-import kotlin.math.sqrt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -359,14 +359,14 @@ fun NowPlayingOverlay(
     val context = LocalContext.current
     val queue = visualSnapshot.queue
     val currentIdx = visualSnapshot.currentIndex
-    val prevSongId = queue.getOrNull(currentIdx - 1)?.songId
-    val nextSongId = queue.getOrNull(currentIdx + 1)?.songId
-    LaunchedEffect(visible, visualSnapshot.currentTrack.songId, prevSongId, nextSongId, visualCurrentServer) {
+    val prewarmArtworkKeys = remember(queue, currentIdx) {
+        (currentIdx - ARTWORK_PREWARM_RADIUS_PAGES..currentIdx + ARTWORK_PREWARM_RADIUS_PAGES)
+            .mapNotNull { index -> queue.getOrNull(index)?.artworkIdentityKey() }
+    }
+    LaunchedEffect(visible, visualSnapshot.currentTrack.artworkIdentityKey(), prewarmArtworkKeys, visualCurrentServer) {
         if (!visible) return@LaunchedEffect
-        val adjacentIndices = listOfNotNull(
-            if (currentIdx > 0) currentIdx - 1 else null,
-            if (currentIdx < queue.lastIndex) currentIdx + 1 else null,
-        ).distinct()
+        val adjacentIndices = (currentIdx - ARTWORK_PREWARM_RADIUS_PAGES..currentIdx + ARTWORK_PREWARM_RADIUS_PAGES)
+            .filter { it in queue.indices && it != currentIdx }
         for (i in adjacentIndices) {
             val item = queue[i]
             val server = item.serverId?.let { serversById[it] }
@@ -421,19 +421,12 @@ fun NowPlayingOverlay(
             queue = visualSnapshot.queue,
             serversById = serversById,
             position = artworkMotionState.position,
+            freezePresentationUpdates = artworkMotionState.isScrollInProgress,
             fallbackDominant = colorScheme.primary,
             fallbackAccent = colorScheme.tertiary,
         )
-        val dominant = rememberFixedMotionColor(
-            targetValue = artworkColors.dominant,
-            durationMillis = ARTWORK_BACKGROUND_COLOR_SMOOTH_MS,
-            easing = FastOutSlowInEasing,
-        )
-        val accent = rememberFixedMotionColor(
-            targetValue = artworkColors.accent,
-            durationMillis = ARTWORK_BACKGROUND_COLOR_SMOOTH_MS,
-            easing = FastOutSlowInEasing,
-        )
+        val dominant = artworkColors.dominant
+        val accent = artworkColors.accent
         val background = remember(dominant, accent, colorScheme) {
             Brush.verticalGradient(
                 listOf(
@@ -1418,6 +1411,8 @@ private fun List<PlaybackQueueItem>.withVisualCurrentItem(
 
 private class NowPlayingArtworkMotionState(initialPosition: Float) {
     var position by mutableFloatStateOf(initialPosition)
+    var velocity by mutableFloatStateOf(0f)
+    var isScrollInProgress by mutableStateOf(false)
 }
 
 @Composable
@@ -1436,35 +1431,11 @@ private data class ArtworkPresentationRequest(
 )
 
 @Composable
-private fun rememberFixedMotionColor(
-    targetValue: Color,
-    durationMillis: Int,
-    easing: Easing,
-): Color {
-    var color by remember { mutableStateOf(targetValue) }
-    LaunchedEffect(targetValue, durationMillis, easing) {
-        if (durationMillis <= 0) {
-            color = targetValue
-            return@LaunchedEffect
-        }
-        val startColor = color
-        val startNanos = withFrameNanos { it }
-        var fraction: Float
-        do {
-            val frameNanos = withFrameNanos { it }
-            fraction = ((frameNanos - startNanos) / 1_000_000f / durationMillis)
-                .coerceIn(0f, 1f)
-            color = lerp(startColor, targetValue, easing.transform(fraction))
-        } while (fraction < 1f)
-    }
-    return color
-}
-
-@Composable
 private fun rememberMotionArtworkColors(
     queue: List<PlaybackQueueItem>,
     serversById: Map<Long, ServerConfig>,
     position: Float,
+    freezePresentationUpdates: Boolean,
     fallbackDominant: Color,
     fallbackAccent: Color,
 ): ArtworkColors {
@@ -1474,13 +1445,15 @@ private fun rememberMotionArtworkColors(
 
     val context = LocalContext.current.applicationContext
     var presentations by remember { mutableStateOf<Map<String, ArtworkPresentation>>(emptyMap()) }
+    var appliedPresentations by remember { mutableStateOf<Map<String, ArtworkPresentation>>(emptyMap()) }
     val clampedPosition = position.coerceIn(0f, queue.lastIndex.toFloat())
     val fromPage = floor(clampedPosition).toInt().coerceIn(0, queue.lastIndex)
     val toPage = ceil(clampedPosition).toInt().coerceIn(0, queue.lastIndex)
     val fraction = (clampedPosition - fromPage).coerceIn(0f, 1f)
-    val pageRequests = remember(queue, serversById, fromPage, toPage) {
-        listOf(fromPage, toPage)
-            .distinct()
+    val centerPage = clampedPosition.roundToInt().coerceIn(0, queue.lastIndex)
+    val pageRequests = remember(queue, serversById, centerPage) {
+        (centerPage - ARTWORK_PREWARM_RADIUS_PAGES..centerPage + ARTWORK_PREWARM_RADIUS_PAGES)
+            .filter { it in queue.indices }
             .associateWith { page ->
                 val item = queue[page]
                 ArtworkPresentationRequest(
@@ -1491,17 +1464,26 @@ private fun rememberMotionArtworkColors(
     }
 
     LaunchedEffect(pageRequests) {
+        var loadedPresentations = presentations
         for (request in pageRequests.values) {
-            if (request.key !in presentations) {
-                presentations = presentations + (request.key to loadArtworkPresentation(context, request.model))
+            if (request.key !in loadedPresentations) {
+                val presentation = loadArtworkPresentation(context, request.model)
+                loadedPresentations = loadedPresentations + (request.key to presentation)
+                presentations = loadedPresentations
             }
+        }
+    }
+
+    LaunchedEffect(freezePresentationUpdates, presentations) {
+        if (!freezePresentationUpdates) {
+            appliedPresentations = presentations
         }
     }
 
     fun colorsFor(page: Int): ArtworkColors {
         val item = queue.getOrNull(page)
         val key = item?.artworkIdentityKey()
-        val presentation = key?.let { presentations[it] } ?: ArtworkPresentation()
+        val presentation = key?.let { appliedPresentations[it] } ?: ArtworkPresentation()
         return ArtworkColors(
             dominant = presentation.dominantColor ?: fallbackDominant,
             accent = presentation.accentColor ?: fallbackAccent,
@@ -1590,9 +1572,10 @@ private fun NowPlayingArtworkPagerHost(
                     targetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
                 )
                 withContext(FixedArtworkMotionDurationScale) {
-                    artworkPagerState.animateScrollToPage(
+                    artworkPagerState.animateArtworkMotionToPage(
                         page = targetPage,
-                        animationSpec = programmaticArtworkScrollSpec(distancePages),
+                        motionState = motionState,
+                        distancePages = distancePages,
                     )
                 }
             } finally {
@@ -1606,14 +1589,16 @@ private fun NowPlayingArtworkPagerHost(
     LaunchedEffect(artworkPagerState, motionState) {
         snapshotFlow {
             val maxPage = (artworkPagerState.pageCount - 1).coerceAtLeast(0)
-            (
+            val position = (
                 artworkPagerState.currentPage +
                     artworkPagerState.currentPageOffsetFraction
                 ).coerceIn(0f, maxPage.toFloat())
+            position to artworkPagerState.isScrollInProgress
         }
             .distinctUntilChanged()
-            .collect { position ->
+            .collect { (position, isScrollInProgress) ->
                 motionState.position = position
+                motionState.isScrollInProgress = isScrollInProgress
             }
     }
 
@@ -1698,11 +1683,9 @@ private fun NowPlayingArtworkFrame(
 }
 
 private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
-private const val ARTWORK_BACKGROUND_COLOR_SMOOTH_MS = 140
-private const val PROGRAMMATIC_ARTWORK_SCROLL_MIN_MS = 260
-private const val PROGRAMMATIC_ARTWORK_SCROLL_MAX_MS = 680
-private const val PROGRAMMATIC_ARTWORK_SCROLL_BASE_MS = 210
-private const val PROGRAMMATIC_ARTWORK_SCROLL_DISTANCE_MS = 280
+private const val ARTWORK_PREWARM_RADIUS_PAGES = 3
+private const val PROGRAMMATIC_ARTWORK_SPRING_BASE_STIFFNESS = 140f
+private const val PROGRAMMATIC_ARTWORK_SPRING_DISTANCE_STIFFNESS = 60f
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
 
 private object FixedArtworkMotionDurationScale : MotionDurationScale {
@@ -1710,14 +1693,58 @@ private object FixedArtworkMotionDurationScale : MotionDurationScale {
     override val scaleFactor: Float = 1f
 }
 
-private fun programmaticArtworkScrollSpec(distancePages: Float) = tween<Float>(
-    durationMillis = (
-        PROGRAMMATIC_ARTWORK_SCROLL_BASE_MS +
-            sqrt(distancePages.coerceAtLeast(0.01f)) * PROGRAMMATIC_ARTWORK_SCROLL_DISTANCE_MS
-        )
-        .roundToInt()
-        .coerceIn(PROGRAMMATIC_ARTWORK_SCROLL_MIN_MS, PROGRAMMATIC_ARTWORK_SCROLL_MAX_MS),
-    easing = FastOutSlowInEasing,
+private suspend fun PagerState.animateArtworkMotionToPage(
+    page: Int,
+    motionState: NowPlayingArtworkMotionState,
+    distancePages: Float,
+) {
+    val safePageCount = pageCount.coerceAtLeast(1)
+    val targetPage = page.coerceIn(0, safePageCount - 1)
+    val targetPosition = targetPage.toFloat()
+    val startPosition = (currentPage + currentPageOffsetFraction)
+        .coerceIn(0f, (safePageCount - 1).toFloat())
+    val startVelocity = motionState.velocity
+        .takeUnless { it.isNaN() || it.isInfinite() }
+        ?: 0f
+    val pagerState = this
+
+    scroll {
+        updateTargetPage(targetPage)
+        animate(
+            initialValue = startPosition,
+            targetValue = targetPosition,
+            initialVelocity = startVelocity,
+            animationSpec = programmaticArtworkScrollSpec(distancePages),
+        ) { value, velocity ->
+            val position = value.coerceIn(0f, (safePageCount - 1).toFloat())
+            motionState.position = position
+            motionState.velocity = velocity
+            pagerState.updateArtworkPagerPosition(this, position, safePageCount)
+        }
+        motionState.position = targetPosition
+        motionState.velocity = 0f
+        pagerState.updateArtworkPagerPosition(this, targetPosition, safePageCount)
+    }
+}
+
+private fun PagerState.updateArtworkPagerPosition(
+    scrollScope: ScrollScope,
+    absolutePosition: Float,
+    pageCount: Int,
+) {
+    val page = absolutePosition.roundToInt().coerceIn(0, pageCount - 1)
+    val offset = (absolutePosition - page).coerceIn(-0.5f, 0.5f)
+    with(scrollScope) {
+        updateCurrentPage(page, offset)
+    }
+}
+
+private fun programmaticArtworkScrollSpec(distancePages: Float) = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = (
+        PROGRAMMATIC_ARTWORK_SPRING_BASE_STIFFNESS +
+            distancePages.coerceIn(0f, 3f) * PROGRAMMATIC_ARTWORK_SPRING_DISTANCE_STIFFNESS
+        ),
 )
 
 private suspend fun loadArtworkPresentation(
