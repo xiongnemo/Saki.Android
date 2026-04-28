@@ -351,7 +351,7 @@ fun NowPlayingOverlay(
         currentIndex = playbackState.currentIndex,
         currentTrack = track,
     )
-    val artworkMotionState = rememberNowPlayingArtworkMotionState(visualSnapshot.currentIndex)
+    val artworkMotionState = rememberNowPlayingArtworkMotionState(visualSnapshot.currentIndex, visible)
     val visualCurrentServer = visualSnapshot.currentTrack.serverId?.let { serversById[it] }
         ?: currentServer.takeIf { it?.id == visualSnapshot.currentTrack.serverId }
 
@@ -417,13 +417,17 @@ fun NowPlayingOverlay(
         ),
     ) {
         val colorScheme = MaterialTheme.colorScheme
-        val artworkColors = rememberMotionArtworkColors(
+        val rawArtworkColors = rememberMotionArtworkColors(
             queue = visualSnapshot.queue,
             serversById = serversById,
             position = artworkMotionState.position,
             freezePresentationUpdates = artworkMotionState.isScrollInProgress,
             fallbackDominant = colorScheme.primary,
             fallbackAccent = colorScheme.tertiary,
+        )
+        val artworkColors = rememberDisplayedArtworkColors(
+            targetColors = rawArtworkColors,
+            followImmediately = artworkMotionState.isScrollInProgress || !visible,
         )
         val dominant = artworkColors.dominant
         val accent = artworkColors.accent
@@ -1421,8 +1425,11 @@ private class NowPlayingArtworkMotionState(initialPosition: Float) {
 }
 
 @Composable
-private fun rememberNowPlayingArtworkMotionState(currentIndex: Int): NowPlayingArtworkMotionState {
-    return remember { NowPlayingArtworkMotionState(currentIndex.coerceAtLeast(0).toFloat()) }
+private fun rememberNowPlayingArtworkMotionState(
+    currentIndex: Int,
+    visible: Boolean,
+): NowPlayingArtworkMotionState {
+    return remember(visible) { NowPlayingArtworkMotionState(currentIndex.coerceAtLeast(0).toFloat()) }
 }
 
 private data class ArtworkColors(
@@ -1434,6 +1441,38 @@ private data class ArtworkPresentationRequest(
     val key: String,
     val model: Any?,
 )
+
+@Composable
+private fun rememberDisplayedArtworkColors(
+    targetColors: ArtworkColors,
+    followImmediately: Boolean,
+): ArtworkColors {
+    var displayedColors by remember { mutableStateOf(targetColors) }
+
+    LaunchedEffect(targetColors, followImmediately) {
+        if (followImmediately) {
+            displayedColors = targetColors
+            return@LaunchedEffect
+        }
+        if (displayedColors == targetColors) return@LaunchedEffect
+
+        val startColors = displayedColors
+        withContext(FixedArtworkMotionDurationScale) {
+            animate(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = tween(ARTWORK_BACKGROUND_SETTLE_MS),
+            ) { fraction, _ ->
+                displayedColors = ArtworkColors(
+                    dominant = lerp(startColors.dominant, targetColors.dominant, fraction),
+                    accent = lerp(startColors.accent, targetColors.accent, fraction),
+                )
+            }
+        }
+    }
+
+    return if (followImmediately) targetColors else displayedColors
+}
 
 @Composable
 private fun rememberMotionArtworkColors(
@@ -1488,7 +1527,10 @@ private fun rememberMotionArtworkColors(
     fun colorsFor(page: Int): ArtworkColors {
         val item = queue.getOrNull(page)
         val key = item?.artworkIdentityKey()
-        val presentation = key?.let { appliedPresentations[it] } ?: ArtworkPresentation()
+        val cachedPresentation = item
+            ?.queueArtworkModel(item.serverId?.let { serversById[it] })
+            ?.cachedArtworkPresentation()
+        val presentation = key?.let { appliedPresentations[it] ?: cachedPresentation } ?: ArtworkPresentation()
         return ArtworkColors(
             dominant = presentation.dominantColor ?: fallbackDominant,
             accent = presentation.accentColor ?: fallbackAccent,
@@ -1689,6 +1731,7 @@ private fun NowPlayingArtworkFrame(
 
 private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
 private const val ARTWORK_PREWARM_RADIUS_PAGES = 3
+private const val ARTWORK_BACKGROUND_SETTLE_MS = 180
 private const val PROGRAMMATIC_ARTWORK_SPRING_BASE_STIFFNESS = 140f
 private const val PROGRAMMATIC_ARTWORK_SPRING_DISTANCE_STIFFNESS = 60f
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
@@ -1777,6 +1820,10 @@ private fun Any.artworkPresentationCacheKey(): String {
         is File -> "file:$absolutePath"
         else -> "model:${this}"
     }
+}
+
+private fun Any.cachedArtworkPresentation(): ArtworkPresentation? {
+    return artworkPresentationCache.get(artworkPresentationCacheKey())
 }
 
 private suspend fun decodeArtworkPresentation(
