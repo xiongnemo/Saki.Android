@@ -339,14 +339,21 @@ fun NowPlayingOverlay(
     var showMenu by remember(track.songId) { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showEndpointStatus by remember { mutableStateOf(false) }
+    val visualSnapshot = rememberNowPlayingVisualSnapshot(
+        queue = playbackState.queue,
+        currentIndex = playbackState.currentIndex,
+        currentTrack = track,
+    )
+    val visualCurrentServer = visualSnapshot.currentTrack.serverId?.let { serversById[it] }
+        ?: currentServer.takeIf { it?.id == visualSnapshot.currentTrack.serverId }
 
     // Preload adjacent artwork into Coil and palette caches.
     val context = LocalContext.current
-    val queue = playbackState.queue
-    val currentIdx = playbackState.currentIndex
+    val queue = visualSnapshot.queue
+    val currentIdx = visualSnapshot.currentIndex
     val prevSongId = queue.getOrNull(currentIdx - 1)?.songId
     val nextSongId = queue.getOrNull(currentIdx + 1)?.songId
-    LaunchedEffect(visible, track.songId, prevSongId, nextSongId, currentServer) {
+    LaunchedEffect(visible, visualSnapshot.currentTrack.songId, prevSongId, nextSongId, visualCurrentServer) {
         if (!visible) return@LaunchedEffect
         val adjacentIndices = listOfNotNull(
             if (currentIdx > 0) currentIdx - 1 else null,
@@ -402,7 +409,7 @@ fun NowPlayingOverlay(
         ),
     ) {
         val artwork = rememberArtworkPresentation(
-            fallbackModel = track.queueArtworkModel(currentServer),
+            fallbackModel = visualSnapshot.currentTrack.queueArtworkModel(visualCurrentServer),
         )
         val colorScheme = MaterialTheme.colorScheme
         val targetDominant = artwork.dominantColor ?: colorScheme.primary
@@ -558,9 +565,9 @@ fun NowPlayingOverlay(
                         contentAlignment = Alignment.Center,
                     ) {
                         NowPlayingArtworkPagerHost(
-                            queue = playbackState.queue,
-                            currentIndex = playbackState.currentIndex,
-                            currentTrack = track,
+                            queue = visualSnapshot.queue,
+                            currentIndex = visualSnapshot.currentIndex,
+                            currentTrack = visualSnapshot.currentTrack,
                             serversById = serversById,
                             modifier = Modifier.fillMaxSize(),
                             onArtworkClick = {
@@ -1332,6 +1339,76 @@ private fun PlaybackQueueItem.artworkIdentityKey(): String {
         coverArtPath.orEmpty(),
         artworkUri.orEmpty(),
     ).joinToString("|")
+}
+
+private data class NowPlayingVisualSnapshot(
+    val queue: List<PlaybackQueueItem>,
+    val currentIndex: Int,
+    val currentTrack: PlaybackQueueItem,
+)
+
+@Composable
+private fun rememberNowPlayingVisualSnapshot(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): NowPlayingVisualSnapshot {
+    val candidate = remember(queue, currentIndex, currentTrack) {
+        buildNowPlayingVisualSnapshot(queue, currentIndex, currentTrack)
+    }
+    var snapshot by remember {
+        mutableStateOf(candidate ?: fallbackNowPlayingVisualSnapshot(queue, currentIndex, currentTrack))
+    }
+
+    LaunchedEffect(candidate) {
+        if (candidate != null) {
+            snapshot = candidate
+        }
+    }
+
+    return candidate ?: snapshot
+}
+
+private fun buildNowPlayingVisualSnapshot(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): NowPlayingVisualSnapshot? {
+    if (currentIndex !in queue.indices) return null
+    if (queue[currentIndex].songId != currentTrack.songId) return null
+    return NowPlayingVisualSnapshot(
+        queue = queue.withVisualCurrentItem(currentIndex, currentTrack),
+        currentIndex = currentIndex,
+        currentTrack = currentTrack,
+    )
+}
+
+private fun fallbackNowPlayingVisualSnapshot(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): NowPlayingVisualSnapshot {
+    val safeIndex = currentIndex.takeIf { it in queue.indices }
+    if (safeIndex != null && queue[safeIndex].songId == currentTrack.songId) {
+        return NowPlayingVisualSnapshot(
+            queue = queue.withVisualCurrentItem(safeIndex, currentTrack),
+            currentIndex = safeIndex,
+            currentTrack = currentTrack,
+        )
+    }
+    return NowPlayingVisualSnapshot(
+        queue = listOf(currentTrack),
+        currentIndex = 0,
+        currentTrack = currentTrack,
+    )
+}
+
+private fun List<PlaybackQueueItem>.withVisualCurrentItem(
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): List<PlaybackQueueItem> {
+    if (getOrNull(currentIndex) == currentTrack) return this
+    return toMutableList().also { it[currentIndex] = currentTrack }
 }
 
 private data class ArtworkPresentation(
