@@ -132,6 +132,7 @@ import org.hdhmc.saki.domain.model.SongLyrics
 import java.io.File
 import coil3.imageLoader
 import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import coil3.toBitmap
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Dispatchers
