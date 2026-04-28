@@ -446,28 +446,39 @@ fun NowPlayingOverlay(
         var lastTrackId by remember { mutableStateOf(track.songId) }
         // Guard: suppress pager-driven skips during programmatic scroll
         var suppressPagerSkip by remember { mutableStateOf(false) }
+        var programmaticPagerTargetPage by remember { mutableStateOf<Int?>(null) }
         var currentArtworkKeyPage by remember { mutableStateOf(playbackState.currentIndex.coerceAtLeast(0)) }
         var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
         // Stabilize artwork during deferred queue expansion:
         // keep the current artwork keyed to the visible page until the pager can
-        // move after any page-count change caused by queue item insertion.
+        // move after any page-count change caused by queue item insertion. If
+        // the user starts swiping during this handoff, do not force it back.
         val targetPage = playbackState.currentIndex.coerceAtLeast(0)
         LaunchedEffect(targetPage, track.songId, playbackState.queue) {
             if (track.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
+                val startPage = artworkPagerState.currentPage
                 suppressPagerSkip = true
-                pinnedCurrentArtworkPage = artworkPagerState.currentPage
-                currentArtworkKeyPage = artworkPagerState.currentPage
+                programmaticPagerTargetPage = targetPage
+                pinnedCurrentArtworkPage = startPage
+                currentArtworkKeyPage = startPage
                 try {
                     stableQueue = playbackState.queue
                     withFrameNanos { }
-                    if (artworkPagerState.currentPage != targetPage) {
+                    while (artworkPagerState.isScrollInProgress) {
+                        withFrameNanos { }
+                    }
+                    val userMovedPager =
+                        artworkPagerState.currentPage != startPage ||
+                        artworkPagerState.settledPage != startPage
+                    if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
                         artworkPagerState.scrollToPage(targetPage)
                     }
-                    currentArtworkKeyPage = targetPage
+                    currentArtworkKeyPage = if (userMovedPager) targetPage else artworkPagerState.currentPage
                     pinnedCurrentArtworkPage = null
                     withFrameNanos { }
                 } finally {
                     pinnedCurrentArtworkPage = null
+                    programmaticPagerTargetPage = null
                     suppressPagerSkip = false
                 }
             } else {
@@ -476,7 +487,13 @@ fun NowPlayingOverlay(
             }
             if (track.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
                 suppressPagerSkip = true
-                try { artworkPagerState.animateScrollToPage(targetPage) } finally { suppressPagerSkip = false }
+                programmaticPagerTargetPage = targetPage
+                try {
+                    artworkPagerState.animateScrollToPage(targetPage)
+                } finally {
+                    programmaticPagerTargetPage = null
+                    suppressPagerSkip = false
+                }
             }
             lastTrackId = track.songId
         }
@@ -487,7 +504,7 @@ fun NowPlayingOverlay(
             snapshotFlow { artworkPagerState.settledPage }
                 .distinctUntilChanged()
                 .collect { page ->
-                    if (suppressPagerSkip) return@collect
+                    if (suppressPagerSkip && page == programmaticPagerTargetPage) return@collect
                     if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
                         onSkipToQueueItem(page)
                     }
