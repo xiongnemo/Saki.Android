@@ -442,15 +442,34 @@ fun NowPlayingOverlay(
         var lastTrackId by remember { mutableStateOf(track.songId) }
         // Guard: suppress pager-driven skips during programmatic scroll
         var suppressPagerSkip by remember { mutableStateOf(false) }
+        var currentArtworkKeyPage by remember { mutableStateOf(playbackState.currentIndex.coerceAtLeast(0)) }
+        var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
         // Buffer queue to avoid pager flash during shuffle toggle:
-        // update queue snapshot only after pager has scrolled to correct page
+        // keep the current artwork keyed to the visible page until the pager can
+        // move after any page-count change caused by deferred queue expansion.
         val targetPage = playbackState.currentIndex.coerceAtLeast(0)
         LaunchedEffect(targetPage, track.songId, playbackState.queue) {
             if (track.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
                 suppressPagerSkip = true
-                try { artworkPagerState.scrollToPage(targetPage) } finally { suppressPagerSkip = false }
+                pinnedCurrentArtworkPage = artworkPagerState.currentPage
+                currentArtworkKeyPage = artworkPagerState.currentPage
+                try {
+                    stableQueue = playbackState.queue
+                    withFrameNanos { }
+                    if (artworkPagerState.currentPage != targetPage) {
+                        artworkPagerState.scrollToPage(targetPage)
+                    }
+                    currentArtworkKeyPage = targetPage
+                    pinnedCurrentArtworkPage = null
+                    withFrameNanos { }
+                } finally {
+                    pinnedCurrentArtworkPage = null
+                    suppressPagerSkip = false
+                }
+            } else {
+                stableQueue = playbackState.queue
+                currentArtworkKeyPage = targetPage
             }
-            stableQueue = playbackState.queue
             if (track.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
                 suppressPagerSkip = true
                 try { artworkPagerState.animateScrollToPage(targetPage) } finally { suppressPagerSkip = false }
@@ -575,15 +594,28 @@ fun NowPlayingOverlay(
                                 .clip(RoundedCornerShape(34.dp)),
                             pageSpacing = 16.dp,
                             beyondViewportPageCount = 1,
+                            key = { page ->
+                                if (page == currentArtworkKeyPage) {
+                                    "current-${track.mediaId}"
+                                } else {
+                                    stableQueue.getOrNull(page)?.let { "queue-${it.mediaId}-$page" }
+                                        ?: "empty-$page"
+                                }
+                            },
                         ) { page ->
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 val queueItem = stableQueue.getOrNull(page)
+                                val artworkItem = if (page == pinnedCurrentArtworkPage) {
+                                    track
+                                } else {
+                                    queueItem
+                                }
                                 ArtworkCard(
-                                    model = queueItem?.queueArtworkModel(queueItem.serverId?.let { serversById[it] }),
-                                    contentDescription = queueItem?.title,
+                                    model = artworkItem?.queueArtworkModel(artworkItem.serverId?.let { serversById[it] }),
+                                    contentDescription = artworkItem?.title,
                                     modifier = Modifier
                                         .aspectRatio(1f)
                                         .fillMaxHeight()
