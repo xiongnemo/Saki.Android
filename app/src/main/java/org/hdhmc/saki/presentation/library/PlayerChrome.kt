@@ -444,9 +444,9 @@ fun NowPlayingOverlay(
         var suppressPagerSkip by remember { mutableStateOf(false) }
         var currentArtworkKeyPage by remember { mutableStateOf(playbackState.currentIndex.coerceAtLeast(0)) }
         var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
-        // Buffer queue to avoid pager flash during shuffle toggle:
+        // Stabilize artwork during deferred queue expansion:
         // keep the current artwork keyed to the visible page until the pager can
-        // move after any page-count change caused by deferred queue expansion.
+        // move after any page-count change caused by queue item insertion.
         val targetPage = playbackState.currentIndex.coerceAtLeast(0)
         LaunchedEffect(targetPage, track.songId, playbackState.queue) {
             if (track.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
