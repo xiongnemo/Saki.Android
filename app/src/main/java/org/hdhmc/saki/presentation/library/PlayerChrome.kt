@@ -468,11 +468,10 @@ fun NowPlayingOverlay(
         )
         // Sync pager when track changes externally (button skip, queue tap)
         var lastTrackId by remember { mutableStateOf(track.songId) }
-        // A settled page is a playback intent only after a real user drag.
         // Programmatic sync keeps pager state aligned but never drives playback.
+        // Any other settled page change comes from the user's pager gesture.
         // A separate cover transition handles button/notification skip animation.
         var programmaticPagerSync by remember { mutableStateOf(false) }
-        var userPagerDragSeen by remember { mutableStateOf(false) }
         var currentArtworkKeyPage by remember { mutableStateOf(playbackState.currentIndex.coerceAtLeast(0)) }
         var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
         var artworkTransitionSequence by remember { mutableStateOf(0) }
@@ -480,7 +479,6 @@ fun NowPlayingOverlay(
         val isArtworkPagerDragged by artworkPagerState.interactionSource.collectIsDraggedAsState()
         LaunchedEffect(isArtworkPagerDragged, programmaticPagerSync) {
             if (isArtworkPagerDragged && !programmaticPagerSync) {
-                userPagerDragSeen = true
                 programmaticArtworkTransition = null
             }
         }
@@ -505,7 +503,6 @@ fun NowPlayingOverlay(
                         artworkPagerState.settledPage != startPage
                     if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
                         programmaticPagerSync = true
-                        userPagerDragSeen = false
                         try {
                             artworkPagerState.scrollToPage(targetPage)
                             withFrameNanos { }
@@ -526,17 +523,18 @@ fun NowPlayingOverlay(
             if (track.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
                 val startPage = artworkPagerState.currentPage
                 val direction = (targetPage - startPage).coerceIn(-1, 1)
+                val fromItem = programmaticArtworkTransition?.to ?: stableQueue.getOrNull(startPage)
+                val toItem = playbackState.queue.getOrNull(targetPage) ?: track
                 if (direction != 0) {
                     artworkTransitionSequence += 1
                     programmaticArtworkTransition = ProgrammaticArtworkTransition(
                         sequence = artworkTransitionSequence,
-                        from = stableQueue.getOrNull(startPage),
-                        to = playbackState.queue.getOrNull(targetPage) ?: track,
+                        from = fromItem,
+                        to = toItem,
                         direction = direction,
                     )
                 }
                 programmaticPagerSync = true
-                userPagerDragSeen = false
                 try {
                     artworkPagerState.scrollToPage(targetPage)
                     withFrameNanos { }
@@ -553,8 +551,7 @@ fun NowPlayingOverlay(
             snapshotFlow { artworkPagerState.settledPage }
                 .distinctUntilChanged()
                 .collect { page ->
-                    if (programmaticPagerSync || !userPagerDragSeen) return@collect
-                    userPagerDragSeen = false
+                    if (programmaticPagerSync) return@collect
                     if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
                         onSkipToQueueItem(page)
                     }
