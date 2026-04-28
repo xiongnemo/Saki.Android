@@ -476,10 +476,12 @@ fun NowPlayingOverlay(
         var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
         var artworkTransitionSequence by remember { mutableStateOf(0) }
         var programmaticArtworkTransition by remember { mutableStateOf<ProgrammaticArtworkTransition?>(null) }
+        var programmaticArtworkTransitionCoversPager by remember { mutableStateOf(false) }
         val isArtworkPagerDragged by artworkPagerState.interactionSource.collectIsDraggedAsState()
         LaunchedEffect(isArtworkPagerDragged, programmaticPagerSync) {
             if (isArtworkPagerDragged && !programmaticPagerSync) {
                 programmaticArtworkTransition = null
+                programmaticArtworkTransitionCoversPager = false
             }
         }
         // Stabilize artwork during deferred queue expansion:
@@ -533,6 +535,7 @@ fun NowPlayingOverlay(
                         to = toItem,
                         direction = direction,
                     )
+                    programmaticArtworkTransitionCoversPager = true
                 }
                 programmaticPagerSync = true
                 try {
@@ -660,7 +663,7 @@ fun NowPlayingOverlay(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {
-                                    alpha = if (programmaticArtworkTransition == null) 1f else 0f
+                                    alpha = if (programmaticArtworkTransitionCoversPager) 0f else 1f
                                 }
                                 .clip(RoundedCornerShape(34.dp)),
                             pageSpacing = 16.dp,
@@ -674,30 +677,21 @@ fun NowPlayingOverlay(
                                 }
                             },
                         ) { page ->
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                val queueItem = stableQueue.getOrNull(page)
-                                val artworkItem = if (page == pinnedCurrentArtworkPage) {
-                                    track
-                                } else {
-                                    queueItem
-                                }
-                                ArtworkCard(
-                                    model = artworkItem?.queueArtworkModel(artworkItem.serverId?.let { serversById[it] }),
-                                    contentDescription = artworkItem?.title,
-                                    modifier = Modifier
-                                        .aspectRatio(1f)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(34.dp))
-                                        .clickable {
-                                            if (showLyrics) showLyrics = false
-                                            else if (hasLyrics) showLyrics = true
-                                        },
-                                    cornerRadiusDp = 34,
-                                )
+                            val queueItem = stableQueue.getOrNull(page)
+                            val artworkItem = if (page == pinnedCurrentArtworkPage) {
+                                track
+                            } else {
+                                queueItem
                             }
+                            NowPlayingArtworkFrame(
+                                item = artworkItem,
+                                serversById = serversById,
+                                modifier = Modifier.fillMaxSize(),
+                                onClick = {
+                                    if (showLyrics) showLyrics = false
+                                    else if (hasLyrics) showLyrics = true
+                                },
+                            )
                         }
                         programmaticArtworkTransition?.let { transition ->
                             ProgrammaticArtworkTransitionOverlay(
@@ -706,9 +700,15 @@ fun NowPlayingOverlay(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(RoundedCornerShape(34.dp)),
+                                onRevealPager = {
+                                    if (programmaticArtworkTransition?.sequence == transition.sequence) {
+                                        programmaticArtworkTransitionCoversPager = false
+                                    }
+                                },
                                 onFinished = {
                                     if (programmaticArtworkTransition?.sequence == transition.sequence) {
                                         programmaticArtworkTransition = null
+                                        programmaticArtworkTransitionCoversPager = false
                                     }
                                 },
                             )
@@ -1488,10 +1488,14 @@ private fun ProgrammaticArtworkTransitionOverlay(
     transition: ProgrammaticArtworkTransition,
     serversById: Map<Long, ServerConfig>,
     modifier: Modifier = Modifier,
+    onRevealPager: () -> Unit,
     onFinished: () -> Unit,
 ) {
+    val latestOnRevealPager by rememberUpdatedState(onRevealPager)
     val latestOnFinished by rememberUpdatedState(onFinished)
     var started by remember(transition.sequence) { mutableStateOf(false) }
+    var slideFinished by remember(transition.sequence) { mutableStateOf(false) }
+    var fadeStarted by remember(transition.sequence) { mutableStateOf(false) }
     val progress by animateFloatAsState(
         targetValue = if (started) 1f else 0f,
         animationSpec = tween(
@@ -1499,15 +1503,32 @@ private fun ProgrammaticArtworkTransitionOverlay(
             easing = FastOutSlowInEasing,
         ),
         label = "ProgrammaticArtworkTransitionProgress",
-        finishedListener = { latestOnFinished() },
+        finishedListener = { if (it == 1f) slideFinished = true },
+    )
+    val overlayAlpha by animateFloatAsState(
+        targetValue = if (fadeStarted) 0f else 1f,
+        animationSpec = tween(
+            durationMillis = PROGRAMMATIC_ARTWORK_FADE_OUT_MS,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "ProgrammaticArtworkTransitionAlpha",
+        finishedListener = { if (it == 0f) latestOnFinished() },
     )
 
     LaunchedEffect(transition.sequence) {
         started = true
     }
+    LaunchedEffect(transition.sequence, slideFinished) {
+        if (slideFinished) {
+            withFrameNanos { }
+            latestOnRevealPager()
+            delay(PROGRAMMATIC_ARTWORK_REVEAL_HOLD_MS.toLong())
+            fadeStarted = true
+        }
+    }
 
     BoxWithConstraints(
-        modifier = modifier,
+        modifier = modifier.graphicsLayer { alpha = overlayAlpha },
         contentAlignment = Alignment.Center,
     ) {
         val density = LocalDensity.current
@@ -1516,22 +1537,22 @@ private fun ProgrammaticArtworkTransitionOverlay(
         }
         val direction = transition.direction.coerceIn(-1, 1)
         transition.from?.let { item ->
-            ProgrammaticArtworkTransitionCard(
+            NowPlayingArtworkFrame(
                 item = item,
                 serversById = serversById,
-                modifier = Modifier.graphicsLayer {
-                    alpha = 1f
+                modifier = Modifier.fillMaxSize(),
+                contentModifier = Modifier.graphicsLayer {
                     scaleX = 1f - progress * 0.03f
                     scaleY = 1f - progress * 0.03f
                     translationX = -direction * progress * cardTravelPx
                 },
             )
         }
-        ProgrammaticArtworkTransitionCard(
+        NowPlayingArtworkFrame(
             item = transition.to,
             serversById = serversById,
-            modifier = Modifier.graphicsLayer {
-                alpha = 1f
+            modifier = Modifier.fillMaxSize(),
+            contentModifier = Modifier.graphicsLayer {
                 scaleX = 0.97f + progress * 0.03f
                 scaleY = 0.97f + progress * 0.03f
                 translationX = direction * (1f - progress) * cardTravelPx
@@ -1541,25 +1562,40 @@ private fun ProgrammaticArtworkTransitionOverlay(
 }
 
 @Composable
-private fun ProgrammaticArtworkTransitionCard(
-    item: PlaybackQueueItem,
+private fun NowPlayingArtworkFrame(
+    item: PlaybackQueueItem?,
     serversById: Map<Long, ServerConfig>,
     modifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
-    ArtworkCard(
-        model = item.queueArtworkModel(item.serverId?.let { serversById[it] }),
-        contentDescription = item.title,
-        modifier = modifier
-            .aspectRatio(1f)
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(34.dp)),
-        cornerRadiusDp = 34,
-    )
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        val clickModifier = if (onClick != null) {
+            Modifier.clickable(onClick = onClick)
+        } else {
+            Modifier
+        }
+        ArtworkCard(
+            model = item?.queueArtworkModel(item.serverId?.let { serversById[it] }),
+            contentDescription = item?.title,
+            modifier = contentModifier
+                .aspectRatio(1f)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(34.dp))
+                .then(clickModifier),
+            cornerRadiusDp = 34,
+        )
+    }
 }
 
 private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
 private const val ARTWORK_COLOR_TRANSITION_MS = 520
 private const val PROGRAMMATIC_ARTWORK_TRANSITION_MS = 420
+private const val PROGRAMMATIC_ARTWORK_REVEAL_HOLD_MS = 80
+private const val PROGRAMMATIC_ARTWORK_FADE_OUT_MS = 120
 private const val PROGRAMMATIC_ARTWORK_PAGE_SPACING_DP = 16
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
 
