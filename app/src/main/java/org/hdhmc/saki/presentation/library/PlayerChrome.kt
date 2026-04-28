@@ -1465,7 +1465,7 @@ private suspend fun decodeArtworkPresentation(
     model: Any,
 ): ArtworkPresentation = withContext(Dispatchers.IO) {
     try {
-        val request = coil3.request.ImageRequest.Builder(context)
+        val request = ImageRequest.Builder(context)
             .data(model)
             .size(PALETTE_COVER_ART_SIZE_PX)
             .allowHardware(false)
