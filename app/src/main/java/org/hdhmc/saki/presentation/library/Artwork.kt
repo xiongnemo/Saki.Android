@@ -1,5 +1,6 @@
 package org.hdhmc.saki.presentation.library
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -14,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -41,15 +41,12 @@ fun ArtworkCard(
     cornerRadiusDp: Int = 24,
     requestSizePx: Int? = null,
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val fallbackColors = remember(colorScheme.primary, colorScheme.tertiary) {
+    val fallbackBrush = Brush.linearGradient(
         listOf(
-            colorScheme.primary.copy(alpha = 0.9f),
-            colorScheme.tertiary.copy(alpha = 0.7f),
-        )
-    }
-    val containerColor = colorScheme.surfaceVariant.copy(alpha = 0.34f)
-    val fallbackIconTint = colorScheme.onPrimary
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+        ),
+    )
     val context = LocalContext.current
     val imageModel = remember(model, requestSizePx, context) {
         if (model != null && requestSizePx != null) {
@@ -65,7 +62,7 @@ fun ArtworkCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(cornerRadiusDp.dp),
-        color = containerColor,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
     ) {
         if (imageModel != null) {
             AsyncImage(
@@ -78,20 +75,15 @@ fun ArtworkCard(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(cornerRadiusDp.dp))
-                    .drawWithCache {
-                        val fallbackBrush = Brush.linearGradient(fallbackColors)
-                        onDrawBehind {
-                            drawRect(fallbackBrush)
-                        }
-                    },
+                    .background(fallbackBrush)
+                    .clip(RoundedCornerShape(cornerRadiusDp.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Rounded.LibraryMusic,
                     contentDescription = null,
                     modifier = Modifier.size(42.dp),
-                    tint = fallbackIconTint,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
         }

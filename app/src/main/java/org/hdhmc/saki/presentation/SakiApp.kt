@@ -401,7 +401,17 @@ private fun NowPlayingOverlayHost(
     onReprobeEndpoints: () -> Unit,
     onForceEndpoint: (Long) -> Unit,
 ) {
-    val track = playbackState.currentItem ?: return
+    val activeTrack = playbackState.currentItem
+        ?: playbackState.queue.getOrNull(playbackState.currentIndex)
+    var stableTrack by remember { mutableStateOf(activeTrack) }
+    LaunchedEffect(visible, activeTrack) {
+        if (activeTrack != null) {
+            stableTrack = activeTrack
+        } else if (!visible) {
+            stableTrack = null
+        }
+    }
+    val track = activeTrack ?: stableTrack ?: return
     val availableArtistIds = remember(libraryIndexes) {
         libraryIndexes
             ?.let { indexes ->
