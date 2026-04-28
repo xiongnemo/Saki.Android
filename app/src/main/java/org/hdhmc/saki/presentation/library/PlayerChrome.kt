@@ -141,6 +141,7 @@ import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -1494,7 +1495,7 @@ private fun rememberDisplayedArtworkColors(
         if (displayedColors == targetColors) return@LaunchedEffect
 
         val startColors = displayedColors
-        withContext(FixedArtworkMotionDurationScale) {
+        withFixedArtworkMotionDurationScale {
             animate(
                 initialValue = 0f,
                 targetValue = 1f,
@@ -1547,8 +1548,10 @@ private fun rememberMotionArtworkColors(
     LaunchedEffect(pageRequests) {
         var loadedPresentations = presentations
         for (request in pageRequests.values) {
-            if (request.key !in loadedPresentations) {
-                val presentation = loadArtworkPresentation(context, request.model)
+            val model = request.model ?: continue
+            if (loadedPresentations[request.key]?.hasColors != true) {
+                val presentation = loadArtworkPresentation(context, model)
+                if (!presentation.hasColors) continue
                 loadedPresentations = loadedPresentations + (request.key to presentation)
                 presentations = loadedPresentations
             }
@@ -1567,7 +1570,10 @@ private fun rememberMotionArtworkColors(
         val cachedPresentation = item
             ?.queueArtworkModel(item.serverId?.let { serversById[it] })
             ?.cachedArtworkPresentation()
-        val presentation = key?.let { appliedPresentations[it] ?: cachedPresentation } ?: ArtworkPresentation()
+        val presentation = key
+            ?.let { appliedPresentations[it]?.takeIf { presentation -> presentation.hasColors } }
+            ?: cachedPresentation?.takeIf { presentation -> presentation.hasColors }
+            ?: ArtworkPresentation()
         return ArtworkColors(
             dominant = presentation.dominantColor ?: fallbackDominant,
             accent = presentation.accentColor ?: fallbackAccent,
@@ -1636,7 +1642,7 @@ private fun NowPlayingArtworkPagerHost(
                 val distancePages = abs(
                     visualTargetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
                 )
-                withContext(FixedArtworkMotionDurationScale) {
+                withFixedArtworkMotionDurationScale {
                     artworkPagerState.animateArtworkMotionToPage(
                         page = visualTargetPage,
                         motionState = motionState,
@@ -1686,7 +1692,7 @@ private fun NowPlayingArtworkPagerHost(
                 val distancePages = abs(
                     targetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
                 )
-                withContext(FixedArtworkMotionDurationScale) {
+                withFixedArtworkMotionDurationScale {
                     artworkPagerState.animateArtworkMotionToPage(
                         page = targetPage,
                         motionState = motionState,
@@ -1810,6 +1816,16 @@ private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ART
 private object FixedArtworkMotionDurationScale : MotionDurationScale {
     override val key: CoroutineContext.Key<*> = MotionDurationScale.Key
     override val scaleFactor: Float = 1f
+}
+
+private suspend fun withFixedArtworkMotionDurationScale(block: suspend () -> Unit) {
+    if (coroutineContext[MotionDurationScale.Key]?.scaleFactor == 0f) {
+        block()
+    } else {
+        withContext(FixedArtworkMotionDurationScale) {
+            block()
+        }
+    }
 }
 
 private suspend fun PagerState.animateArtworkMotionToPage(
