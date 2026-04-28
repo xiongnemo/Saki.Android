@@ -409,6 +409,7 @@ fun NowPlayingOverlay(
     BackHandler(enabled = visible) {
         onDismiss()
     }
+    val latestOnDismiss by rememberUpdatedState(onDismiss)
 
     // Reset lyrics overlay when Now Playing is dismissed
     LaunchedEffect(visible) {
@@ -548,6 +549,7 @@ fun NowPlayingOverlay(
             // Queue bottom sheet state
             val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
             var showQueueSheet by remember { mutableStateOf(false) }
+            val latestOpenQueueSheet by rememberUpdatedState { showQueueSheet = true }
 
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
                 Column(
@@ -798,21 +800,68 @@ fun NowPlayingOverlay(
                     )
                     Column(
                         modifier = Modifier.pointerInput(showQueueAffordance) {
-                            if (!showQueueAffordance) return@pointerInput
-                            val thresholdPx = 80.dp.toPx()
-                            var accumulated = 0f
+                            val openQueueThresholdPx = 80.dp.toPx()
+                            val dismissThresholdPx = 72.dp.toPx()
+                            val velocityThresholdDpPerSecond = 300f
+                            var upwardDistance = 0f
+                            var downwardDistance = 0f
+                            var dragStartedAtNanos = 0L
+                            var didOpenQueue = false
+                            var didDismiss = false
+
+                            fun openQueueFromSwipe() {
+                                if (showQueueAffordance && !didOpenQueue && !didDismiss) {
+                                    didOpenQueue = true
+                                    latestOpenQueueSheet()
+                                }
+                            }
+
+                            fun dismissFromSwipe() {
+                                if (!didDismiss && !didOpenQueue) {
+                                    didDismiss = true
+                                    latestOnDismiss()
+                                }
+                            }
+
                             detectVerticalDragGestures(
-                                onDragStart = { accumulated = 0f },
+                                onDragStart = {
+                                    upwardDistance = 0f
+                                    downwardDistance = 0f
+                                    dragStartedAtNanos = System.nanoTime()
+                                    didOpenQueue = false
+                                    didDismiss = false
+                                },
                                 onVerticalDrag = { _, dragAmount ->
                                     if (dragAmount < 0f) {
-                                        accumulated -= dragAmount
-                                        if (accumulated >= thresholdPx) {
-                                            accumulated = 0f
-                                            showQueueSheet = true
+                                        upwardDistance -= dragAmount
+                                        downwardDistance = 0f
+                                        if (upwardDistance >= openQueueThresholdPx) {
+                                            openQueueFromSwipe()
                                         }
-                                    } else {
-                                        accumulated = 0f
+                                    } else if (dragAmount > 0f) {
+                                        downwardDistance += dragAmount
+                                        upwardDistance = 0f
+                                        if (downwardDistance >= dismissThresholdPx) {
+                                            dismissFromSwipe()
+                                        }
                                     }
+                                },
+                                onDragEnd = {
+                                    val elapsedSeconds = (System.nanoTime() - dragStartedAtNanos) / 1_000_000_000f
+                                    if (elapsedSeconds > 0f) {
+                                        val downwardVelocityDpPerSecond = (downwardDistance / elapsedSeconds).toDp().value
+                                        val upwardVelocityDpPerSecond = (upwardDistance / elapsedSeconds).toDp().value
+                                        when {
+                                            downwardVelocityDpPerSecond >= velocityThresholdDpPerSecond -> dismissFromSwipe()
+                                            upwardVelocityDpPerSecond >= velocityThresholdDpPerSecond -> openQueueFromSwipe()
+                                        }
+                                    }
+                                },
+                                onDragCancel = {
+                                    upwardDistance = 0f
+                                    downwardDistance = 0f
+                                    didOpenQueue = false
+                                    didDismiss = false
                                 },
                             )
                         },
