@@ -107,6 +107,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -138,7 +139,12 @@ import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
+import kotlin.math.sqrt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -343,6 +349,7 @@ fun NowPlayingOverlay(
         currentIndex = playbackState.currentIndex,
         currentTrack = track,
     )
+    val artworkMotionState = rememberNowPlayingArtworkMotionState(visualSnapshot.currentIndex)
     val visualCurrentServer = visualSnapshot.currentTrack.serverId?.let { serversById[it] }
         ?: currentServer.takeIf { it?.id == visualSnapshot.currentTrack.serverId }
 
@@ -407,24 +414,26 @@ fun NowPlayingOverlay(
             targetOffsetY = { fullHeight -> fullHeight / 3 },
         ),
     ) {
-        val artwork = rememberArtworkPresentation(
-            fallbackModel = visualSnapshot.currentTrack.queueArtworkModel(visualCurrentServer),
-        )
         val colorScheme = MaterialTheme.colorScheme
-        val targetDominant = artwork.dominantColor ?: colorScheme.primary
-        val targetAccent = artwork.accentColor ?: colorScheme.tertiary
+        val artworkColors = rememberMotionArtworkColors(
+            queue = visualSnapshot.queue,
+            serversById = serversById,
+            position = artworkMotionState.position,
+            fallbackDominant = colorScheme.primary,
+            fallbackAccent = colorScheme.tertiary,
+        )
         val dominant by animateColorAsState(
-            targetValue = targetDominant,
+            targetValue = artworkColors.dominant,
             animationSpec = tween(
-                durationMillis = ARTWORK_COLOR_TRANSITION_MS,
+                durationMillis = ARTWORK_BACKGROUND_COLOR_SMOOTH_MS,
                 easing = FastOutSlowInEasing,
             ),
             label = "NowPlayingDominantColor",
         )
         val accent by animateColorAsState(
-            targetValue = targetAccent,
+            targetValue = artworkColors.accent,
             animationSpec = tween(
-                durationMillis = ARTWORK_COLOR_TRANSITION_MS,
+                durationMillis = ARTWORK_BACKGROUND_COLOR_SMOOTH_MS,
                 easing = FastOutSlowInEasing,
             ),
             label = "NowPlayingAccentColor",
@@ -568,6 +577,7 @@ fun NowPlayingOverlay(
                             currentIndex = visualSnapshot.currentIndex,
                             currentTrack = visualSnapshot.currentTrack,
                             serversById = serversById,
+                            motionState = artworkMotionState,
                             modifier = Modifier.fillMaxSize(),
                             onArtworkClick = {
                                 if (showLyrics) showLyrics = false
@@ -1410,6 +1420,82 @@ private fun List<PlaybackQueueItem>.withVisualCurrentItem(
     return toMutableList().also { it[currentIndex] = currentTrack }
 }
 
+private class NowPlayingArtworkMotionState(initialPosition: Float) {
+    var position by mutableFloatStateOf(initialPosition)
+}
+
+@Composable
+private fun rememberNowPlayingArtworkMotionState(currentIndex: Int): NowPlayingArtworkMotionState {
+    return remember { NowPlayingArtworkMotionState(currentIndex.coerceAtLeast(0).toFloat()) }
+}
+
+private data class ArtworkColors(
+    val dominant: Color,
+    val accent: Color,
+)
+
+private data class ArtworkPresentationRequest(
+    val key: String,
+    val model: Any?,
+)
+
+@Composable
+private fun rememberMotionArtworkColors(
+    queue: List<PlaybackQueueItem>,
+    serversById: Map<Long, ServerConfig>,
+    position: Float,
+    fallbackDominant: Color,
+    fallbackAccent: Color,
+): ArtworkColors {
+    if (queue.isEmpty()) {
+        return ArtworkColors(fallbackDominant, fallbackAccent)
+    }
+
+    val context = LocalContext.current.applicationContext
+    var presentations by remember { mutableStateOf<Map<String, ArtworkPresentation>>(emptyMap()) }
+    val clampedPosition = position.coerceIn(0f, queue.lastIndex.toFloat())
+    val fromPage = floor(clampedPosition).toInt().coerceIn(0, queue.lastIndex)
+    val toPage = ceil(clampedPosition).toInt().coerceIn(0, queue.lastIndex)
+    val fraction = (clampedPosition - fromPage).coerceIn(0f, 1f)
+    val pageRequests = remember(queue, serversById, fromPage, toPage) {
+        listOf(fromPage, toPage)
+            .distinct()
+            .associateWith { page ->
+                val item = queue[page]
+                ArtworkPresentationRequest(
+                    key = item.artworkIdentityKey(),
+                    model = item.queueArtworkModel(item.serverId?.let { serversById[it] }),
+                )
+            }
+    }
+
+    LaunchedEffect(pageRequests) {
+        for (request in pageRequests.values) {
+            if (request.key !in presentations) {
+                presentations = presentations + (request.key to loadArtworkPresentation(context, request.model))
+            }
+        }
+    }
+
+    fun colorsFor(page: Int): ArtworkColors {
+        val item = queue.getOrNull(page)
+        val key = item?.artworkIdentityKey()
+        val presentation = key?.let { presentations[it] } ?: ArtworkPresentation()
+        return ArtworkColors(
+            dominant = presentation.dominantColor ?: fallbackDominant,
+            accent = presentation.accentColor ?: fallbackAccent,
+        )
+    }
+
+    val fromColors = colorsFor(fromPage)
+    if (fromPage == toPage) return fromColors
+    val toColors = colorsFor(toPage)
+    return ArtworkColors(
+        dominant = lerp(fromColors.dominant, toColors.dominant, fraction),
+        accent = lerp(fromColors.accent, toColors.accent, fraction),
+    )
+}
+
 private data class ArtworkPresentation(
     val dominantColor: Color? = null,
     val accentColor: Color? = null,
@@ -1425,6 +1511,7 @@ private fun NowPlayingArtworkPagerHost(
     currentIndex: Int,
     currentTrack: PlaybackQueueItem,
     serversById: Map<Long, ServerConfig>,
+    motionState: NowPlayingArtworkMotionState,
     modifier: Modifier = Modifier,
     onArtworkClick: () -> Unit,
     onUserSelectQueueItem: (Int) -> Unit,
@@ -1478,12 +1565,12 @@ private fun NowPlayingArtworkPagerHost(
             withFrameNanos { }
             programmaticPagerSync = true
             try {
+                val distancePages = abs(
+                    targetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
+                )
                 artworkPagerState.animateScrollToPage(
                     page = targetPage,
-                    animationSpec = tween(
-                        durationMillis = PROGRAMMATIC_ARTWORK_SCROLL_MS,
-                        easing = FastOutSlowInEasing,
-                    ),
+                    animationSpec = programmaticArtworkScrollSpec(distancePages),
                 )
             } finally {
                 lastProgrammaticSettledPage = artworkPagerState.settledPage
@@ -1491,6 +1578,20 @@ private fun NowPlayingArtworkPagerHost(
             }
         }
         lastTrackId = currentTrack.songId
+    }
+
+    LaunchedEffect(artworkPagerState, motionState) {
+        snapshotFlow {
+            val maxPage = (artworkPagerState.pageCount - 1).coerceAtLeast(0)
+            (
+                artworkPagerState.currentPage +
+                    artworkPagerState.currentPageOffsetFraction
+                ).coerceIn(0f, maxPage.toFloat())
+        }
+            .distinctUntilChanged()
+            .collect { position ->
+                motionState.position = position
+            }
     }
 
     val currentPlaybackIndex by rememberUpdatedState(currentIndex)
@@ -1574,21 +1675,22 @@ private fun NowPlayingArtworkFrame(
 }
 
 private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
-private const val ARTWORK_COLOR_TRANSITION_MS = 520
-private const val PROGRAMMATIC_ARTWORK_SCROLL_MS = 520
+private const val ARTWORK_BACKGROUND_COLOR_SMOOTH_MS = 140
+private const val PROGRAMMATIC_ARTWORK_SCROLL_MIN_MS = 260
+private const val PROGRAMMATIC_ARTWORK_SCROLL_MAX_MS = 680
+private const val PROGRAMMATIC_ARTWORK_SCROLL_BASE_MS = 210
+private const val PROGRAMMATIC_ARTWORK_SCROLL_DISTANCE_MS = 280
 private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
 
-@Composable
-private fun rememberArtworkPresentation(
-    fallbackModel: Any?,
-): ArtworkPresentation {
-    val context = LocalContext.current.applicationContext
-    var presentation by remember { mutableStateOf(ArtworkPresentation()) }
-    LaunchedEffect(fallbackModel) {
-        presentation = loadArtworkPresentation(context, fallbackModel)
-    }
-    return presentation
-}
+private fun programmaticArtworkScrollSpec(distancePages: Float) = tween<Float>(
+    durationMillis = (
+        PROGRAMMATIC_ARTWORK_SCROLL_BASE_MS +
+            sqrt(distancePages.coerceAtLeast(0.01f)) * PROGRAMMATIC_ARTWORK_SCROLL_DISTANCE_MS
+        )
+        .roundToInt()
+        .coerceIn(PROGRAMMATIC_ARTWORK_SCROLL_MIN_MS, PROGRAMMATIC_ARTWORK_SCROLL_MAX_MS),
+    easing = FastOutSlowInEasing,
+)
 
 private suspend fun loadArtworkPresentation(
     context: android.content.Context,
