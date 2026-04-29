@@ -113,6 +113,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.compositeOver
@@ -342,6 +343,10 @@ fun NowPlayingOverlay(
     onReprobeEndpoints: () -> Unit = {},
     onForceEndpoint: (Long) -> Unit = {},
     lyrics: SongLyrics? = null,
+    useDynamicArtworkColors: Boolean = true,
+    useGradientBackground: Boolean = true,
+    useArtworkMotion: Boolean = true,
+    artworkPrewarmRadius: Int = ARTWORK_PREWARM_RADIUS_PAGES,
 ) {
     val serversById = remember(servers) { servers.associateBy { it.id } }
     var showDetails by remember(track.songId) { mutableStateOf(false) }
@@ -387,13 +392,21 @@ fun NowPlayingOverlay(
     val context = LocalContext.current
     val queue = visualSnapshot.queue
     val currentIdx = visualSnapshot.currentIndex
-    val prewarmArtworkKeys = remember(queue, currentIdx) {
-        (currentIdx - ARTWORK_PREWARM_RADIUS_PAGES..currentIdx + ARTWORK_PREWARM_RADIUS_PAGES)
+    val prewarmRadius = artworkPrewarmRadius.coerceAtLeast(0)
+    val prewarmArtworkKeys = remember(queue, currentIdx, prewarmRadius) {
+        (currentIdx - prewarmRadius..currentIdx + prewarmRadius)
             .mapNotNull { index -> queue.getOrNull(index)?.artworkIdentityKey() }
     }
-    LaunchedEffect(visible, visualSnapshot.currentTrack.artworkIdentityKey(), prewarmArtworkKeys, visualCurrentServer) {
+    LaunchedEffect(
+        visible,
+        visualSnapshot.currentTrack.artworkIdentityKey(),
+        prewarmArtworkKeys,
+        visualCurrentServer,
+        useDynamicArtworkColors,
+        prewarmRadius,
+    ) {
         if (!visible) return@LaunchedEffect
-        val adjacentIndices = (currentIdx - ARTWORK_PREWARM_RADIUS_PAGES..currentIdx + ARTWORK_PREWARM_RADIUS_PAGES)
+        val adjacentIndices = (currentIdx - prewarmRadius..currentIdx + prewarmRadius)
             .filter { it in queue.indices && it != currentIdx }
         for (i in adjacentIndices) {
             val item = queue[i]
@@ -404,7 +417,9 @@ fun NowPlayingOverlay(
                 .size(FULL_COVER_ART_SIZE_PX)
                 .build()
             context.imageLoader.enqueue(request)
-            prewarmArtworkPresentation(context.applicationContext, model)
+            if (useDynamicArtworkColors) {
+                prewarmArtworkPresentation(context.applicationContext, model)
+            }
         }
     }
 
@@ -446,28 +461,40 @@ fun NowPlayingOverlay(
         ),
     ) {
         val colorScheme = MaterialTheme.colorScheme
-        val rawArtworkColors = rememberMotionArtworkColors(
-            queue = visualSnapshot.queue,
-            serversById = serversById,
-            position = artworkMotionState.position,
-            freezePresentationUpdates = artworkMotionState.isScrollInProgress,
-            fallbackDominant = colorScheme.primary,
-            fallbackAccent = colorScheme.tertiary,
-        )
+        val rawArtworkColors = if (useDynamicArtworkColors) {
+            rememberMotionArtworkColors(
+                queue = visualSnapshot.queue,
+                serversById = serversById,
+                position = artworkMotionState.position,
+                freezePresentationUpdates = artworkMotionState.isScrollInProgress,
+                fallbackDominant = colorScheme.primary,
+                fallbackAccent = colorScheme.tertiary,
+                prewarmRadius = prewarmRadius,
+            )
+        } else {
+            ArtworkColors(
+                dominant = colorScheme.primary,
+                accent = colorScheme.tertiary,
+            )
+        }
         val artworkColors = rememberDisplayedArtworkColors(
             targetColors = rawArtworkColors,
-            followImmediately = artworkMotionState.isScrollInProgress || !visible,
+            followImmediately = artworkMotionState.isScrollInProgress || !visible || !useDynamicArtworkColors,
         )
         val dominant = artworkColors.dominant
         val accent = artworkColors.accent
-        val background = remember(dominant, accent, colorScheme) {
-            Brush.verticalGradient(
-                listOf(
-                    dominant.copy(alpha = 0.50f).compositeOver(colorScheme.background),
-                    accent.copy(alpha = 0.35f).compositeOver(colorScheme.surface),
-                    dominant.copy(alpha = 0.12f).compositeOver(colorScheme.background),
-                ),
-            )
+        val background = remember(dominant, accent, colorScheme, useGradientBackground) {
+            if (useGradientBackground) {
+                Brush.verticalGradient(
+                    listOf(
+                        dominant.copy(alpha = 0.50f).compositeOver(colorScheme.background),
+                        accent.copy(alpha = 0.35f).compositeOver(colorScheme.surface),
+                        dominant.copy(alpha = 0.12f).compositeOver(colorScheme.background),
+                    ),
+                )
+            } else {
+                SolidColor(colorScheme.background)
+            }
         }
         val isDark = colorScheme.background.luminance() < 0.5f
         val playButtonColor = remember(dominant, isDark) {
@@ -667,6 +694,7 @@ fun NowPlayingOverlay(
                             serversById = serversById,
                             motionState = artworkMotionState,
                             visualSkipRequest = visualSkipRequest,
+                            useProgrammaticMotion = useArtworkMotion,
                             modifier = Modifier.fillMaxSize(),
                             onArtworkClick = {
                                 if (showLyrics) showLyrics = false
@@ -1567,6 +1595,7 @@ private fun rememberMotionArtworkColors(
     freezePresentationUpdates: Boolean,
     fallbackDominant: Color,
     fallbackAccent: Color,
+    prewarmRadius: Int,
 ): ArtworkColors {
     if (queue.isEmpty()) {
         return ArtworkColors(fallbackDominant, fallbackAccent)
@@ -1580,8 +1609,8 @@ private fun rememberMotionArtworkColors(
     val toPage = ceil(clampedPosition).toInt().coerceIn(0, queue.lastIndex)
     val fraction = (clampedPosition - fromPage).coerceIn(0f, 1f)
     val centerPage = clampedPosition.roundToInt().coerceIn(0, queue.lastIndex)
-    val pageRequests = remember(queue, serversById, centerPage) {
-        (centerPage - ARTWORK_PREWARM_RADIUS_PAGES..centerPage + ARTWORK_PREWARM_RADIUS_PAGES)
+    val pageRequests = remember(queue, serversById, centerPage, prewarmRadius) {
+        (centerPage - prewarmRadius..centerPage + prewarmRadius)
             .filter { it in queue.indices }
             .associateWith { page ->
                 val item = queue[page]
@@ -1653,6 +1682,7 @@ private fun NowPlayingArtworkPagerHost(
     serversById: Map<Long, ServerConfig>,
     motionState: NowPlayingArtworkMotionState,
     visualSkipRequest: ArtworkPageRequest?,
+    useProgrammaticMotion: Boolean,
     modifier: Modifier = Modifier,
     onArtworkClick: () -> Unit,
     onUserSelectQueueItem: (Int) -> Unit,
@@ -1680,7 +1710,13 @@ private fun NowPlayingArtworkPagerHost(
     // update the page count first, then move after any insertion before the
     // current item. Track changes use the pager's own animation so there is
     // only one artwork render path and no overlay handoff frame.
-    LaunchedEffect(visualTargetPage, visualSkipSequence, currentTrack.songId, queueIdentity) {
+    LaunchedEffect(
+        visualTargetPage,
+        visualSkipSequence,
+        currentTrack.songId,
+        queueIdentity,
+        useProgrammaticMotion,
+    ) {
         val isLocalVisualSkip = requestedVisualPage != null && requestedVisualPage != targetPage
         if (isLocalVisualSkip && artworkPagerState.currentPage != visualTargetPage) {
             stableQueue = queue
@@ -1689,18 +1725,17 @@ private fun NowPlayingArtworkPagerHost(
                 val distancePages = abs(
                     visualTargetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
                 )
-                withFixedArtworkMotionDurationScale {
-                    artworkPagerState.animateArtworkMotionToPage(
-                        page = visualTargetPage,
-                        motionState = motionState,
-                        distancePages = distancePages,
-                        velocityBoostPagesPerSecond = if (visualTargetPage > artworkPagerState.currentArtworkPosition()) {
-                            ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES
-                        } else {
-                            -ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES
-                        },
-                    )
-                }
+                artworkPagerState.moveArtworkMotionToPage(
+                    page = visualTargetPage,
+                    motionState = motionState,
+                    distancePages = distancePages,
+                    useProgrammaticMotion = useProgrammaticMotion,
+                    velocityBoostPagesPerSecond = if (visualTargetPage > artworkPagerState.currentArtworkPosition()) {
+                        ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES
+                    } else {
+                        -ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES
+                    },
+                )
             } finally {
                 lastProgrammaticSettledPage = artworkPagerState.settledPage
                 programmaticPagerSync = false
@@ -1739,13 +1774,12 @@ private fun NowPlayingArtworkPagerHost(
                 val distancePages = abs(
                     targetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
                 )
-                withFixedArtworkMotionDurationScale {
-                    artworkPagerState.animateArtworkMotionToPage(
-                        page = targetPage,
-                        motionState = motionState,
-                        distancePages = distancePages,
-                    )
-                }
+                artworkPagerState.moveArtworkMotionToPage(
+                    page = targetPage,
+                    motionState = motionState,
+                    distancePages = distancePages,
+                    useProgrammaticMotion = useProgrammaticMotion,
+                )
             } finally {
                 lastProgrammaticSettledPage = artworkPagerState.settledPage
                 programmaticPagerSync = false
@@ -1872,6 +1906,31 @@ private suspend fun withFixedArtworkMotionDurationScale(block: suspend () -> Uni
         withContext(FixedArtworkMotionDurationScale) {
             block()
         }
+    }
+}
+
+private suspend fun PagerState.moveArtworkMotionToPage(
+    page: Int,
+    motionState: NowPlayingArtworkMotionState,
+    distancePages: Float,
+    useProgrammaticMotion: Boolean,
+    velocityBoostPagesPerSecond: Float = 0f,
+) {
+    if (useProgrammaticMotion) {
+        withFixedArtworkMotionDurationScale {
+            animateArtworkMotionToPage(
+                page = page,
+                motionState = motionState,
+                distancePages = distancePages,
+                velocityBoostPagesPerSecond = velocityBoostPagesPerSecond,
+            )
+        }
+    } else {
+        val safePageCount = pageCount.coerceAtLeast(1)
+        val targetPage = page.coerceIn(0, safePageCount - 1)
+        scrollToPage(targetPage)
+        motionState.position = targetPage.toFloat()
+        motionState.velocity = 0f
     }
 }
 
