@@ -42,7 +42,33 @@ interface LibraryCacheDao {
     @Query("SELECT * FROM cached_albums WHERE serverId = :serverId AND listType = :listType ORDER BY sortOrder")
     suspend fun getAlbums(serverId: Long, listType: String): List<CachedAlbumEntity>
 
-    @Query("SELECT * FROM cached_albums WHERE serverId = :serverId AND albumId = :albumId ORDER BY sortOrder LIMIT 1")
+    @Query(
+        """
+        SELECT * FROM cached_albums
+        WHERE serverId = :serverId AND albumId = :albumId
+        ORDER BY
+            CASE WHEN artist IS NOT NULL THEN 1 ELSE 0 END
+                + CASE WHEN artistId IS NOT NULL THEN 1 ELSE 0 END
+                + CASE WHEN coverArtId IS NOT NULL THEN 1 ELSE 0 END
+                + CASE WHEN songCount IS NOT NULL THEN 1 ELSE 0 END
+                + CASE WHEN durationSeconds IS NOT NULL THEN 1 ELSE 0 END
+                + CASE WHEN year IS NOT NULL THEN 1 ELSE 0 END
+                + CASE WHEN genre IS NOT NULL THEN 1 ELSE 0 END DESC,
+            CASE listType
+                WHEN 'newest' THEN 0
+                WHEN 'recent' THEN 1
+                WHEN 'highest' THEN 2
+                WHEN 'frequent' THEN 3
+                WHEN 'alphabeticalByName' THEN 4
+                WHEN 'alphabeticalByArtist' THEN 5
+                WHEN 'starred' THEN 6
+                WHEN 'random' THEN 7
+                ELSE 99
+            END,
+            sortOrder
+        LIMIT 1
+        """,
+    )
     suspend fun getAlbumSummary(serverId: Long, albumId: String): CachedAlbumEntity?
 
     @Query("SELECT * FROM cached_albums WHERE serverId = :serverId AND artistId = :artistId ORDER BY year DESC, name COLLATE NOCASE")
@@ -206,6 +232,34 @@ interface LibraryCacheDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSongMetadata(songs: List<CachedSongMetadataEntity>)
+
+    @Query(
+        """
+        DELETE FROM cached_song_metadata
+        WHERE serverId = :serverId
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_library_songs
+                WHERE cached_library_songs.serverId = cached_song_metadata.serverId
+                    AND cached_library_songs.songId = cached_song_metadata.songId
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_artist_detail_songs
+                WHERE cached_artist_detail_songs.serverId = cached_song_metadata.serverId
+                    AND cached_artist_detail_songs.songId = cached_song_metadata.songId
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_album_detail_songs
+                WHERE cached_album_detail_songs.serverId = cached_song_metadata.serverId
+                    AND cached_album_detail_songs.songId = cached_song_metadata.songId
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_playlist_detail_songs
+                WHERE cached_playlist_detail_songs.serverId = cached_song_metadata.serverId
+                    AND cached_playlist_detail_songs.songId = cached_song_metadata.songId
+            )
+        """,
+    )
+    suspend fun pruneUnreferencedSongMetadata(serverId: Long)
 
     @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId AND songId IN (:songIds)")
     suspend fun getSongMetadata(serverId: Long, songIds: List<String>): List<CachedSongMetadataEntity>

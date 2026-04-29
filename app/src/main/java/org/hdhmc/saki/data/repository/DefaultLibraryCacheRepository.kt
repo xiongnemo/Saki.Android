@@ -151,6 +151,7 @@ class DefaultLibraryCacheRepository @Inject constructor(
             )
         }
         dao.replaceSongs(serverId, entities)
+        dao.pruneUnreferencedSongMetadata(serverId)
         songs.asSequence()
             .map { song -> song.toMetadataEntity(serverId, cachedAt) }
             .chunked(SONG_METADATA_WRITE_CHUNK_SIZE)
