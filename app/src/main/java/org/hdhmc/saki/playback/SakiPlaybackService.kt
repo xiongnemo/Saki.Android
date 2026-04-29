@@ -47,6 +47,7 @@ import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -521,8 +522,11 @@ class SakiPlaybackService : MediaSessionService() {
     }
 
     private suspend fun saveLocalPlayQueueSnapshot(snapshot: LocalPlayQueueSnapshot) {
-        runCatching {
+        try {
             localPlayQueueRepository.save(snapshot)
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
         }
     }
 
@@ -532,13 +536,16 @@ class SakiPlaybackService : MediaSessionService() {
         currentSongId: String,
         positionMs: Long,
     ) {
-        runCatching {
+        try {
             subsonicRepository.savePlayQueue(
                 serverId = serverId,
                 songIds = songIds,
                 currentSongId = currentSongId,
                 positionMs = positionMs,
             )
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
         }
     }
 

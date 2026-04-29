@@ -734,13 +734,14 @@ class DefaultPlaybackManager @Inject constructor(
         // Expose queue in shuffled order if shuffle is active
         val displayOrder = shuffleDisplayOrder
         val (displayQueue, displayIndex) = if (displayOrder != null && queue.isNotEmpty()) {
-            val shuffled = displayOrder.mapNotNull { queue.getOrNull(it) }
-            val mappedIndex = playerToDisplay(playerIndex)
-            val currentPlayerItem = player.currentMediaItem?.toQueueItemOrNull()
-            val reconciledIndex = currentPlayerItem?.let { current ->
-                shuffled.indexOfFirst { item -> item.songId == current.songId }
-                    .takeIf { index -> index >= 0 }
-            } ?: mappedIndex
+            val shuffledEntries = displayOrder.mapNotNull { index ->
+                queue.getOrNull(index)?.let { item -> index to item }
+            }
+            val shuffled = shuffledEntries.map { (_, item) -> item }
+            val reconciledIndex = shuffledEntries
+                .indexOfFirst { (index, _) -> index == playerIndex }
+                .takeIf { index -> index >= 0 }
+                ?: playerToDisplay(playerIndex)
             shuffled to reconciledIndex
         } else {
             queue to playerIndex
