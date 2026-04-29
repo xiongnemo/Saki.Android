@@ -136,6 +136,7 @@ import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.RepeatModeSetting
 import org.hdhmc.saki.domain.model.ServerConfig
 import org.hdhmc.saki.domain.model.SongLyrics
+import org.hdhmc.saki.domain.model.StreamQuality
 import java.io.File
 import coil3.imageLoader
 import coil3.request.ImageRequest
@@ -947,9 +948,10 @@ fun NowPlayingOverlay(
                         val runtimeInfo = playbackState.runtimeInfo
                         val format = track.stableFormatLabel()
                         val sampleRate = track.sampleRate?.let(::formatSampleRateShort)
-                        val metadataBitrate = track.bitRateKbps?.let { "$it kbps" }
-                        val runtimeBitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
-                        val bitrate = metadataBitrate ?: runtimeBitrate
+                        val bitrate = track.displayBitrate(
+                            runtimeInfo = runtimeInfo,
+                            preferStableMetadata = true,
+                        )
                         val techParts = listOfNotNull(format, sampleRate, bitrate)
                         if (techParts.isNotEmpty()) {
                             Text(
@@ -2027,9 +2029,13 @@ private fun formatBitrate(bitrate: Int): String {
     }
 }
 
-private fun PlaybackQueueItem.displayBitrate(runtimeInfo: PlaybackRuntimeInfo?): String? {
+private fun PlaybackQueueItem.displayBitrate(
+    runtimeInfo: PlaybackRuntimeInfo?,
+    preferStableMetadata: Boolean = false,
+): String? {
     val metadataBitrate = bitRateKbps?.let { "$it kbps" }
     val runtimeBitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
+    if (preferStableMetadata) return metadataBitrate ?: runtimeBitrate
     return if (prefersMetadataBitrate()) {
         metadataBitrate ?: runtimeBitrate
     } else {
@@ -2038,7 +2044,7 @@ private fun PlaybackQueueItem.displayBitrate(runtimeInfo: PlaybackRuntimeInfo?):
 }
 
 private fun PlaybackQueueItem.prefersMetadataBitrate(): Boolean {
-    return !qualityLabel.equals("Original", ignoreCase = true) && bitRateKbps != null
+    return !qualityLabel.equals(StreamQuality.ORIGINAL.label, ignoreCase = true) && bitRateKbps != null
 }
 
 private fun PlaybackQueueItem.stableFormatLabel(): String? {
