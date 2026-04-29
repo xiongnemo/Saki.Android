@@ -119,6 +119,17 @@ class DefaultLibraryCacheRepository @Inject constructor(
         dao.replacePlaylists(serverId, entities)
     }
 
+    override suspend fun getCachedPlaylistDetailIds(
+        serverId: Long,
+        playlistIds: List<String>,
+    ): Set<String> = withContext(ioDispatcher) {
+        if (playlistIds.isEmpty()) return@withContext emptySet()
+        playlistIds.distinct()
+            .chunked(IN_CLAUSE_QUERY_CHUNK_SIZE)
+            .flatMap { chunk -> dao.getCachedPlaylistDetailIds(serverId, chunk) }
+            .toSet()
+    }
+
     override suspend fun getSongs(serverId: Long): List<Song> = withContext(ioDispatcher) {
         dao.getSongs(serverId).map { it.toDomain() }
     }
@@ -316,10 +327,10 @@ class DefaultLibraryCacheRepository @Inject constructor(
         if (songIds.isEmpty()) return emptyList()
         val distinctSongIds = songIds.distinct()
         val metadataSongs = distinctSongIds
-            .chunked(SONG_METADATA_QUERY_CHUNK_SIZE)
+            .chunked(IN_CLAUSE_QUERY_CHUNK_SIZE)
             .flatMap { chunk -> dao.getSongMetadata(serverId, chunk).map { it.toDomain() } }
         val librarySongs = distinctSongIds
-            .chunked(SONG_METADATA_QUERY_CHUNK_SIZE)
+            .chunked(IN_CLAUSE_QUERY_CHUNK_SIZE)
             .flatMap { chunk -> dao.getLibrarySongs(serverId, chunk).map { it.toDomain() } }
         val songsById = (librarySongs + metadataSongs).associateBy(Song::id)
         return songIds.mapNotNull { songId -> songsById[songId] }
@@ -602,7 +613,7 @@ class DefaultLibraryCacheRepository @Inject constructor(
     )
 
     private companion object {
-        const val SONG_METADATA_QUERY_CHUNK_SIZE = 500
+        const val IN_CLAUSE_QUERY_CHUNK_SIZE = 500
         const val SONG_METADATA_WRITE_CHUNK_SIZE = 500
     }
 }
