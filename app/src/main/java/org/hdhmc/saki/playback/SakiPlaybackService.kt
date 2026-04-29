@@ -31,7 +31,11 @@ import org.hdhmc.saki.MainActivity
 import org.hdhmc.saki.R
 import org.hdhmc.saki.data.remote.HTTP_USER_AGENT
 import org.hdhmc.saki.domain.model.LyricLine
+import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshot
+import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.domain.model.SoundBalancingMode
+import org.hdhmc.saki.domain.model.StreamQuality
+import org.hdhmc.saki.domain.repository.LocalPlayQueueRepository
 import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
 import org.hdhmc.saki.domain.repository.SubsonicRepository
 import com.google.common.util.concurrent.ListenableFuture
@@ -43,6 +47,7 @@ import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -77,6 +82,9 @@ class SakiPlaybackService : MediaSessionService() {
 
     @Inject
     lateinit var playbackPreferencesRepository: PlaybackPreferencesRepository
+
+    @Inject
+    lateinit var localPlayQueueRepository: LocalPlayQueueRepository
 
     @Inject
     lateinit var streamCache: SimpleCache
@@ -367,34 +375,43 @@ class SakiPlaybackService : MediaSessionService() {
 
         // Use cached prefs to avoid blocking; fall back to blocking read if not yet available
         val prefs = cachedPlaybackPrefs ?: runBlocking { playbackPreferencesRepository.getPreferences() }
-        val quality = if (prefs.adaptiveQualityEnabled) {
-            val preferred = when (networkTypeProvider.networkType.value) {
+        val requestedQuality = if (prefs.adaptiveQualityEnabled) {
+            when (networkTypeProvider.networkType.value) {
                 org.hdhmc.saki.data.remote.NetworkType.WIFI -> prefs.wifiStreamQuality
                 org.hdhmc.saki.data.remote.NetworkType.MOBILE -> prefs.mobileStreamQuality
             }
-            val cachedKey = streamCacheRepository.findCachedQualityKey(serverId, songId, preferred)
-            if (cachedKey != null) org.hdhmc.saki.domain.model.StreamQuality.fromStorageKey(cachedKey) else preferred
         } else {
             val maxBitRate = uri.getQueryParameter("maxBitRate")?.toIntOrNull()
-            val format = uri.getQueryParameter("format")
-            val matched = org.hdhmc.saki.domain.model.StreamQuality.entries.find { it.maxBitRate == maxBitRate }
-                ?: org.hdhmc.saki.domain.model.StreamQuality.ORIGINAL
-            // If the placeholder has a specific format, pass it through to buildStreamRequest
-            if (format != null && format != matched.format) {
-                // Use maxBitRate/format directly instead of going through StreamQuality enum
-                val streamRequest = runBlocking {
-                    subsonicRepository.buildStreamRequest(serverId, songId, maxBitRate, format)
-                }
-                if (streamRequest.candidates.isEmpty()) {
-                    throw IOException("No stream candidates for song $songId on server $serverId")
-                }
-                val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, matched)
-                return dataSpec.buildUpon()
-                    .setUri(streamRequest.candidates.first().url)
-                    .setKey(cacheKey)
-                    .build()
+            StreamQuality.entries.find { it.maxBitRate == maxBitRate } ?: StreamQuality.ORIGINAL
+        }
+        val preferLocalCache = shouldPreferLocalStreamCache(serverId)
+        val cacheLookupQuality = if (preferLocalCache) StreamQuality.entries.last() else requestedQuality
+        val cachedQualityKey = streamCacheRepository.findCachedQualityKey(serverId, songId, cacheLookupQuality)
+        val cachedQuality = cachedQualityKey?.let { key -> StreamQuality.fromStorageKey(key) }
+        val cachedResourceKey = cachedQuality?.let { quality ->
+            streamCacheRepository.buildCacheKey(serverId, songId, quality)
+        }
+        if (preferLocalCache && cachedResourceKey != null) {
+            return dataSpec.buildUpon()
+                .setUri(cachedStreamUri(cachedResourceKey))
+                .setKey(cachedResourceKey)
+                .build()
+        }
+
+        val quality = cachedQuality ?: requestedQuality
+        val format = uri.getQueryParameter("format")
+        if (!prefs.adaptiveQualityEnabled && cachedResourceKey == null && format != null && format != requestedQuality.format) {
+            val streamRequest = runBlocking {
+                subsonicRepository.buildStreamRequest(serverId, songId, requestedQuality.maxBitRate, format)
             }
-            matched
+            if (streamRequest.candidates.isEmpty()) {
+                throw IOException("No stream candidates for song $songId on server $serverId")
+            }
+            val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, requestedQuality)
+            return dataSpec.buildUpon()
+                .setUri(streamRequest.candidates.first().url)
+                .setKey(cacheKey)
+                .build()
         }
 
         val streamRequest = runBlocking {
@@ -409,7 +426,20 @@ class SakiPlaybackService : MediaSessionService() {
 
         return dataSpec.buildUpon()
             .setUri(realUrl)
-            .setKey(cacheKey)
+            .setKey(cachedResourceKey ?: cacheKey)
+            .build()
+    }
+
+    private fun shouldPreferLocalStreamCache(serverId: Long): Boolean {
+        val probeResults = endpointSelector.getLastProbeResults(serverId)
+        return probeResults.isNotEmpty() && probeResults.none { result -> result.reachable }
+    }
+
+    private fun cachedStreamUri(cacheKey: String): Uri {
+        return Uri.Builder()
+            .scheme("saki-cache")
+            .authority("stream")
+            .appendQueryParameter("key", cacheKey)
             .build()
     }
 
@@ -448,24 +478,74 @@ class SakiPlaybackService : MediaSessionService() {
         val itemCount = activePlayer.mediaItemCount
         if (itemCount == 0) return
         val request = activePlayer.currentMediaItem?.toPlaybackRequestOrNull() ?: return
-        val songIds = (0 until itemCount).mapNotNull { i ->
-            activePlayer.getMediaItemAt(i).toPlaybackRequestOrNull()?.songId
-        }
+        val queueRequests = (0 until itemCount)
+            .mapNotNull { i -> activePlayer.getMediaItemAt(i).toPlaybackRequestOrNull() }
+            .filter { itemRequest -> itemRequest.serverId == request.serverId }
+        val songIds = queueRequests.map(PlaybackRequest::songId)
         if (songIds.isEmpty()) return
         val positionMs = activePlayer.currentPosition
         val serverId = request.serverId
         val currentSongId = request.songId
+        val snapshot = LocalPlayQueueSnapshot(
+            serverId = serverId,
+            songs = queueRequests.map(PlaybackRequest::toSong),
+            currentSongId = currentSongId,
+            positionMs = positionMs,
+            updatedAt = System.currentTimeMillis(),
+        )
         savePlayQueueJob?.cancel()
-        savePlayQueueJob = serviceScope.launch {
-            if (!immediate) kotlinx.coroutines.delay(500)
-            runCatching {
-                subsonicRepository.savePlayQueue(
+        if (immediate) {
+            runBlocking {
+                saveLocalPlayQueueSnapshot(snapshot)
+            }
+            savePlayQueueJob = serviceScope.launch {
+                saveRemotePlayQueue(
                     serverId = serverId,
                     songIds = songIds,
                     currentSongId = currentSongId,
                     positionMs = positionMs,
                 )
             }
+            return
+        }
+
+        savePlayQueueJob = serviceScope.launch {
+            delay(500)
+            saveLocalPlayQueueSnapshot(snapshot)
+            saveRemotePlayQueue(
+                serverId = serverId,
+                songIds = songIds,
+                currentSongId = currentSongId,
+                positionMs = positionMs,
+            )
+        }
+    }
+
+    private suspend fun saveLocalPlayQueueSnapshot(snapshot: LocalPlayQueueSnapshot) {
+        try {
+            localPlayQueueRepository.save(snapshot)
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
+        }
+    }
+
+    private suspend fun saveRemotePlayQueue(
+        serverId: Long,
+        songIds: List<String>,
+        currentSongId: String,
+        positionMs: Long,
+    ) {
+        try {
+            subsonicRepository.savePlayQueue(
+                serverId = serverId,
+                songIds = songIds,
+                currentSongId = currentSongId,
+                positionMs = positionMs,
+            )
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
         }
     }
 
@@ -745,6 +825,31 @@ class SakiPlaybackService : MediaSessionService() {
             }
         }.getOrNull()
     }
+}
+
+private fun PlaybackRequest.toSong(): Song {
+    return Song(
+        id = songId,
+        parentId = null,
+        title = title,
+        album = album,
+        albumId = albumId,
+        artist = artist,
+        artistId = artistId,
+        coverArtId = coverArtId,
+        durationSeconds = durationMs?.div(1_000L)?.toInt(),
+        track = track,
+        discNumber = discNumber,
+        year = null,
+        genre = null,
+        bitRate = sourceBitRate ?: bitRate,
+        sampleRate = sampleRate,
+        suffix = suffix,
+        contentType = mimeType,
+        sizeBytes = null,
+        path = null,
+        created = null,
+    )
 }
 
 private fun PlaybackException.shouldRetryNextEndpoint(): Boolean {
