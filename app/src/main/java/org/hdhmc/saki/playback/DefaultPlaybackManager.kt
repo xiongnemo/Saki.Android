@@ -735,12 +735,19 @@ class DefaultPlaybackManager @Inject constructor(
         val displayOrder = shuffleDisplayOrder
         val (displayQueue, displayIndex) = if (displayOrder != null && queue.isNotEmpty()) {
             val shuffled = displayOrder.mapNotNull { queue.getOrNull(it) }
-            shuffled to playerToDisplay(playerIndex)
+            val mappedIndex = playerToDisplay(playerIndex)
+            val currentPlayerItem = player.currentMediaItem?.toQueueItemOrNull()
+            val reconciledIndex = currentPlayerItem?.let { current ->
+                shuffled.indexOfFirst { item -> item.songId == current.songId }
+                    .takeIf { index -> index >= 0 }
+            } ?: mappedIndex
+            shuffled to reconciledIndex
         } else {
             queue to playerIndex
         }
 
         val currentRequest = player.currentMediaItem?.toPlaybackRequestOrNull()
+        val currentPlayerItem = player.currentMediaItem?.toQueueItemOrNull()
         val cachedQualityKey = if (currentRequest != null && !currentRequest.isCached && cacheReady) {
             streamCacheRepository.findCachedQualityKey(
                 currentRequest.serverId, currentRequest.songId, playbackQuality(currentRequest.serverId),
@@ -751,7 +758,7 @@ class DefaultPlaybackManager @Inject constructor(
         mutablePlaybackProgress.value = progress
 
         mutablePlaybackState.update { state ->
-            val currentDisplayItem = displayQueue.getOrNull(displayIndex)?.let { item ->
+            val currentDisplayItem = (currentPlayerItem ?: displayQueue.getOrNull(displayIndex))?.let { item ->
                 if (item.isCached) return@let item
                 if (state.preferences.adaptiveQualityEnabled) {
                     val quality = if (streamCached) {

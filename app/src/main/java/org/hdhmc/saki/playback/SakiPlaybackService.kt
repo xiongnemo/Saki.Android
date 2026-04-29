@@ -388,6 +388,7 @@ class SakiPlaybackService : MediaSessionService() {
         val cachedKey = streamCacheRepository.findCachedQualityKey(serverId, songId, cacheLookupQuality)
         if (preferLocalCache && cachedKey != null) {
             return dataSpec.buildUpon()
+                .setUri(cachedStreamUri(cachedKey))
                 .setKey(cachedKey)
                 .build()
         }
@@ -427,6 +428,14 @@ class SakiPlaybackService : MediaSessionService() {
     private fun shouldPreferLocalStreamCache(serverId: Long): Boolean {
         val probeResults = endpointSelector.getLastProbeResults(serverId)
         return probeResults.isNotEmpty() && probeResults.none { result -> result.reachable }
+    }
+
+    private fun cachedStreamUri(cacheKey: String): Uri {
+        return Uri.Builder()
+            .scheme("saki-cache")
+            .authority("stream")
+            .appendQueryParameter("key", cacheKey)
+            .build()
     }
 
     override fun onGetSession(
