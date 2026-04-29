@@ -470,19 +470,52 @@ class SakiPlaybackService : MediaSessionService() {
             updatedAt = System.currentTimeMillis(),
         )
         savePlayQueueJob?.cancel()
-        savePlayQueueJob = serviceScope.launch {
-            if (!immediate) kotlinx.coroutines.delay(500)
-            runCatching {
-                localPlayQueueRepository.save(snapshot)
+        if (immediate) {
+            runBlocking {
+                saveLocalPlayQueueSnapshot(snapshot)
             }
-            runCatching {
-                subsonicRepository.savePlayQueue(
+            savePlayQueueJob = serviceScope.launch {
+                saveRemotePlayQueue(
                     serverId = serverId,
                     songIds = songIds,
                     currentSongId = currentSongId,
                     positionMs = positionMs,
                 )
             }
+            return
+        }
+
+        savePlayQueueJob = serviceScope.launch {
+            delay(500)
+            saveLocalPlayQueueSnapshot(snapshot)
+            saveRemotePlayQueue(
+                serverId = serverId,
+                songIds = songIds,
+                currentSongId = currentSongId,
+                positionMs = positionMs,
+            )
+        }
+    }
+
+    private suspend fun saveLocalPlayQueueSnapshot(snapshot: LocalPlayQueueSnapshot) {
+        runCatching {
+            localPlayQueueRepository.save(snapshot)
+        }
+    }
+
+    private suspend fun saveRemotePlayQueue(
+        serverId: Long,
+        songIds: List<String>,
+        currentSongId: String,
+        positionMs: Long,
+    ) {
+        runCatching {
+            subsonicRepository.savePlayQueue(
+                serverId = serverId,
+                songIds = songIds,
+                currentSongId = currentSongId,
+                positionMs = positionMs,
+            )
         }
     }
 

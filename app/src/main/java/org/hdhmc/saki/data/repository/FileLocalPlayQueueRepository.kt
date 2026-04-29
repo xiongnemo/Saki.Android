@@ -15,17 +15,26 @@ import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.domain.repository.LocalPlayQueueRepository
 
 @Singleton
-class FileLocalPlayQueueRepository @Inject constructor(
-    @param:ApplicationContext context: Context,
+class FileLocalPlayQueueRepository internal constructor(
+    private val directory: File,
     moshi: Moshi,
-    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val ioDispatcher: CoroutineDispatcher,
 ) : LocalPlayQueueRepository {
-    private val directory = File(context.filesDir, "play_queue_snapshots")
     private val adapter = moshi.adapter(LocalPlayQueueSnapshotDto::class.java)
 
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        moshi: Moshi,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
+    ) : this(
+        directory = File(context.filesDir, SNAPSHOT_DIRECTORY),
+        moshi = moshi,
+        ioDispatcher = ioDispatcher,
+    )
+
     override suspend fun get(serverId: Long): LocalPlayQueueSnapshot? = withContext(ioDispatcher) {
-        val file = snapshotFile(serverId)
-        if (!file.isFile) return@withContext null
+        val file = readableSnapshotFile(serverId) ?: return@withContext null
         runCatching {
             adapter.fromJson(file.readText())?.toDomain()
         }.getOrNull()
@@ -34,27 +43,68 @@ class FileLocalPlayQueueRepository @Inject constructor(
     override suspend fun save(snapshot: LocalPlayQueueSnapshot): Unit = withContext(ioDispatcher) {
         if (snapshot.songs.isEmpty()) {
             snapshotFile(snapshot.serverId).delete()
+            snapshotBackupFile(snapshot.serverId).delete()
             return@withContext
         }
         directory.mkdirs()
         val target = snapshotFile(snapshot.serverId)
-        val temp = File(directory, "${target.name}.tmp")
-        temp.writeText(adapter.toJson(snapshot.toDto()))
-        if (target.exists() && !target.delete()) {
-            temp.delete()
-            error("Unable to replace local play queue snapshot for server ${snapshot.serverId}.")
-        }
-        if (!temp.renameTo(target)) {
-            temp.delete()
-            error("Unable to write local play queue snapshot for server ${snapshot.serverId}.")
-        }
+        writeSnapshotFile(
+            target = target,
+            backup = snapshotBackupFile(snapshot.serverId),
+            json = adapter.toJson(snapshot.toDto()),
+            serverId = snapshot.serverId,
+        )
     }
 
     override suspend fun clear(serverId: Long): Unit = withContext(ioDispatcher) {
         snapshotFile(serverId).delete()
+        snapshotBackupFile(serverId).delete()
     }
 
     private fun snapshotFile(serverId: Long): File = File(directory, "server_$serverId.json")
+
+    private fun snapshotBackupFile(serverId: Long): File = File(directory, "server_$serverId.json.bak")
+
+    private fun readableSnapshotFile(serverId: Long): File? {
+        val target = snapshotFile(serverId)
+        if (target.isFile) return target
+
+        val backup = snapshotBackupFile(serverId)
+        if (!backup.isFile) return null
+        backup.renameTo(target)
+        return if (target.isFile) target else backup
+    }
+
+    private fun writeSnapshotFile(
+        target: File,
+        backup: File,
+        json: String,
+        serverId: Long,
+    ) {
+        val temp = File.createTempFile("${target.name}.", ".tmp", directory)
+        try {
+            temp.writeText(json)
+            if (backup.exists() && !backup.delete()) {
+                error("Unable to clear stale local play queue snapshot backup for server $serverId.")
+            }
+            if (target.exists() && !target.renameTo(backup)) {
+                error("Unable to prepare local play queue snapshot replacement for server $serverId.")
+            }
+            if (!temp.renameTo(target)) {
+                if (backup.exists() && !target.exists()) {
+                    backup.renameTo(target)
+                }
+                error("Unable to write local play queue snapshot for server $serverId.")
+            }
+            backup.delete()
+        } finally {
+            temp.delete()
+        }
+    }
+
+    private companion object {
+        const val SNAPSHOT_DIRECTORY = "play_queue_snapshots"
+    }
 }
 
 @JsonClass(generateAdapter = true)
