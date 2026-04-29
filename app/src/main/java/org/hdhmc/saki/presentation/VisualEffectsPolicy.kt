@@ -25,6 +25,8 @@ data class VisualEffectsPolicy(
     val deviceCapability: DeviceCapability,
     val useNowPlayingDynamicArtworkColors: Boolean,
     val useNowPlayingGradientBackground: Boolean,
+    val useNowPlayingArtworkMotion: Boolean,
+    val nowPlayingArtworkPrewarmRadius: Int,
 )
 
 @Composable
@@ -44,6 +46,12 @@ private fun detectVisualEffectsPolicy(context: Context): VisualEffectsPolicy {
         deviceCapability = capability,
         useNowPlayingDynamicArtworkColors = richNowPlayingEffects,
         useNowPlayingGradientBackground = richNowPlayingEffects,
+        useNowPlayingArtworkMotion = capability.tier != DeviceCapabilityTier.LOW,
+        nowPlayingArtworkPrewarmRadius = when (capability.tier) {
+            DeviceCapabilityTier.LOW -> LOW_ARTWORK_PREWARM_RADIUS
+            DeviceCapabilityTier.LEGACY -> LEGACY_ARTWORK_PREWARM_RADIUS
+            DeviceCapabilityTier.STANDARD, DeviceCapabilityTier.HIGH -> RICH_ARTWORK_PREWARM_RADIUS
+        },
     )
 }
 
@@ -73,3 +81,6 @@ private fun detectDeviceCapability(context: Context): DeviceCapability {
 
 private const val LOW_MEMORY_CLASS_MB = 128
 private const val HIGH_MEMORY_CLASS_MB = 384
+private const val LOW_ARTWORK_PREWARM_RADIUS = 0
+private const val LEGACY_ARTWORK_PREWARM_RADIUS = 1
+private const val RICH_ARTWORK_PREWARM_RADIUS = 3

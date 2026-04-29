@@ -19,6 +19,7 @@ import org.hdhmc.saki.domain.model.CacheStorageSummary
 import org.hdhmc.saki.domain.model.CachedSong
 import org.hdhmc.saki.domain.model.DefaultBrowseTab
 import org.hdhmc.saki.domain.model.LibraryIndexes
+import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshot
 import org.hdhmc.saki.domain.model.regroupByLocale
 import org.hdhmc.saki.domain.model.PlaybackProgressState
 import org.hdhmc.saki.domain.model.PlaybackSessionState
@@ -34,6 +35,7 @@ import org.hdhmc.saki.domain.model.TextScale
 import org.hdhmc.saki.domain.repository.AppPreferencesRepository
 import org.hdhmc.saki.domain.repository.CachedSongRepository
 import org.hdhmc.saki.domain.repository.LibraryCacheRepository
+import org.hdhmc.saki.domain.repository.LocalPlayQueueRepository
 import org.hdhmc.saki.domain.repository.PlaybackManager
 import org.hdhmc.saki.playback.LyricsHolder
 import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
@@ -73,6 +75,7 @@ class SakiAppViewModel @Inject constructor(
     private val streamCacheRepository: StreamCacheRepository,
     private val playbackPreferencesRepository: PlaybackPreferencesRepository,
     private val libraryCacheRepository: LibraryCacheRepository,
+    private val localPlayQueueRepository: LocalPlayQueueRepository,
     private val playbackManager: PlaybackManager,
     private val lyricsHolder: LyricsHolder,
     private val endpointSelector: EndpointSelector,
@@ -749,6 +752,10 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    fun showOfflineSongUnavailable() {
+        snackbarMessages.tryEmit(SnackbarMessage(UiText.resource(R.string.message_song_unavailable_offline)))
+    }
+
     fun deleteCachedSong(cacheId: String) {
         viewModelScope.launch {
             runCatching {
@@ -1038,10 +1045,16 @@ class SakiAppViewModel @Inject constructor(
                     endpointSelector.probe(selectedServerId, server)
                     refreshEndpointStatus()
                 }
-                if (endpointSelector.getActiveEndpointId(selectedServerId) != null) {
-                    if (uiState.value.playbackState.currentItem == null) {
+                val hasReachableEndpoint = endpointSelector.getActiveEndpointId(selectedServerId) != null &&
+                    !endpointStatus.value.isOfflineDegraded
+                if (uiState.value.playbackState.currentItem == null) {
+                    if (hasReachableEndpoint) {
                         restorePlayQueue(selectedServerId)
+                    } else {
+                        restoreLocalPlayQueue(selectedServerId, offlineOnly = true)
                     }
+                }
+                if (hasReachableEndpoint) {
                     refreshServerContent(selectedServerId, forceRefresh = serverChanged)
                 }
             }
@@ -1059,10 +1072,6 @@ class SakiAppViewModel @Inject constructor(
     private suspend fun refreshCacheStorageSummary(serverId: Long?) {
         val downloadSummary = cachedSongRepository.getCacheStorageSummary(serverId)
         val fullStreamSummary = streamCacheRepository.getStreamCacheSummary(serverId)
-        val playableStreamSummary = streamCacheRepository.getStreamCacheSummary(
-            serverId = serverId,
-            quality = uiState.value.playbackState.preferences.streamQuality,
-        )
         val imageCacheDir = appContext.cacheDir.resolve("image_cache")
         val imageCacheBytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             imageCacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
@@ -1076,7 +1085,7 @@ class SakiAppViewModel @Inject constructor(
                         hasStreamingCache = true,
                         imageCacheBytes = imageCacheBytes,
                     ),
-                    streamCachedSongIds = playableStreamSummary.cachedSongIds,
+                    streamCachedSongIds = fullStreamSummary.cachedSongIds,
                 )
             } else {
                 state
@@ -1104,8 +1113,75 @@ class SakiAppViewModel @Inject constructor(
                 )
             }.onFailure { e ->
                 if (e is CancellationException) throw e
+                restoreLocalPlayQueueSnapshot(
+                    serverId = serverId,
+                    offlineOnly = endpointStatus.value.isOfflineDegraded,
+                )
             }
         }
+    }
+
+    private fun restoreLocalPlayQueue(
+        serverId: Long,
+        offlineOnly: Boolean,
+    ) {
+        viewModelScope.launch {
+            restoreLocalPlayQueueSnapshot(serverId, offlineOnly)
+        }
+    }
+
+    private suspend fun restoreLocalPlayQueueSnapshot(
+        serverId: Long,
+        offlineOnly: Boolean,
+    ) {
+        if (uiState.value.playbackState.currentItem != null || uiState.value.playbackState.queue.isNotEmpty()) {
+            return
+        }
+        val snapshot = localPlayQueueRepository.get(serverId) ?: return
+        if (snapshot.songs.isEmpty()) return
+
+        val restored = if (offlineOnly) {
+            snapshot.offlinePlayableRestorePlan(serverId) ?: return
+        } else {
+            val rawStartIndex = snapshot.songs.indexOfFirst { song -> song.id == snapshot.currentSongId }
+            LocalPlayQueueRestorePlan(
+                songs = snapshot.songs,
+                startIndex = rawStartIndex.coerceAtLeast(0),
+                positionMs = if (rawStartIndex >= 0) snapshot.positionMs else 0L,
+            )
+        }
+        playbackManager.restoreQueue(
+            serverId = serverId,
+            songs = restored.songs,
+            startIndex = restored.startIndex,
+            positionMs = restored.positionMs,
+        )
+    }
+
+    private suspend fun LocalPlayQueueSnapshot.offlinePlayableRestorePlan(
+        serverId: Long,
+    ): LocalPlayQueueRestorePlan? {
+        val localCacheQuality = StreamQuality.entries.last()
+        val downloadedSongIds = cachedSongRepository.getPlayableCachedSongs(serverId, localCacheQuality).keys
+        val streamCachedSongIds = songs.asSequence()
+            .map(Song::id)
+            .filter { songId -> streamCacheRepository.findCachedQualityKey(serverId, songId, localCacheQuality) != null }
+            .toSet()
+        val playableSongIds = downloadedSongIds + streamCachedSongIds
+        val originalStartIndex = songs.indexOfFirst { song -> song.id == currentSongId }
+            .coerceAtLeast(0)
+        val playableSongs = songs.withIndex()
+            .filter { (_, song) -> song.id in playableSongIds }
+        if (playableSongs.isEmpty()) return null
+
+        val startItem = playableSongs.firstOrNull { (index, _) -> index >= originalStartIndex }
+            ?: playableSongs.first()
+        val startIndex = playableSongs.indexOfFirst { (index, _) -> index == startItem.index }
+        return LocalPlayQueueRestorePlan(
+            songs = playableSongs.map { (_, song) -> song },
+            startIndex = startIndex.coerceAtLeast(0),
+            positionMs = if (startItem.value.id == currentSongId) positionMs else 0L,
+        )
     }
 
     private fun loadCachedContent(serverId: Long) {
@@ -1584,7 +1660,12 @@ data class EndpointStatus(
     val isForced: Boolean = false,
     val probeResults: List<EndpointProbeInfo> = emptyList(),
     val isProbing: Boolean = false,
-)
+) {
+    val isOfflineDegraded: Boolean
+        get() = !isProbing &&
+            probeResults.isNotEmpty() &&
+            probeResults.none { it.reachable }
+}
 
 data class EndpointProbeInfo(
     val id: Long,
@@ -1592,6 +1673,12 @@ data class EndpointProbeInfo(
     val baseUrl: String,
     val latencyMs: Long?,
     val reachable: Boolean,
+)
+
+private data class LocalPlayQueueRestorePlan(
+    val songs: List<Song>,
+    val startIndex: Int,
+    val positionMs: Long,
 )
 
 enum class BrowseSection {

@@ -136,6 +136,7 @@
     <string name="library_playlist_sequence">Playlist sequence</string>
     <string name="library_play_playlist">Play playlist</string>
     <string name="library_available_offline">Available offline</string>
+    <string name="library_unavailable_offline">Unavailable offline</string>
     <string name="library_unknown_artist_album">Unknown artist • Unknown album</string>
     <string name="library_more_actions">More actions</string>
     <string name="library_play_next">Play next</string>
@@ -176,6 +177,7 @@
     <string name="browse_needs_server_body">Add a Subsonic server first, then swipe through artists, albums, playlists, and songs.</string>
     <string name="browse_add_server">Add server</string>
     <string name="browse_import_backup">Import backup</string>
+    <string name="browse_offline_degraded_banner">Offline - showing cached data. Only downloaded or fully cached songs can play.</string>
     <string name="browse_search_placeholder">Search %1$s</string>
     <string name="browse_close_search">Close search</string>
     <string name="browse_search_server">Search this server</string>
@@ -267,6 +269,7 @@
     <string name="error_cache_song">Unable to cache the song.</string>
     <string name="error_play_cached_song">Unable to play the cached song.</string>
     <string name="error_start_offline_playback">Unable to start offline playback.</string>
+    <string name="message_song_unavailable_offline">This song is not available offline.</string>
     <string name="message_removed_cached_file">Removed cached file.</string>
     <string name="error_remove_cached_file">Unable to remove the cached file.</string>
     <string name="message_no_downloads_to_clear">No downloads to clear.</string>

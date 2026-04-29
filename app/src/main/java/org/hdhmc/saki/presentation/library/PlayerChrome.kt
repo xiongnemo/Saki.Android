@@ -4,6 +4,7 @@ import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -45,6 +46,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -96,6 +98,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -105,6 +108,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -128,15 +132,23 @@ import org.hdhmc.saki.R
 import org.hdhmc.saki.presentation.EndpointProbeInfo
 import org.hdhmc.saki.domain.model.PlaybackQueueItem
 import org.hdhmc.saki.domain.model.PlaybackProgressState
+import org.hdhmc.saki.domain.model.PlaybackRuntimeInfo
 import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.RepeatModeSetting
 import org.hdhmc.saki.domain.model.ServerConfig
 import org.hdhmc.saki.domain.model.SongLyrics
+import org.hdhmc.saki.domain.model.StreamQuality
 import java.io.File
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -333,25 +345,69 @@ fun NowPlayingOverlay(
     lyrics: SongLyrics? = null,
     useDynamicArtworkColors: Boolean = true,
     useGradientBackground: Boolean = true,
+    useArtworkMotion: Boolean = true,
+    artworkPrewarmRadius: Int = ARTWORK_PREWARM_RADIUS_PAGES,
 ) {
     val serversById = remember(servers) { servers.associateBy { it.id } }
     var showDetails by remember(track.songId) { mutableStateOf(false) }
     var showMenu by remember(track.songId) { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showEndpointStatus by remember { mutableStateOf(false) }
+    val visualSnapshot = rememberNowPlayingVisualSnapshot(
+        queue = playbackState.queue,
+        currentIndex = playbackState.currentIndex,
+        currentTrack = track,
+    )
+    val artworkMotionState = rememberNowPlayingArtworkMotionState(visualSnapshot.currentIndex, visible)
+    var visualSkipRequest by remember { mutableStateOf<ArtworkPageRequest?>(null) }
+    fun requestVisualSkip(delta: Int) {
+        val queue = visualSnapshot.queue
+        val basePage = visualSkipRequest
+            ?.page
+            ?.takeIf { it in queue.indices }
+            ?: visualSnapshot.currentIndex
+        val targetPage = basePage + delta
+        if (targetPage in queue.indices) {
+            visualSkipRequest = ArtworkPageRequest(
+                page = targetPage,
+                sequence = (visualSkipRequest?.sequence ?: 0) + 1,
+            ).takeUnless { targetPage == visualSnapshot.currentIndex }
+        }
+    }
+    LaunchedEffect(visualSkipRequest, visualSnapshot.currentIndex) {
+        val request = visualSkipRequest ?: return@LaunchedEffect
+        if (visualSnapshot.currentIndex == request.page) {
+            visualSkipRequest = null
+            return@LaunchedEffect
+        }
+        delay(ARTWORK_BUTTON_SKIP_CONFIRM_TIMEOUT_MS)
+        if (visualSkipRequest == request && visualSnapshot.currentIndex != request.page) {
+            visualSkipRequest = null
+        }
+    }
+    val visualCurrentServer = visualSnapshot.currentTrack.serverId?.let { serversById[it] }
+        ?: currentServer.takeIf { it?.id == visualSnapshot.currentTrack.serverId }
 
     // Preload adjacent artwork into Coil and palette caches.
     val context = LocalContext.current
-    val queue = playbackState.queue
-    val currentIdx = playbackState.currentIndex
-    val prevSongId = queue.getOrNull(currentIdx - 1)?.songId
-    val nextSongId = queue.getOrNull(currentIdx + 1)?.songId
-    LaunchedEffect(visible, track.songId, prevSongId, nextSongId, currentServer, useDynamicArtworkColors) {
+    val queue = visualSnapshot.queue
+    val currentIdx = visualSnapshot.currentIndex
+    val prewarmRadius = artworkPrewarmRadius.coerceAtLeast(0)
+    val prewarmArtworkKeys = remember(queue, currentIdx, prewarmRadius) {
+        (currentIdx - prewarmRadius..currentIdx + prewarmRadius)
+            .mapNotNull { index -> queue.getOrNull(index)?.artworkIdentityKey() }
+    }
+    LaunchedEffect(
+        visible,
+        visualSnapshot.currentTrack.artworkIdentityKey(),
+        prewarmArtworkKeys,
+        visualCurrentServer,
+        useDynamicArtworkColors,
+        prewarmRadius,
+    ) {
         if (!visible) return@LaunchedEffect
-        val adjacentIndices = listOfNotNull(
-            if (currentIdx > 0) currentIdx - 1 else null,
-            if (currentIdx < queue.lastIndex) currentIdx + 1 else null,
-        ).distinct()
+        val adjacentIndices = (currentIdx - prewarmRadius..currentIdx + prewarmRadius)
+            .filter { it in queue.indices && it != currentIdx }
         for (i in adjacentIndices) {
             val item = queue[i]
             val server = item.serverId?.let { serversById[it] }
@@ -370,6 +426,7 @@ fun NowPlayingOverlay(
     BackHandler(enabled = visible) {
         onDismiss()
     }
+    val latestOnDismiss by rememberUpdatedState(onDismiss)
 
     // Reset lyrics overlay when Now Playing is dismissed
     LaunchedEffect(visible) {
@@ -403,13 +460,29 @@ fun NowPlayingOverlay(
             targetOffsetY = { fullHeight -> fullHeight / 3 },
         ),
     ) {
-        val artwork = rememberArtworkPresentation(
-            fallbackModel = track.queueArtworkModel(currentServer),
-            enabled = useDynamicArtworkColors,
-        )
         val colorScheme = MaterialTheme.colorScheme
-        val dominant = artwork.dominantColor ?: colorScheme.primary
-        val accent = artwork.accentColor ?: colorScheme.tertiary
+        val rawArtworkColors = if (useDynamicArtworkColors) {
+            rememberMotionArtworkColors(
+                queue = visualSnapshot.queue,
+                serversById = serversById,
+                position = artworkMotionState.position,
+                freezePresentationUpdates = artworkMotionState.isScrollInProgress,
+                fallbackDominant = colorScheme.primary,
+                fallbackAccent = colorScheme.tertiary,
+                prewarmRadius = prewarmRadius,
+            )
+        } else {
+            ArtworkColors(
+                dominant = colorScheme.primary,
+                accent = colorScheme.tertiary,
+            )
+        }
+        val artworkColors = rememberDisplayedArtworkColors(
+            targetColors = rawArtworkColors,
+            followImmediately = artworkMotionState.isScrollInProgress || !visible || !useDynamicArtworkColors,
+        )
+        val dominant = artworkColors.dominant
+        val accent = artworkColors.accent
         val background = remember(dominant, accent, colorScheme, useGradientBackground) {
             if (useGradientBackground) {
                 Brush.verticalGradient(
@@ -449,81 +522,6 @@ fun NowPlayingOverlay(
             if (!isDragging) {
                 sliderValue = playbackProgress.positionMs.toFloat()
             }
-        }
-
-        // Artwork pager state synced with playback queue
-        var stableQueue by remember { mutableStateOf(playbackState.queue) }
-        val artworkPagerState = rememberPagerState(
-            initialPage = playbackState.currentIndex.coerceAtLeast(0),
-            pageCount = { stableQueue.size.coerceAtLeast(1) },
-        )
-        // Sync pager when track changes externally (button skip, queue tap)
-        var lastTrackId by remember { mutableStateOf(track.songId) }
-        // Guard: suppress pager-driven skips during programmatic scroll
-        var suppressPagerSkip by remember { mutableStateOf(false) }
-        var programmaticPagerTargetPage by remember { mutableStateOf<Int?>(null) }
-        var currentArtworkKeyPage by remember { mutableStateOf(playbackState.currentIndex.coerceAtLeast(0)) }
-        var pinnedCurrentArtworkPage by remember { mutableStateOf<Int?>(null) }
-        // Stabilize artwork during deferred queue expansion:
-        // keep the current artwork keyed to the visible page until the pager can
-        // move after any page-count change caused by queue item insertion. If
-        // the user starts swiping during this handoff, do not force it back.
-        val targetPage = playbackState.currentIndex.coerceAtLeast(0)
-        LaunchedEffect(targetPage, track.songId, playbackState.queue) {
-            if (track.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
-                val startPage = artworkPagerState.currentPage
-                suppressPagerSkip = true
-                programmaticPagerTargetPage = targetPage
-                pinnedCurrentArtworkPage = startPage
-                currentArtworkKeyPage = startPage
-                try {
-                    stableQueue = playbackState.queue
-                    withFrameNanos { }
-                    while (artworkPagerState.isScrollInProgress) {
-                        withFrameNanos { }
-                    }
-                    val userMovedPager =
-                        artworkPagerState.currentPage != startPage ||
-                        artworkPagerState.settledPage != startPage
-                    if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
-                        artworkPagerState.scrollToPage(targetPage)
-                    }
-                    currentArtworkKeyPage = if (userMovedPager) targetPage else artworkPagerState.currentPage
-                    pinnedCurrentArtworkPage = null
-                    withFrameNanos { }
-                } finally {
-                    pinnedCurrentArtworkPage = null
-                    programmaticPagerTargetPage = null
-                    suppressPagerSkip = false
-                }
-            } else {
-                stableQueue = playbackState.queue
-                currentArtworkKeyPage = targetPage
-            }
-            if (track.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
-                suppressPagerSkip = true
-                programmaticPagerTargetPage = targetPage
-                try {
-                    artworkPagerState.animateScrollToPage(targetPage)
-                } finally {
-                    programmaticPagerTargetPage = null
-                    suppressPagerSkip = false
-                }
-            }
-            lastTrackId = track.songId
-        }
-        // When user swipes pager, trigger skip
-        val currentPlaybackIndex by rememberUpdatedState(playbackState.currentIndex)
-        val currentQueueSize by rememberUpdatedState(playbackState.queue.size)
-        LaunchedEffect(artworkPagerState) {
-            snapshotFlow { artworkPagerState.settledPage }
-                .distinctUntilChanged()
-                .collect { page ->
-                    if (suppressPagerSkip && page == programmaticPagerTargetPage) return@collect
-                    if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
-                        onSkipToQueueItem(page)
-                    }
-                }
         }
 
         BoxWithConstraints(
@@ -580,6 +578,72 @@ fun NowPlayingOverlay(
             // Queue bottom sheet state
             val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
             var showQueueSheet by remember { mutableStateOf(false) }
+            val latestOpenQueueSheet by rememberUpdatedState { showQueueSheet = true }
+            val dismissSwipeModifier = Modifier.pointerInput(visible) {
+                if (!visible) return@pointerInput
+                val dismissThresholdPx = 72.dp.toPx()
+                val velocityThresholdDpPerSecond = 300f
+                var downwardDistance = 0f
+                var dragStartedAtNanos = 0L
+                var didDismiss = false
+
+                fun dismissFromSwipe() {
+                    if (visible && !didDismiss) {
+                        didDismiss = true
+                        latestOnDismiss()
+                    }
+                }
+
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        downwardDistance = 0f
+                        dragStartedAtNanos = System.nanoTime()
+                        didDismiss = false
+                    },
+                    onVerticalDrag = { _, dragAmount ->
+                        if (dragAmount > 0f) {
+                            downwardDistance += dragAmount
+                            if (downwardDistance >= dismissThresholdPx) {
+                                dismissFromSwipe()
+                            }
+                        } else {
+                            downwardDistance = (downwardDistance + dragAmount).coerceAtLeast(0f)
+                        }
+                    },
+                    onDragEnd = {
+                        val elapsedSeconds = (System.nanoTime() - dragStartedAtNanos) / 1_000_000_000f
+                        if (elapsedSeconds > 0f) {
+                            val downwardVelocityDpPerSecond = (downwardDistance / elapsedSeconds).toDp().value
+                            if (downwardVelocityDpPerSecond >= velocityThresholdDpPerSecond) {
+                                dismissFromSwipe()
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        downwardDistance = 0f
+                        didDismiss = false
+                    },
+                )
+            }
+            val queueSwipeModifier = Modifier.pointerInput(showQueueAffordance) {
+                if (!showQueueAffordance) return@pointerInput
+                val thresholdPx = 80.dp.toPx()
+                var accumulated = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { accumulated = 0f },
+                    onVerticalDrag = { _, dragAmount ->
+                        if (dragAmount < 0f) {
+                            accumulated -= dragAmount
+                            if (accumulated >= thresholdPx) {
+                                accumulated = 0f
+                                latestOpenQueueSheet()
+                            }
+                        } else {
+                            accumulated = 0f
+                        }
+                    },
+                )
+            }
 
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
                 Column(
@@ -623,47 +687,21 @@ fun NowPlayingOverlay(
                             .fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        HorizontalPager(
-                            state = artworkPagerState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(34.dp)),
-                            pageSpacing = 16.dp,
-                            beyondViewportPageCount = 1,
-                            key = { page ->
-                                if (page == currentArtworkKeyPage) {
-                                    "current-${track.mediaId}"
-                                } else {
-                                    stableQueue.getOrNull(page)?.let { "queue-${it.mediaId}-$page" }
-                                        ?: "empty-$page"
-                                }
+                        NowPlayingArtworkPagerHost(
+                            queue = visualSnapshot.queue,
+                            currentIndex = visualSnapshot.currentIndex,
+                            currentTrack = visualSnapshot.currentTrack,
+                            serversById = serversById,
+                            motionState = artworkMotionState,
+                            visualSkipRequest = visualSkipRequest,
+                            useProgrammaticMotion = useArtworkMotion,
+                            modifier = Modifier.fillMaxSize(),
+                            onArtworkClick = {
+                                if (showLyrics) showLyrics = false
+                                else if (hasLyrics) showLyrics = true
                             },
-                        ) { page ->
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                val queueItem = stableQueue.getOrNull(page)
-                                val artworkItem = if (page == pinnedCurrentArtworkPage) {
-                                    track
-                                } else {
-                                    queueItem
-                                }
-                                ArtworkCard(
-                                    model = artworkItem?.queueArtworkModel(artworkItem.serverId?.let { serversById[it] }),
-                                    contentDescription = artworkItem?.title,
-                                    modifier = Modifier
-                                        .aspectRatio(1f)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(34.dp))
-                                        .clickable {
-                                            if (showLyrics) showLyrics = false
-                                            else if (hasLyrics) showLyrics = true
-                                        },
-                                    cornerRadiusDp = 34,
-                                )
-                            }
-                        }
+                            onUserSelectQueueItem = onSkipToQueueItem,
+                        )
                         // Lyrics overlay on artwork
                         androidx.compose.animation.AnimatedVisibility(
                             visible = showLyrics && hasLyrics,
@@ -704,92 +742,99 @@ fun NowPlayingOverlay(
                             }
                         }
                     }
-                    // Repeat / Shuffle / More row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val repeatDescription = stringResource(R.string.player_repeat)
-                        val repeatOneLabel = stringResource(R.string.player_repeat_one)
-                        val repeatAllLabel = stringResource(R.string.player_repeat_all)
-                        val repeatOffLabel = stringResource(R.string.player_repeat_off)
-                        val shuffleDescription = stringResource(R.string.player_shuffle)
-                        val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
-                        val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
-                        Row(
-                            modifier = Modifier.offset(x = (-12).dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            ToggleIconButton(
-                                icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                                active = playbackState.repeatMode != RepeatModeSetting.OFF,
-                                contentDescription = repeatDescription,
-                                onClick = {
-                                    onCycleRepeatMode()
-                                    val label = when (playbackState.repeatMode) {
-                                        RepeatModeSetting.OFF -> repeatAllLabel
-                                        RepeatModeSetting.ALL -> repeatOneLabel
-                                        RepeatModeSetting.ONE -> repeatOffLabel
-                                    }
-                                    showPlayerSnackbar(label)
-                                },
-                                compact = true,
-                            )
-                            ToggleIconButton(
-                                icon = Icons.Rounded.Shuffle,
-                                active = playbackState.shuffleEnabled,
-                                contentDescription = shuffleDescription,
-                                onClick = {
-                                    onToggleShuffle()
-                                    val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
-                                    showPlayerSnackbar(label)
-                                },
-                                compact = true,
-                            )
-                        }
-                        Box(modifier = Modifier.offset(x = 12.dp)) {
-                            PressScaleIconButton(
-                                icon = Icons.Rounded.MoreVert,
-                                contentDescription = stringResource(R.string.player_more),
-                                onClick = { showMenu = true },
-                                compact = true,
-                            )
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.player_song_details)) },
-                                    onClick = {
-                                        showMenu = false
-                                        showDetails = true
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
-                                    onClick = {
-                                        showMenu = false
-                                        showEndpointStatus = true
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    Text(
-                        text = track.title,
-                        style = titleStyle,
-                        color = MaterialTheme.colorScheme.onBackground,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .basicMarquee(iterations = Int.MAX_VALUE),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    MetadataLinkRow(
-                        track = track,
-                        textStyle = metadataStyle,
-                        canOpenArtist = canOpenArtist,
-                        onOpenArtist = onOpenArtist,
-                        onOpenAlbum = onOpenAlbum,
-                    )
+                            .then(dismissSwipeModifier),
+                        verticalArrangement = Arrangement.spacedBy(verticalSpacing),
+                    ) {
+                        // Repeat / Shuffle / More row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val repeatDescription = stringResource(R.string.player_repeat)
+                            val repeatOneLabel = stringResource(R.string.player_repeat_one)
+                            val repeatAllLabel = stringResource(R.string.player_repeat_all)
+                            val repeatOffLabel = stringResource(R.string.player_repeat_off)
+                            val shuffleDescription = stringResource(R.string.player_shuffle)
+                            val shuffleOnLabel = stringResource(R.string.player_shuffle_on)
+                            val shuffleOffLabel = stringResource(R.string.player_shuffle_off)
+                            Row(
+                                modifier = Modifier.offset(x = (-12).dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                ToggleIconButton(
+                                    icon = if (playbackState.repeatMode == RepeatModeSetting.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                                    active = playbackState.repeatMode != RepeatModeSetting.OFF,
+                                    contentDescription = repeatDescription,
+                                    onClick = {
+                                        onCycleRepeatMode()
+                                        val label = when (playbackState.repeatMode) {
+                                            RepeatModeSetting.OFF -> repeatAllLabel
+                                            RepeatModeSetting.ALL -> repeatOneLabel
+                                            RepeatModeSetting.ONE -> repeatOffLabel
+                                        }
+                                        showPlayerSnackbar(label)
+                                    },
+                                    compact = true,
+                                )
+                                ToggleIconButton(
+                                    icon = Icons.Rounded.Shuffle,
+                                    active = playbackState.shuffleEnabled,
+                                    contentDescription = shuffleDescription,
+                                    onClick = {
+                                        onToggleShuffle()
+                                        val label = if (!playbackState.shuffleEnabled) shuffleOnLabel else shuffleOffLabel
+                                        showPlayerSnackbar(label)
+                                    },
+                                    compact = true,
+                                )
+                            }
+                            Box(modifier = Modifier.offset(x = 12.dp)) {
+                                PressScaleIconButton(
+                                    icon = Icons.Rounded.MoreVert,
+                                    contentDescription = stringResource(R.string.player_more),
+                                    onClick = { showMenu = true },
+                                    compact = true,
+                                )
+                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.player_song_details)) },
+                                        onClick = {
+                                            showMenu = false
+                                            showDetails = true
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
+                                        onClick = {
+                                            showMenu = false
+                                            showEndpointStatus = true
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = track.title,
+                            style = titleStyle,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .basicMarquee(iterations = Int.MAX_VALUE),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        MetadataLinkRow(
+                            track = track,
+                            textStyle = metadataStyle,
+                            canOpenArtist = canOpenArtist,
+                            onOpenArtist = onOpenArtist,
+                            onOpenAlbum = onOpenAlbum,
+                        )
+                    }
                     val duration = playbackProgress.durationMs.coerceAtLeast(1L).toFloat()
                     val bufferFraction = if (playbackProgress.durationMs > 0) {
                         (playbackProgress.bufferedPositionMs.toFloat() / duration).coerceIn(0f, 1f)
@@ -856,25 +901,9 @@ fun NowPlayingOverlay(
                         } else Modifier,
                     )
                     Column(
-                        modifier = Modifier.pointerInput(showQueueAffordance) {
-                            if (!showQueueAffordance) return@pointerInput
-                            val thresholdPx = 80.dp.toPx()
-                            var accumulated = 0f
-                            detectVerticalDragGestures(
-                                onDragStart = { accumulated = 0f },
-                                onVerticalDrag = { _, dragAmount ->
-                                    if (dragAmount < 0f) {
-                                        accumulated -= dragAmount
-                                        if (accumulated >= thresholdPx) {
-                                            accumulated = 0f
-                                            showQueueSheet = true
-                                        }
-                                    } else {
-                                        accumulated = 0f
-                                    }
-                                },
-                            )
-                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(queueSwipeModifier),
                         verticalArrangement = Arrangement.spacedBy(verticalSpacing),
                     ) {
                         Row(
@@ -890,10 +919,13 @@ fun NowPlayingOverlay(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             PlayerActionButton(
-                                Icons.Rounded.SkipPrevious,
-                                stringResource(R.string.player_previous),
-                                onSkipToPrevious,
-                                compactControls,
+                                icon = Icons.Rounded.SkipPrevious,
+                                label = stringResource(R.string.player_previous),
+                                onClick = {
+                                    requestVisualSkip(-1)
+                                    onSkipToPrevious()
+                                },
+                                compact = compactControls,
                             )
                             Spacer(Modifier.width(14.dp))
                             Surface(
@@ -931,34 +963,24 @@ fun NowPlayingOverlay(
                             }
                             Spacer(Modifier.width(14.dp))
                             PlayerActionButton(
-                                Icons.Rounded.SkipNext,
-                                stringResource(R.string.player_next),
-                                onSkipToNext,
-                                compactControls,
+                                icon = Icons.Rounded.SkipNext,
+                                label = stringResource(R.string.player_next),
+                                onClick = {
+                                    requestVisualSkip(1)
+                                    onSkipToNext()
+                                },
+                                compact = compactControls,
                             )
                         }
                         // Tech info bar
                         val runtimeInfo = playbackState.runtimeInfo
-                        val codec = runtimeInfo?.sampleMimeType?.let { mime ->
-                            when {
-                                "flac" in mime -> "FLAC"
-                                "opus" in mime -> "Opus"
-                                "vorbis" in mime -> "Vorbis"
-                                "mp4a" in mime || "aac" in mime -> "AAC"
-                                "mp3" in mime || "mpeg" in mime -> "MP3"
-                                "wav" in mime || "raw" in mime -> "WAV"
-                                else -> mime.substringAfter("/")
-                            }
-                        } ?: runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
-                        val sampleRate = runtimeInfo?.sampleRate?.let {
-                            if (it >= 1_000) {
-                                val khz = it / 1_000.0
-                                if (it % 1_000 == 0) "${it / 1_000} kHz" else "${"%.1f".format(khz)} kHz"
-                            } else "$it Hz"
-                        }
-                        val bitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
-                            ?: track.bitRateKbps?.let { "$it kbps" }
-                        val techParts = listOfNotNull(codec, sampleRate, bitrate)
+                        val format = track.stableFormatLabel()
+                        val sampleRate = track.sampleRate?.let(::formatSampleRateShort)
+                        val bitrate = track.displayBitrate(
+                            runtimeInfo = runtimeInfo,
+                            preferStableMetadata = true,
+                        )
+                        val techParts = listOfNotNull(format, sampleRate, bitrate)
                         if (techParts.isNotEmpty()) {
                             Text(
                                 text = techParts.joinToString(" | "),
@@ -1069,9 +1091,9 @@ fun NowPlayingOverlay(
                     item { DetailLine(stringResource(R.string.detail_mime_type), playbackState.runtimeInfo?.sampleMimeType ?: track.contentType) }
                     item { DetailLine(stringResource(R.string.detail_container), playbackState.runtimeInfo?.containerMimeType) }
                     item { DetailLine(stringResource(R.string.detail_codec), playbackState.runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)) }
-                    item { DetailLine(stringResource(R.string.detail_average_bitrate), playbackState.runtimeInfo?.averageBitrate?.let(::formatBitrate) ?: track.bitRateKbps?.let { formatBitrate(it * 1_000) }) }
+                    item { DetailLine(stringResource(R.string.detail_average_bitrate), track.displayBitrate(playbackState.runtimeInfo)) }
                     item { DetailLine(stringResource(R.string.detail_peak_bitrate), playbackState.runtimeInfo?.peakBitrate?.let(::formatBitrate)) }
-                    item { DetailLine(stringResource(R.string.detail_sample_rate), playbackState.runtimeInfo?.sampleRate?.let(::formatSampleRate)) }
+                    item { DetailLine(stringResource(R.string.detail_sample_rate), (playbackState.runtimeInfo?.sampleRate ?: track.sampleRate)?.let(::formatSampleRate)) }
                     item { DetailLine(stringResource(R.string.detail_channels), playbackState.runtimeInfo?.channelCount?.toString()) }
                     item { DetailLine(stringResource(R.string.detail_language), playbackState.runtimeInfo?.language) }
                     item { DetailLine(stringResource(R.string.detail_cover_art_id), track.coverArtId) }
@@ -1419,6 +1441,230 @@ private fun PlaybackQueueItem.queueArtworkModel(server: ServerConfig?): Any? {
     }
 }
 
+private fun PlaybackQueueItem.artworkIdentityKey(): String {
+    return listOf(
+        mediaId,
+        serverId?.toString().orEmpty(),
+        coverArtId.orEmpty(),
+        coverArtPath.orEmpty(),
+        artworkUri.orEmpty(),
+    ).joinToString("|")
+}
+
+private data class NowPlayingVisualSnapshot(
+    val queue: List<PlaybackQueueItem>,
+    val currentIndex: Int,
+    val currentTrack: PlaybackQueueItem,
+)
+
+@Composable
+private fun rememberNowPlayingVisualSnapshot(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): NowPlayingVisualSnapshot {
+    val candidate = remember(queue, currentIndex, currentTrack) {
+        buildNowPlayingVisualSnapshot(queue, currentIndex, currentTrack)
+    }
+    var snapshot by remember {
+        mutableStateOf(candidate ?: fallbackNowPlayingVisualSnapshot(queue, currentIndex, currentTrack))
+    }
+
+    LaunchedEffect(candidate) {
+        if (candidate != null) {
+            snapshot = candidate
+        }
+    }
+
+    return candidate ?: snapshot
+}
+
+private fun buildNowPlayingVisualSnapshot(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): NowPlayingVisualSnapshot? {
+    if (currentIndex !in queue.indices) return null
+    if (queue[currentIndex].songId != currentTrack.songId) return null
+    return NowPlayingVisualSnapshot(
+        queue = queue.withVisualCurrentItem(currentIndex, currentTrack),
+        currentIndex = currentIndex,
+        currentTrack = currentTrack,
+    )
+}
+
+private fun fallbackNowPlayingVisualSnapshot(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): NowPlayingVisualSnapshot {
+    val safeIndex = currentIndex.takeIf { it in queue.indices }
+    if (safeIndex != null && queue[safeIndex].songId == currentTrack.songId) {
+        return NowPlayingVisualSnapshot(
+            queue = queue.withVisualCurrentItem(safeIndex, currentTrack),
+            currentIndex = safeIndex,
+            currentTrack = currentTrack,
+        )
+    }
+    return NowPlayingVisualSnapshot(
+        queue = listOf(currentTrack),
+        currentIndex = 0,
+        currentTrack = currentTrack,
+    )
+}
+
+private fun List<PlaybackQueueItem>.withVisualCurrentItem(
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+): List<PlaybackQueueItem> {
+    val currentItem = getOrNull(currentIndex) ?: return this
+    if (currentItem == currentTrack || currentItem.hasSameArtworkVisual(currentTrack)) return this
+    return toMutableList().also { it[currentIndex] = currentTrack }
+}
+
+private fun PlaybackQueueItem.hasSameArtworkVisual(other: PlaybackQueueItem): Boolean {
+    return title == other.title && artworkIdentityKey() == other.artworkIdentityKey()
+}
+
+private class NowPlayingArtworkMotionState(initialPosition: Float) {
+    var position by mutableFloatStateOf(initialPosition)
+    var velocity by mutableFloatStateOf(0f)
+    var isScrollInProgress by mutableStateOf(false)
+}
+
+@Composable
+private fun rememberNowPlayingArtworkMotionState(
+    currentIndex: Int,
+    visible: Boolean,
+): NowPlayingArtworkMotionState {
+    return remember(visible) { NowPlayingArtworkMotionState(currentIndex.coerceAtLeast(0).toFloat()) }
+}
+
+private data class ArtworkColors(
+    val dominant: Color,
+    val accent: Color,
+)
+
+private data class ArtworkPageRequest(
+    val page: Int,
+    val sequence: Int,
+)
+
+private data class ArtworkPresentationRequest(
+    val key: String,
+    val model: Any?,
+)
+
+@Composable
+private fun rememberDisplayedArtworkColors(
+    targetColors: ArtworkColors,
+    followImmediately: Boolean,
+): ArtworkColors {
+    var displayedColors by remember { mutableStateOf(targetColors) }
+
+    LaunchedEffect(targetColors, followImmediately) {
+        if (followImmediately) {
+            displayedColors = targetColors
+            return@LaunchedEffect
+        }
+        if (displayedColors == targetColors) return@LaunchedEffect
+
+        val startColors = displayedColors
+        withFixedArtworkMotionDurationScale {
+            animate(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = tween(ARTWORK_BACKGROUND_SETTLE_MS),
+            ) { fraction, _ ->
+                displayedColors = ArtworkColors(
+                    dominant = lerp(startColors.dominant, targetColors.dominant, fraction),
+                    accent = lerp(startColors.accent, targetColors.accent, fraction),
+                )
+            }
+        }
+    }
+
+    return if (followImmediately) targetColors else displayedColors
+}
+
+@Composable
+private fun rememberMotionArtworkColors(
+    queue: List<PlaybackQueueItem>,
+    serversById: Map<Long, ServerConfig>,
+    position: Float,
+    freezePresentationUpdates: Boolean,
+    fallbackDominant: Color,
+    fallbackAccent: Color,
+    prewarmRadius: Int,
+): ArtworkColors {
+    if (queue.isEmpty()) {
+        return ArtworkColors(fallbackDominant, fallbackAccent)
+    }
+
+    val context = LocalContext.current.applicationContext
+    var presentations by remember { mutableStateOf<Map<String, ArtworkPresentation>>(emptyMap()) }
+    var appliedPresentations by remember { mutableStateOf<Map<String, ArtworkPresentation>>(emptyMap()) }
+    val clampedPosition = position.coerceIn(0f, queue.lastIndex.toFloat())
+    val fromPage = floor(clampedPosition).toInt().coerceIn(0, queue.lastIndex)
+    val toPage = ceil(clampedPosition).toInt().coerceIn(0, queue.lastIndex)
+    val fraction = (clampedPosition - fromPage).coerceIn(0f, 1f)
+    val centerPage = clampedPosition.roundToInt().coerceIn(0, queue.lastIndex)
+    val pageRequests = remember(queue, serversById, centerPage, prewarmRadius) {
+        (centerPage - prewarmRadius..centerPage + prewarmRadius)
+            .filter { it in queue.indices }
+            .associateWith { page ->
+                val item = queue[page]
+                ArtworkPresentationRequest(
+                    key = item.artworkIdentityKey(),
+                    model = item.queueArtworkModel(item.serverId?.let { serversById[it] }),
+                )
+            }
+    }
+
+    LaunchedEffect(pageRequests) {
+        var loadedPresentations = presentations
+        for (request in pageRequests.values) {
+            val model = request.model ?: continue
+            if (loadedPresentations[request.key]?.hasColors != true) {
+                val presentation = loadArtworkPresentation(context, model)
+                if (!presentation.hasColors) continue
+                loadedPresentations = loadedPresentations + (request.key to presentation)
+                presentations = loadedPresentations
+            }
+        }
+    }
+
+    LaunchedEffect(freezePresentationUpdates, presentations) {
+        if (!freezePresentationUpdates) {
+            appliedPresentations = presentations
+        }
+    }
+
+    fun colorsFor(page: Int): ArtworkColors {
+        val item = queue.getOrNull(page)
+        val key = item?.artworkIdentityKey()
+        val cachedPresentation = item
+            ?.queueArtworkModel(item.serverId?.let { serversById[it] })
+            ?.cachedArtworkPresentation()
+        val presentation = key
+            ?.let { appliedPresentations[it]?.takeIf { presentation -> presentation.hasColors } }
+            ?: cachedPresentation?.takeIf { presentation -> presentation.hasColors }
+            ?: ArtworkPresentation()
+        return ArtworkColors(
+            dominant = presentation.dominantColor ?: fallbackDominant,
+            accent = presentation.accentColor ?: fallbackAccent,
+        )
+    }
+
+    val fromColors = colorsFor(fromPage)
+    if (fromPage == toPage) return fromColors
+    val toColors = colorsFor(toPage)
+    return ArtworkColors(
+        dominant = lerp(fromColors.dominant, toColors.dominant, fraction),
+        accent = lerp(fromColors.accent, toColors.accent, fraction),
+    )
+}
+
 private data class ArtworkPresentation(
     val dominantColor: Color? = null,
     val accentColor: Color? = null,
@@ -1427,27 +1673,343 @@ private data class ArtworkPresentation(
         get() = dominantColor != null || accentColor != null
 }
 
-private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
-private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NowPlayingArtworkPagerHost(
+    queue: List<PlaybackQueueItem>,
+    currentIndex: Int,
+    currentTrack: PlaybackQueueItem,
+    serversById: Map<Long, ServerConfig>,
+    motionState: NowPlayingArtworkMotionState,
+    visualSkipRequest: ArtworkPageRequest?,
+    useProgrammaticMotion: Boolean,
+    modifier: Modifier = Modifier,
+    onArtworkClick: () -> Unit,
+    onUserSelectQueueItem: (Int) -> Unit,
+) {
+    val targetPage = currentIndex.coerceAtLeast(0)
+    val requestedVisualPage = visualSkipRequest?.page?.takeIf { it in queue.indices }
+    val visualTargetPage = requestedVisualPage ?: targetPage
+    val visualSkipSequence = visualSkipRequest?.sequence
+    val queueIdentity = remember(queue) { queue.map { it.artworkIdentityKey() } }
+    val latestOnArtworkClick by rememberUpdatedState(onArtworkClick)
+    val latestOnUserSelectQueueItem by rememberUpdatedState(onUserSelectQueueItem)
+    var stableQueue by remember { mutableStateOf(queue) }
+    val artworkPagerState = rememberPagerState(
+        initialPage = targetPage,
+        pageCount = { stableQueue.size.coerceAtLeast(1) },
+    )
+
+    var lastTrackId by remember { mutableStateOf(currentTrack.songId) }
+    // Programmatic sync keeps pager state aligned but never drives playback.
+    // Any other settled page change comes from the user's pager gesture.
+    var programmaticPagerSync by remember { mutableStateOf(false) }
+    var lastProgrammaticSettledPage by remember { mutableStateOf<Int?>(null) }
+
+    // Stabilize artwork during deferred queue expansion:
+    // update the page count first, then move after any insertion before the
+    // current item. Track changes use the pager's own animation so there is
+    // only one artwork render path and no overlay handoff frame.
+    LaunchedEffect(
+        visualTargetPage,
+        visualSkipSequence,
+        currentTrack.songId,
+        queueIdentity,
+        useProgrammaticMotion,
+    ) {
+        val isLocalVisualSkip = requestedVisualPage != null && requestedVisualPage != targetPage
+        if (isLocalVisualSkip && artworkPagerState.currentPage != visualTargetPage) {
+            stableQueue = queue
+            programmaticPagerSync = true
+            try {
+                val distancePages = abs(
+                    visualTargetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
+                )
+                artworkPagerState.moveArtworkMotionToPage(
+                    page = visualTargetPage,
+                    motionState = motionState,
+                    distancePages = distancePages,
+                    useProgrammaticMotion = useProgrammaticMotion,
+                    velocityBoostPagesPerSecond = if (visualTargetPage > artworkPagerState.currentArtworkPosition()) {
+                        ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES
+                    } else {
+                        -ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES
+                    },
+                )
+            } finally {
+                lastProgrammaticSettledPage = artworkPagerState.settledPage
+                programmaticPagerSync = false
+            }
+        }
+        if (!isLocalVisualSkip && currentTrack.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
+            val startPage = artworkPagerState.currentPage
+            while (artworkPagerState.isScrollInProgress) {
+                withFrameNanos { }
+            }
+            val userMovedPager =
+                artworkPagerState.currentPage != startPage ||
+                    artworkPagerState.settledPage != startPage
+            if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
+                programmaticPagerSync = true
+                try {
+                    stableQueue = queue
+                    artworkPagerState.scrollToPage(targetPage)
+                    motionState.position = targetPage.toFloat()
+                    withFrameNanos { }
+                } finally {
+                    lastProgrammaticSettledPage = artworkPagerState.settledPage
+                    programmaticPagerSync = false
+                }
+            } else {
+                stableQueue = queue
+            }
+        } else {
+            stableQueue = queue
+        }
+        if (!isLocalVisualSkip && currentTrack.songId != lastTrackId && artworkPagerState.currentPage != targetPage) {
+            stableQueue = queue
+            withFrameNanos { }
+            programmaticPagerSync = true
+            try {
+                val distancePages = abs(
+                    targetPage - (artworkPagerState.currentPage + artworkPagerState.currentPageOffsetFraction),
+                )
+                artworkPagerState.moveArtworkMotionToPage(
+                    page = targetPage,
+                    motionState = motionState,
+                    distancePages = distancePages,
+                    useProgrammaticMotion = useProgrammaticMotion,
+                )
+            } finally {
+                lastProgrammaticSettledPage = artworkPagerState.settledPage
+                programmaticPagerSync = false
+            }
+        }
+        lastTrackId = currentTrack.songId
+    }
+
+    LaunchedEffect(artworkPagerState, motionState) {
+        snapshotFlow {
+            val maxPage = (artworkPagerState.pageCount - 1).coerceAtLeast(0)
+            val position = (
+                artworkPagerState.currentPage +
+                    artworkPagerState.currentPageOffsetFraction
+                ).coerceIn(0f, maxPage.toFloat())
+            position to artworkPagerState.isScrollInProgress
+        }
+            .distinctUntilChanged()
+            .collect { (position, isScrollInProgress) ->
+                motionState.position = position
+                motionState.isScrollInProgress = isScrollInProgress
+            }
+    }
+
+    val currentPlaybackIndex by rememberUpdatedState(currentIndex)
+    val currentQueueSize by rememberUpdatedState(queue.size)
+    LaunchedEffect(artworkPagerState) {
+        snapshotFlow { artworkPagerState.settledPage to programmaticPagerSync }
+            .distinctUntilChanged()
+            .collect { (page, isProgrammatic) ->
+                if (isProgrammatic) {
+                    lastProgrammaticSettledPage = page
+                    return@collect
+                }
+                if (lastProgrammaticSettledPage == page) {
+                    lastProgrammaticSettledPage = null
+                    return@collect
+                }
+                if (page != currentPlaybackIndex && page in 0 until currentQueueSize) {
+                    latestOnUserSelectQueueItem(page)
+                }
+            }
+    }
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        HorizontalPager(
+            state = artworkPagerState,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(34.dp)),
+            pageSpacing = 16.dp,
+            beyondViewportPageCount = 1,
+            key = { page ->
+                stableQueue.getOrNull(page)?.let { "queue-${it.mediaId}-$page" } ?: "empty-$page"
+            },
+        ) { page ->
+            NowPlayingArtworkFrame(
+                item = stableQueue.getOrNull(page),
+                serversById = serversById,
+                modifier = Modifier.fillMaxSize(),
+                onClick = { latestOnArtworkClick() },
+            )
+        }
+    }
+}
 
 @Composable
-private fun rememberArtworkPresentation(
-    fallbackModel: Any?,
-    enabled: Boolean,
-): ArtworkPresentation {
-    val context = LocalContext.current.applicationContext
-    return produceState(
-        initialValue = ArtworkPresentation(),
-        key1 = fallbackModel,
-        key2 = enabled,
+private fun NowPlayingArtworkFrame(
+    item: PlaybackQueueItem?,
+    serversById: Map<Long, ServerConfig>,
+    modifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
     ) {
-        value = if (enabled) {
-            loadArtworkPresentation(context, fallbackModel)
+        val clickInteractionSource = remember { MutableInteractionSource() }
+        val clickModifier = if (onClick != null) {
+            Modifier.clickable(
+                interactionSource = clickInteractionSource,
+                indication = null,
+                onClick = onClick,
+            )
         } else {
-            ArtworkPresentation()
+            Modifier
         }
-    }.value
+        ArtworkCard(
+            model = item?.queueArtworkModel(item.serverId?.let { serversById[it] }),
+            contentDescription = item?.title,
+            modifier = contentModifier
+                .aspectRatio(1f)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(34.dp))
+                .then(clickModifier),
+            cornerRadiusDp = 34,
+        )
+    }
 }
+
+private const val ARTWORK_PRESENTATION_CACHE_ENTRIES = 64
+private const val ARTWORK_PREWARM_RADIUS_PAGES = 3
+private const val ARTWORK_BACKGROUND_SETTLE_MS = 180
+private const val ARTWORK_BUTTON_SKIP_CONFIRM_TIMEOUT_MS = 900L
+private const val ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES = 3.5f
+private const val PROGRAMMATIC_ARTWORK_SPRING_BASE_STIFFNESS = 140f
+private const val PROGRAMMATIC_ARTWORK_SPRING_DISTANCE_STIFFNESS = 60f
+private const val PROGRAMMATIC_ARTWORK_MAX_INITIAL_VELOCITY_PAGES = 8f
+private val artworkPresentationCache = LruCache<String, ArtworkPresentation>(ARTWORK_PRESENTATION_CACHE_ENTRIES)
+
+private object FixedArtworkMotionDurationScale : MotionDurationScale {
+    override val key: CoroutineContext.Key<*> = MotionDurationScale.Key
+    override val scaleFactor: Float = 1f
+}
+
+private suspend fun withFixedArtworkMotionDurationScale(block: suspend () -> Unit) {
+    if (coroutineContext[MotionDurationScale.Key]?.scaleFactor == 0f) {
+        block()
+    } else {
+        withContext(FixedArtworkMotionDurationScale) {
+            block()
+        }
+    }
+}
+
+private suspend fun PagerState.moveArtworkMotionToPage(
+    page: Int,
+    motionState: NowPlayingArtworkMotionState,
+    distancePages: Float,
+    useProgrammaticMotion: Boolean,
+    velocityBoostPagesPerSecond: Float = 0f,
+) {
+    if (useProgrammaticMotion) {
+        withFixedArtworkMotionDurationScale {
+            animateArtworkMotionToPage(
+                page = page,
+                motionState = motionState,
+                distancePages = distancePages,
+                velocityBoostPagesPerSecond = velocityBoostPagesPerSecond,
+            )
+        }
+    } else {
+        val safePageCount = pageCount.coerceAtLeast(1)
+        val targetPage = page.coerceIn(0, safePageCount - 1)
+        scrollToPage(targetPage)
+        motionState.position = targetPage.toFloat()
+        motionState.velocity = 0f
+    }
+}
+
+private suspend fun PagerState.animateArtworkMotionToPage(
+    page: Int,
+    motionState: NowPlayingArtworkMotionState,
+    distancePages: Float,
+    velocityBoostPagesPerSecond: Float = 0f,
+) {
+    val safePageCount = pageCount.coerceAtLeast(1)
+    val targetPage = page.coerceIn(0, safePageCount - 1)
+    val targetPosition = targetPage.toFloat()
+    val startPosition = currentArtworkPosition(safePageCount)
+    val inheritedVelocity = motionState.velocity
+        .takeUnless { it.isNaN() || it.isInfinite() }
+        ?: 0f
+    val boostedVelocity = when {
+        velocityBoostPagesPerSecond == 0f -> inheritedVelocity
+        inheritedVelocity * velocityBoostPagesPerSecond > 0f -> inheritedVelocity + velocityBoostPagesPerSecond
+        else -> velocityBoostPagesPerSecond
+    }
+    val startVelocity = boostedVelocity
+        .coerceIn(
+            -PROGRAMMATIC_ARTWORK_MAX_INITIAL_VELOCITY_PAGES,
+            PROGRAMMATIC_ARTWORK_MAX_INITIAL_VELOCITY_PAGES,
+        )
+    val pagerState = this
+    var previousPosition = startPosition
+
+    scroll {
+        updateTargetPage(targetPage)
+        animate(
+            initialValue = startPosition,
+            targetValue = targetPosition,
+            initialVelocity = startVelocity,
+            animationSpec = programmaticArtworkScrollSpec(distancePages),
+        ) { value, velocity ->
+            val position = value.coerceIn(0f, (safePageCount - 1).toFloat())
+            val deltaPx = (position - previousPosition) * pagerState.artworkPageDistancePx()
+            if (deltaPx != 0f) {
+                scrollBy(deltaPx)
+            }
+            previousPosition = position
+            motionState.position = pagerState.currentArtworkPosition(safePageCount)
+            motionState.velocity = velocity
+        }
+        val remainingPx = (targetPosition - pagerState.currentArtworkPosition(safePageCount)) *
+            pagerState.artworkPageDistancePx()
+        if (abs(remainingPx) > 0.5f) {
+            scrollBy(remainingPx)
+        }
+        motionState.position = targetPosition
+        motionState.velocity = 0f
+    }
+}
+
+private fun PagerState.currentArtworkPosition(pageCount: Int = this.pageCount.coerceAtLeast(1)): Float {
+    return (currentPage + currentPageOffsetFraction)
+        .coerceIn(0f, (pageCount - 1).coerceAtLeast(0).toFloat())
+}
+
+private fun PagerState.artworkPageDistancePx(): Float {
+    val visiblePages = layoutInfo.visiblePagesInfo.sortedBy { page -> page.index }
+    val adjacentPages = visiblePages
+        .zipWithNext()
+        .firstOrNull { (first, second) -> second.index == first.index + 1 }
+    val measuredDistance = adjacentPages?.let { (first, second) ->
+        abs(second.offset - first.offset).toFloat()
+    }
+    return (measuredDistance ?: layoutInfo.pageSize.toFloat()).coerceAtLeast(1f)
+}
+
+private fun programmaticArtworkScrollSpec(distancePages: Float) = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = (
+        PROGRAMMATIC_ARTWORK_SPRING_BASE_STIFFNESS +
+            distancePages.coerceIn(0f, 3f) * PROGRAMMATIC_ARTWORK_SPRING_DISTANCE_STIFFNESS
+        ),
+)
 
 private suspend fun loadArtworkPresentation(
     context: android.content.Context,
@@ -1474,6 +2036,10 @@ private fun Any.artworkPresentationCacheKey(): String {
         is File -> "file:$absolutePath"
         else -> "model:${this}"
     }
+}
+
+private fun Any.cachedArtworkPresentation(): ArtworkPresentation? {
+    return artworkPresentationCache.get(artworkPresentationCacheKey())
 }
 
 private suspend fun decodeArtworkPresentation(
@@ -1519,6 +2085,57 @@ private fun formatBitrate(bitrate: Int): String {
         "%.2f Mbps".format(bitrate / 1_000_000f)
     } else {
         "%.0f kbps".format(bitrate / 1_000f)
+    }
+}
+
+private fun PlaybackQueueItem.displayBitrate(
+    runtimeInfo: PlaybackRuntimeInfo?,
+    preferStableMetadata: Boolean = false,
+): String? {
+    val metadataBitrate = bitRateKbps?.let { "$it kbps" }
+    val runtimeBitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
+    if (preferStableMetadata) return metadataBitrate ?: runtimeBitrate
+    return if (prefersMetadataBitrate()) {
+        metadataBitrate ?: runtimeBitrate
+    } else {
+        runtimeBitrate ?: metadataBitrate
+    }
+}
+
+private fun PlaybackQueueItem.prefersMetadataBitrate(): Boolean {
+    return !qualityLabel.equals(StreamQuality.ORIGINAL.label, ignoreCase = true) && bitRateKbps != null
+}
+
+private fun PlaybackQueueItem.stableFormatLabel(): String? {
+    suffix?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?.let { return it.uppercase(java.util.Locale.ROOT) }
+
+    return contentType?.substringAfter("/")
+        ?.substringBefore(";")
+        ?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?.let { subtype ->
+            when (subtype.lowercase(java.util.Locale.ROOT)) {
+                "mpeg", "mp3" -> "MP3"
+                "mp4", "x-m4a", "m4a" -> "M4A"
+                "flac" -> "FLAC"
+                "ogg", "oga" -> "OGG"
+                "opus" -> "Opus"
+                "vorbis" -> "Vorbis"
+                "wav", "x-wav" -> "WAV"
+                else -> subtype.uppercase(java.util.Locale.ROOT)
+            }
+        }
+}
+
+private fun formatSampleRateShort(sampleRate: Int): String {
+    if (sampleRate < 1_000) return "$sampleRate Hz"
+    val khz = sampleRate / 1_000.0
+    return if (sampleRate % 1_000 == 0) {
+        "${sampleRate / 1_000} kHz"
+    } else {
+        "%.1f kHz".format(khz)
     }
 }
 

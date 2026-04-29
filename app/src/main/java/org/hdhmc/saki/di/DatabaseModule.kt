@@ -273,6 +273,30 @@ object DatabaseModule {
         }
     }
 
+    private val migration10To11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `cached_songs` ADD COLUMN `bitRate` INTEGER")
+            db.execSQL("ALTER TABLE `cached_songs` ADD COLUMN `sampleRate` INTEGER")
+            db.execSQL("ALTER TABLE `cached_library_songs` ADD COLUMN `sampleRate` INTEGER")
+            db.execSQL(
+                """
+                UPDATE `cached_songs`
+                SET `bitRate` = CASE
+                    WHEN `qualityKey` IN ('320', '256', '192', '160', '128', '96')
+                        THEN CAST(`qualityKey` AS INTEGER)
+                    ELSE (
+                        SELECT `bitRate`
+                        FROM `cached_library_songs`
+                        WHERE `cached_library_songs`.`serverId` = `cached_songs`.`serverId`
+                            AND `cached_library_songs`.`songId` = `cached_songs`.`songId`
+                    )
+                END
+                WHERE `bitRate` IS NULL
+                """.trimIndent(),
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideSakiDatabase(
@@ -289,7 +313,7 @@ object DatabaseModule {
     fun allMigrations() = arrayOf(
         migration1To2, migration2To3, migration3To4, migration4To5,
         migration5To6, migration6To7, migration7To8, migration8To9,
-        migration9To10,
+        migration9To10, migration10To11,
     )
 
     @Provides

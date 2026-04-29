@@ -100,6 +100,7 @@ fun SakiApp(
                 else -> {
                     RootShell(
                         uiState = uiState,
+                        endpointStatus = endpointStatus,
                         snackbarHostState = snackbarHostState,
                         showSettings = showSettings,
                         onShowSettingsChange = { showSettings = it },
@@ -128,6 +129,7 @@ fun SakiApp(
                         onPlaySongs = viewModel::playSongs,
                         onQueueSong = viewModel::queueSong,
                         onPlaySongNext = viewModel::playSongNext,
+                        onOfflineSongUnavailable = viewModel::showOfflineSongUnavailable,
                         onToggleSongDownload = viewModel::toggleSongDownload,
                         onPlayCachedSong = viewModel::playCachedSong,
                         onPlayCachedQueue = viewModel::playCachedQueue,
@@ -201,6 +203,7 @@ fun SakiApp(
 @Composable
 private fun RootShell(
     uiState: SakiAppUiState,
+    endpointStatus: EndpointStatus,
     snackbarHostState: SnackbarHostState,
     showSettings: Boolean,
     onShowSettingsChange: (Boolean) -> Unit,
@@ -225,6 +228,7 @@ private fun RootShell(
     onPlaySongs: (List<org.hdhmc.saki.domain.model.Song>, Int) -> Unit,
     onQueueSong: (org.hdhmc.saki.domain.model.Song) -> Unit,
     onPlaySongNext: (org.hdhmc.saki.domain.model.Song) -> Unit,
+    onOfflineSongUnavailable: () -> Unit,
     onToggleSongDownload: (org.hdhmc.saki.domain.model.Song) -> Unit,
     onPlayCachedSong: (org.hdhmc.saki.domain.model.CachedSong) -> Unit,
     onPlayCachedQueue: (List<org.hdhmc.saki.domain.model.CachedSong>, Int) -> Unit,
@@ -308,6 +312,7 @@ private fun RootShell(
                 } else {
                     BrowseScreen(
                         uiState = uiState,
+                        isOfflineDegraded = endpointStatus.isOfflineDegraded,
                         contentPadding = PaddingValues(),
                         bottomOverlayPadding = capsuleOverlayPadding,
                         onManageServers = onManageServers,
@@ -329,6 +334,7 @@ private fun RootShell(
                         onPlaySongs = onPlaySongs,
                         onQueueSong = onQueueSong,
                         onPlaySongNext = onPlaySongNext,
+                        onOfflineSongUnavailable = onOfflineSongUnavailable,
                         onToggleSongDownload = onToggleSongDownload,
                         onOpenSettings = { onShowSettingsChange(true) },
                         onImportConfig = onImportConfig,
@@ -401,7 +407,18 @@ private fun NowPlayingOverlayHost(
     onReprobeEndpoints: () -> Unit,
     onForceEndpoint: (Long) -> Unit,
 ) {
-    val track = playbackState.currentItem ?: return
+    val hasValidQueuedTrack = playbackState.currentIndex in playbackState.queue.indices
+    val activeTrack = playbackState.currentItem
+        ?: playbackState.queue.getOrNull(playbackState.currentIndex)
+    var stableTrack by remember { mutableStateOf(activeTrack) }
+    LaunchedEffect(visible, activeTrack, hasValidQueuedTrack) {
+        if (activeTrack != null) {
+            stableTrack = activeTrack
+        } else if (!visible || !hasValidQueuedTrack) {
+            stableTrack = null
+        }
+    }
+    val track = activeTrack ?: stableTrack ?: return
     val visualEffectsPolicy = rememberVisualEffectsPolicy()
     val availableArtistIds = remember(libraryIndexes) {
         libraryIndexes
@@ -463,6 +480,8 @@ private fun NowPlayingOverlayHost(
         lyrics = lyrics,
         useDynamicArtworkColors = visualEffectsPolicy.useNowPlayingDynamicArtworkColors,
         useGradientBackground = visualEffectsPolicy.useNowPlayingGradientBackground,
+        useArtworkMotion = visualEffectsPolicy.useNowPlayingArtworkMotion,
+        artworkPrewarmRadius = visualEffectsPolicy.nowPlayingArtworkPrewarmRadius,
     )
 }
 
