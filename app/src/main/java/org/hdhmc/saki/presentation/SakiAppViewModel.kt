@@ -749,6 +749,10 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    fun showOfflineSongUnavailable() {
+        snackbarMessages.tryEmit(SnackbarMessage(UiText.resource(R.string.message_song_unavailable_offline)))
+    }
+
     fun deleteCachedSong(cacheId: String) {
         viewModelScope.launch {
             runCatching {
@@ -1584,7 +1588,12 @@ data class EndpointStatus(
     val isForced: Boolean = false,
     val probeResults: List<EndpointProbeInfo> = emptyList(),
     val isProbing: Boolean = false,
-)
+) {
+    val isOfflineDegraded: Boolean
+        get() = !isProbing &&
+            probeResults.isNotEmpty() &&
+            probeResults.none { it.reachable }
+}
 
 data class EndpointProbeInfo(
     val id: Long,

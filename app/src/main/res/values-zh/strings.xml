@@ -128,6 +128,7 @@
     <string name="library_playlist_sequence">播放列表顺序</string>
     <string name="library_play_playlist">播放列表</string>
     <string name="library_available_offline">可离线播放</string>
+    <string name="library_unavailable_offline">离线不可用</string>
     <string name="library_unknown_artist_album">未知艺术家 · 未知专辑</string>
     <string name="library_more_actions">更多操作</string>
     <string name="library_play_next">下一首播放</string>
@@ -168,6 +169,7 @@
     <string name="browse_needs_server_body">请先添加 Subsonic 服务器，然后浏览艺术家、专辑、播放列表和歌曲。</string>
     <string name="browse_add_server">添加服务器</string>
     <string name="browse_import_backup">导入备份</string>
+    <string name="browse_offline_degraded_banner">离线模式 - 正在显示缓存数据。仅已下载或完整缓存的歌曲可播放。</string>
     <string name="browse_search_placeholder">搜索 %1$s</string>
     <string name="browse_close_search">关闭搜索</string>
     <string name="browse_search_server">搜索此服务器</string>
@@ -259,6 +261,7 @@
     <string name="error_cache_song">无法缓存歌曲。</string>
     <string name="error_play_cached_song">无法播放缓存歌曲。</string>
     <string name="error_start_offline_playback">无法开始离线播放。</string>
+    <string name="message_song_unavailable_offline">这首歌当前无法离线播放。</string>
     <string name="message_removed_cached_file">已移除缓存文件。</string>
     <string name="error_remove_cached_file">无法移除缓存文件。</string>
     <string name="message_no_downloads_to_clear">没有可清除的下载。</string>
