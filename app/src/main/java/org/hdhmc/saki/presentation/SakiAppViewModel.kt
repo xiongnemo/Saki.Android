@@ -1511,21 +1511,30 @@ class SakiAppViewModel @Inject constructor(
             .toList()
         if (candidates.isEmpty()) return
 
-        val cachedIds = runCatching {
+        val cachedIds = try {
             libraryCacheRepository.getCachedPlaylistDetailIds(serverId, candidates.map(PlaylistSummary::id))
-        }.onFailure {
-            Log.w("SakiApp", "Failed to read cached playlist detail ids", it)
-        }.getOrDefault(emptySet())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Log.w("SakiApp", "Failed to read cached playlist detail ids", e)
+            emptySet()
+        }
 
         candidates.filterNot { playlist -> playlist.id in cachedIds }.forEach { playlistSummary ->
             if (uiState.value.selectedServerId != serverId || endpointStatus.value.isOfflineDegraded) return
-            runCatching {
-                subsonicRepository.getPlaylist(serverId, playlistSummary.id).data
-            }.onSuccess { playlist ->
-                runCatching { libraryCacheRepository.savePlaylistDetail(serverId, playlist) }
-                    .onFailure { Log.w("SakiApp", "Failed to prefetch playlist detail", it) }
-            }.onFailure {
-                Log.w("SakiApp", "Failed to prefetch playlist detail", it)
+            try {
+                val playlist = subsonicRepository.getPlaylist(serverId, playlistSummary.id).data
+                try {
+                    libraryCacheRepository.savePlaylistDetail(serverId, playlist)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    Log.w("SakiApp", "Failed to prefetch playlist detail", e)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.w("SakiApp", "Failed to prefetch playlist detail", e)
             }
         }
     }
