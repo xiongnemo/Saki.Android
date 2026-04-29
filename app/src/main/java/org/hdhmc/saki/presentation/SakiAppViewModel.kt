@@ -5,8 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import org.hdhmc.saki.R
 import org.hdhmc.saki.data.remote.EndpointSelector
-import org.hdhmc.saki.data.remote.NetworkType
-import org.hdhmc.saki.data.remote.NetworkTypeProvider
 import org.hdhmc.saki.data.repository.ConfigBackupManager
 import org.hdhmc.saki.data.repository.ImportResult
 import org.hdhmc.saki.domain.model.Album
@@ -81,7 +79,6 @@ class SakiAppViewModel @Inject constructor(
     private val playbackManager: PlaybackManager,
     private val lyricsHolder: LyricsHolder,
     private val endpointSelector: EndpointSelector,
-    private val networkTypeProvider: NetworkTypeProvider,
     private val configBackupManager: ConfigBackupManager,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SakiAppUiState())
@@ -1075,10 +1072,6 @@ class SakiAppViewModel @Inject constructor(
     private suspend fun refreshCacheStorageSummary(serverId: Long?) {
         val downloadSummary = cachedSongRepository.getCacheStorageSummary(serverId)
         val fullStreamSummary = streamCacheRepository.getStreamCacheSummary(serverId)
-        val playableStreamSummary = streamCacheRepository.getStreamCacheSummary(
-            serverId = serverId,
-            quality = effectiveStreamQuality(),
-        )
         val imageCacheDir = appContext.cacheDir.resolve("image_cache")
         val imageCacheBytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             imageCacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
@@ -1092,7 +1085,7 @@ class SakiAppViewModel @Inject constructor(
                         hasStreamingCache = true,
                         imageCacheBytes = imageCacheBytes,
                     ),
-                    streamCachedSongIds = playableStreamSummary.cachedSongIds,
+                    streamCachedSongIds = fullStreamSummary.cachedSongIds,
                 )
             } else {
                 state
@@ -1168,11 +1161,11 @@ class SakiAppViewModel @Inject constructor(
     private suspend fun LocalPlayQueueSnapshot.offlinePlayableRestorePlan(
         serverId: Long,
     ): LocalPlayQueueRestorePlan? {
-        val preferredQuality = effectiveStreamQuality()
-        val downloadedSongIds = cachedSongRepository.getPlayableCachedSongs(serverId, preferredQuality).keys
+        val localCacheQuality = StreamQuality.entries.last()
+        val downloadedSongIds = cachedSongRepository.getPlayableCachedSongs(serverId, localCacheQuality).keys
         val streamCachedSongIds = songs.asSequence()
             .map(Song::id)
-            .filter { songId -> streamCacheRepository.findCachedQualityKey(serverId, songId, preferredQuality) != null }
+            .filter { songId -> streamCacheRepository.findCachedQualityKey(serverId, songId, localCacheQuality) != null }
             .toSet()
         val playableSongIds = downloadedSongIds + streamCachedSongIds
         val originalStartIndex = songs.indexOfFirst { song -> song.id == currentSongId }
@@ -1189,15 +1182,6 @@ class SakiAppViewModel @Inject constructor(
             startIndex = startIndex.coerceAtLeast(0),
             positionMs = if (startItem.value.id == currentSongId) positionMs else 0L,
         )
-    }
-
-    private fun effectiveStreamQuality(): StreamQuality {
-        val preferences = uiState.value.playbackState.preferences
-        if (!preferences.adaptiveQualityEnabled) return preferences.streamQuality
-        return when (networkTypeProvider.networkType.value) {
-            NetworkType.WIFI -> preferences.wifiStreamQuality
-            NetworkType.MOBILE -> preferences.mobileStreamQuality
-        }
     }
 
     private fun loadCachedContent(serverId: Long) {

@@ -34,6 +34,7 @@ import org.hdhmc.saki.domain.model.LyricLine
 import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshot
 import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.domain.model.SoundBalancingMode
+import org.hdhmc.saki.domain.model.StreamQuality
 import org.hdhmc.saki.domain.repository.LocalPlayQueueRepository
 import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
 import org.hdhmc.saki.domain.repository.SubsonicRepository
@@ -373,34 +374,38 @@ class SakiPlaybackService : MediaSessionService() {
 
         // Use cached prefs to avoid blocking; fall back to blocking read if not yet available
         val prefs = cachedPlaybackPrefs ?: runBlocking { playbackPreferencesRepository.getPreferences() }
-        val quality = if (prefs.adaptiveQualityEnabled) {
-            val preferred = when (networkTypeProvider.networkType.value) {
+        val requestedQuality = if (prefs.adaptiveQualityEnabled) {
+            when (networkTypeProvider.networkType.value) {
                 org.hdhmc.saki.data.remote.NetworkType.WIFI -> prefs.wifiStreamQuality
                 org.hdhmc.saki.data.remote.NetworkType.MOBILE -> prefs.mobileStreamQuality
             }
-            val cachedKey = streamCacheRepository.findCachedQualityKey(serverId, songId, preferred)
-            if (cachedKey != null) org.hdhmc.saki.domain.model.StreamQuality.fromStorageKey(cachedKey) else preferred
         } else {
             val maxBitRate = uri.getQueryParameter("maxBitRate")?.toIntOrNull()
-            val format = uri.getQueryParameter("format")
-            val matched = org.hdhmc.saki.domain.model.StreamQuality.entries.find { it.maxBitRate == maxBitRate }
-                ?: org.hdhmc.saki.domain.model.StreamQuality.ORIGINAL
-            // If the placeholder has a specific format, pass it through to buildStreamRequest
-            if (format != null && format != matched.format) {
-                // Use maxBitRate/format directly instead of going through StreamQuality enum
-                val streamRequest = runBlocking {
-                    subsonicRepository.buildStreamRequest(serverId, songId, maxBitRate, format)
-                }
-                if (streamRequest.candidates.isEmpty()) {
-                    throw IOException("No stream candidates for song $songId on server $serverId")
-                }
-                val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, matched)
-                return dataSpec.buildUpon()
-                    .setUri(streamRequest.candidates.first().url)
-                    .setKey(cacheKey)
-                    .build()
+            StreamQuality.entries.find { it.maxBitRate == maxBitRate } ?: StreamQuality.ORIGINAL
+        }
+        val preferLocalCache = shouldPreferLocalStreamCache(serverId)
+        val cacheLookupQuality = if (preferLocalCache) StreamQuality.entries.last() else requestedQuality
+        val cachedKey = streamCacheRepository.findCachedQualityKey(serverId, songId, cacheLookupQuality)
+        if (preferLocalCache && cachedKey != null) {
+            return dataSpec.buildUpon()
+                .setKey(cachedKey)
+                .build()
+        }
+
+        val quality = cachedKey?.let { key -> StreamQuality.fromStorageKey(key) } ?: requestedQuality
+        val format = uri.getQueryParameter("format")
+        if (!prefs.adaptiveQualityEnabled && cachedKey == null && format != null && format != requestedQuality.format) {
+            val streamRequest = runBlocking {
+                subsonicRepository.buildStreamRequest(serverId, songId, requestedQuality.maxBitRate, format)
             }
-            matched
+            if (streamRequest.candidates.isEmpty()) {
+                throw IOException("No stream candidates for song $songId on server $serverId")
+            }
+            val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, requestedQuality)
+            return dataSpec.buildUpon()
+                .setUri(streamRequest.candidates.first().url)
+                .setKey(cacheKey)
+                .build()
         }
 
         val streamRequest = runBlocking {
@@ -415,8 +420,13 @@ class SakiPlaybackService : MediaSessionService() {
 
         return dataSpec.buildUpon()
             .setUri(realUrl)
-            .setKey(cacheKey)
+            .setKey(cachedKey ?: cacheKey)
             .build()
+    }
+
+    private fun shouldPreferLocalStreamCache(serverId: Long): Boolean {
+        val probeResults = endpointSelector.getLastProbeResults(serverId)
+        return probeResults.isNotEmpty() && probeResults.none { result -> result.reachable }
     }
 
     override fun onGetSession(
