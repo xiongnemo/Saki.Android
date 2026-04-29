@@ -29,6 +29,7 @@ class SubsonicPlaybackItemsInstrumentedTest {
             year = 2024,
             genre = null,
             bitRate = 320,
+            sampleRate = 44_100,
             suffix = "flac",
             contentType = "audio/flac",
             sizeBytes = null,
@@ -39,6 +40,7 @@ class SubsonicPlaybackItemsInstrumentedTest {
         val mediaItem = song.toPlaybackRequestMediaItem(
             serverId = 42L,
             qualityLabel = "Original",
+            streamCacheKey = "42:song-1:original",
         )
 
         val request = requireNotNull(mediaItem.toPlaybackRequestOrNull())
@@ -49,6 +51,20 @@ class SubsonicPlaybackItemsInstrumentedTest {
         assertEquals("Saki", request.artist)
         assertEquals(245_000L, request.durationMs)
         assertEquals("audio/flac", request.mimeType)
+        assertEquals(320, request.bitRate)
+        assertEquals(320, request.sourceBitRate)
+        assertEquals(44_100, request.sampleRate)
+
+        val transcoded = requireNotNull(
+            song.toPlaybackRequestMediaItem(
+                serverId = 42L,
+                qualityLabel = "128 kbps",
+                streamCacheKey = "42:song-1:128",
+                maxBitRate = 128,
+            ).toPlaybackRequestOrNull(),
+        )
+        assertEquals(128, transcoded.bitRate)
+        assertEquals(320, transcoded.sourceBitRate)
     }
 
     @Test
@@ -70,9 +86,14 @@ class SubsonicPlaybackItemsInstrumentedTest {
             artworkUri = null,
             localPath = null,
             qualityLabel = "320 kbps",
+            streamCacheKey = "7:song-2:320",
             isCached = false,
             maxBitRate = null,
             format = null,
+            suffix = "mp3",
+            bitRate = 320,
+            sourceBitRate = 320,
+            sampleRate = 44_100,
         )
         val streamRequest = SubsonicStreamRequest(
             songId = "song-2",

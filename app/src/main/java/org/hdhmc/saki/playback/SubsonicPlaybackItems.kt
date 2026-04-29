@@ -35,6 +35,8 @@ private const val EXTRA_STREAM_URLS = "saki.playback.stream_urls"
 private const val EXTRA_STREAM_INDEX = "saki.playback.stream_index"
 private const val EXTRA_SUFFIX = "saki.playback.suffix"
 private const val EXTRA_BIT_RATE = "saki.playback.bit_rate"
+private const val EXTRA_SOURCE_BIT_RATE = "saki.playback.source_bit_rate"
+private const val EXTRA_SAMPLE_RATE = "saki.playback.sample_rate"
 
 internal data class PlaybackRequest(
     val serverId: Long,
@@ -59,7 +61,16 @@ internal data class PlaybackRequest(
     val format: String?,
     val suffix: String?,
     val bitRate: Int?,
+    val sourceBitRate: Int?,
+    val sampleRate: Int?,
 )
+
+internal fun displayBitRateKbps(
+    sourceBitRate: Int?,
+    maxBitRate: Int?,
+): Int? {
+    return maxBitRate?.takeIf { bitrate -> bitrate > 0 } ?: sourceBitRate
+}
 
 internal fun Song.toPlaybackRequestMediaItem(
     serverId: Long,
@@ -91,7 +102,9 @@ internal fun Song.toPlaybackRequestMediaItem(
         maxBitRate = maxBitRate,
         format = format,
         suffix = suffix,
-        bitRate = bitRate,
+        bitRate = displayBitRateKbps(bitRate, maxBitRate),
+        sourceBitRate = bitRate,
+        sampleRate = sampleRate,
     )
 
     return MediaItem.Builder()
@@ -129,7 +142,9 @@ internal fun CachedSong.toCachedMediaItem(): MediaItem {
         maxBitRate = null,
         format = null,
         suffix = suffix,
-        bitRate = null,
+        bitRate = bitRateKbps,
+        sourceBitRate = bitRateKbps,
+        sampleRate = sampleRate,
     )
 
     return MediaItem.Builder()
@@ -179,6 +194,10 @@ internal fun MediaItem.toPlaybackRequestOrNull(): PlaybackRequest? {
         format = extras.getString(EXTRA_FORMAT),
         suffix = extras.getString(EXTRA_SUFFIX),
         bitRate = extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
+        sourceBitRate = extras.getInt(EXTRA_SOURCE_BIT_RATE)
+            .takeIf { extras.containsKey(EXTRA_SOURCE_BIT_RATE) }
+            ?: extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
+        sampleRate = extras.getInt(EXTRA_SAMPLE_RATE).takeIf { extras.containsKey(EXTRA_SAMPLE_RATE) },
     )
 }
 
@@ -208,6 +227,10 @@ internal fun MediaItem.toQueueItemOrNull(): PlaybackQueueItem? {
         isCached = extras.getBoolean(EXTRA_IS_CACHED, false),
         suffix = extras.getString(EXTRA_SUFFIX),
         bitRateKbps = extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
+        sourceBitRateKbps = extras.getInt(EXTRA_SOURCE_BIT_RATE)
+            .takeIf { extras.containsKey(EXTRA_SOURCE_BIT_RATE) }
+            ?: extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
+        sampleRate = extras.getInt(EXTRA_SAMPLE_RATE).takeIf { extras.containsKey(EXTRA_SAMPLE_RATE) },
         contentType = extras.getString(EXTRA_MIME_TYPE),
     )
 }
@@ -295,6 +318,8 @@ internal fun PlaybackRequest.toBundle(): Bundle {
         putString(EXTRA_FORMAT, format)
         putString(EXTRA_SUFFIX, suffix)
         bitRate?.let { putInt(EXTRA_BIT_RATE, it) }
+        sourceBitRate?.let { putInt(EXTRA_SOURCE_BIT_RATE, it) }
+        sampleRate?.let { putInt(EXTRA_SAMPLE_RATE, it) }
     }
 }
 

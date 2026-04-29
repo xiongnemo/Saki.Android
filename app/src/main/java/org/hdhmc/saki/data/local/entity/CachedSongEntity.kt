@@ -28,6 +28,8 @@ data class CachedSongEntity(
     val discNumber: Int?,
     val suffix: String?,
     val contentType: String?,
+    val bitRate: Int?,
+    val sampleRate: Int?,
     val qualityKey: String,
     val fileSizeBytes: Long,
     val downloadedAt: Long,

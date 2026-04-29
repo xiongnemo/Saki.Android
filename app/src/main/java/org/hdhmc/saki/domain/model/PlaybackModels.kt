@@ -190,6 +190,8 @@ data class CachedSong(
     val discNumber: Int?,
     val suffix: String?,
     val contentType: String?,
+    val bitRateKbps: Int?,
+    val sampleRate: Int?,
     val quality: StreamQuality,
     val fileSizeBytes: Long,
     val downloadedAt: Long,
@@ -226,6 +228,8 @@ data class PlaybackQueueItem(
     val isCached: Boolean,
     val suffix: String? = null,
     val bitRateKbps: Int? = null,
+    val sourceBitRateKbps: Int? = null,
+    val sampleRate: Int? = null,
     val contentType: String? = null,
 )
 

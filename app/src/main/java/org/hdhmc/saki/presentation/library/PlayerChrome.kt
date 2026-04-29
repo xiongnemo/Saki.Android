@@ -131,10 +131,12 @@ import org.hdhmc.saki.R
 import org.hdhmc.saki.presentation.EndpointProbeInfo
 import org.hdhmc.saki.domain.model.PlaybackQueueItem
 import org.hdhmc.saki.domain.model.PlaybackProgressState
+import org.hdhmc.saki.domain.model.PlaybackRuntimeInfo
 import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.RepeatModeSetting
 import org.hdhmc.saki.domain.model.ServerConfig
 import org.hdhmc.saki.domain.model.SongLyrics
+import org.hdhmc.saki.domain.model.StreamQuality
 import java.io.File
 import coil3.imageLoader
 import coil3.request.ImageRequest
@@ -944,26 +946,13 @@ fun NowPlayingOverlay(
                         }
                         // Tech info bar
                         val runtimeInfo = playbackState.runtimeInfo
-                        val codec = runtimeInfo?.sampleMimeType?.let { mime ->
-                            when {
-                                "flac" in mime -> "FLAC"
-                                "opus" in mime -> "Opus"
-                                "vorbis" in mime -> "Vorbis"
-                                "mp4a" in mime || "aac" in mime -> "AAC"
-                                "mp3" in mime || "mpeg" in mime -> "MP3"
-                                "wav" in mime || "raw" in mime -> "WAV"
-                                else -> mime.substringAfter("/")
-                            }
-                        } ?: runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)
-                        val sampleRate = runtimeInfo?.sampleRate?.let {
-                            if (it >= 1_000) {
-                                val khz = it / 1_000.0
-                                if (it % 1_000 == 0) "${it / 1_000} kHz" else "${"%.1f".format(khz)} kHz"
-                            } else "$it Hz"
-                        }
-                        val bitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
-                            ?: track.bitRateKbps?.let { "$it kbps" }
-                        val techParts = listOfNotNull(codec, sampleRate, bitrate)
+                        val format = track.stableFormatLabel()
+                        val sampleRate = track.sampleRate?.let(::formatSampleRateShort)
+                        val bitrate = track.displayBitrate(
+                            runtimeInfo = runtimeInfo,
+                            preferStableMetadata = true,
+                        )
+                        val techParts = listOfNotNull(format, sampleRate, bitrate)
                         if (techParts.isNotEmpty()) {
                             Text(
                                 text = techParts.joinToString(" | "),
@@ -1074,9 +1063,9 @@ fun NowPlayingOverlay(
                     item { DetailLine(stringResource(R.string.detail_mime_type), playbackState.runtimeInfo?.sampleMimeType ?: track.contentType) }
                     item { DetailLine(stringResource(R.string.detail_container), playbackState.runtimeInfo?.containerMimeType) }
                     item { DetailLine(stringResource(R.string.detail_codec), playbackState.runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)) }
-                    item { DetailLine(stringResource(R.string.detail_average_bitrate), playbackState.runtimeInfo?.averageBitrate?.let(::formatBitrate) ?: track.bitRateKbps?.let { formatBitrate(it * 1_000) }) }
+                    item { DetailLine(stringResource(R.string.detail_average_bitrate), track.displayBitrate(playbackState.runtimeInfo)) }
                     item { DetailLine(stringResource(R.string.detail_peak_bitrate), playbackState.runtimeInfo?.peakBitrate?.let(::formatBitrate)) }
-                    item { DetailLine(stringResource(R.string.detail_sample_rate), playbackState.runtimeInfo?.sampleRate?.let(::formatSampleRate)) }
+                    item { DetailLine(stringResource(R.string.detail_sample_rate), (playbackState.runtimeInfo?.sampleRate ?: track.sampleRate)?.let(::formatSampleRate)) }
                     item { DetailLine(stringResource(R.string.detail_channels), playbackState.runtimeInfo?.channelCount?.toString()) }
                     item { DetailLine(stringResource(R.string.detail_language), playbackState.runtimeInfo?.language) }
                     item { DetailLine(stringResource(R.string.detail_cover_art_id), track.coverArtId) }
@@ -2037,6 +2026,57 @@ private fun formatBitrate(bitrate: Int): String {
         "%.2f Mbps".format(bitrate / 1_000_000f)
     } else {
         "%.0f kbps".format(bitrate / 1_000f)
+    }
+}
+
+private fun PlaybackQueueItem.displayBitrate(
+    runtimeInfo: PlaybackRuntimeInfo?,
+    preferStableMetadata: Boolean = false,
+): String? {
+    val metadataBitrate = bitRateKbps?.let { "$it kbps" }
+    val runtimeBitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
+    if (preferStableMetadata) return metadataBitrate ?: runtimeBitrate
+    return if (prefersMetadataBitrate()) {
+        metadataBitrate ?: runtimeBitrate
+    } else {
+        runtimeBitrate ?: metadataBitrate
+    }
+}
+
+private fun PlaybackQueueItem.prefersMetadataBitrate(): Boolean {
+    return !qualityLabel.equals(StreamQuality.ORIGINAL.label, ignoreCase = true) && bitRateKbps != null
+}
+
+private fun PlaybackQueueItem.stableFormatLabel(): String? {
+    suffix?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?.let { return it.uppercase(java.util.Locale.ROOT) }
+
+    return contentType?.substringAfter("/")
+        ?.substringBefore(";")
+        ?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?.let { subtype ->
+            when (subtype.lowercase(java.util.Locale.ROOT)) {
+                "mpeg", "mp3" -> "MP3"
+                "mp4", "x-m4a", "m4a" -> "M4A"
+                "flac" -> "FLAC"
+                "ogg", "oga" -> "OGG"
+                "opus" -> "Opus"
+                "vorbis" -> "Vorbis"
+                "wav", "x-wav" -> "WAV"
+                else -> subtype.uppercase(java.util.Locale.ROOT)
+            }
+        }
+}
+
+private fun formatSampleRateShort(sampleRate: Int): String {
+    if (sampleRate < 1_000) return "$sampleRate Hz"
+    val khz = sampleRate / 1_000.0
+    return if (sampleRate % 1_000 == 0) {
+        "${sampleRate / 1_000} kHz"
+    } else {
+        "%.1f kHz".format(khz)
     }
 }
 
