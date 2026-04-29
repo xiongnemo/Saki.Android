@@ -58,6 +58,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -116,6 +117,7 @@ import kotlinx.coroutines.flow.map
 @Composable
 fun BrowseScreen(
     uiState: SakiAppUiState,
+    isOfflineDegraded: Boolean,
     contentPadding: PaddingValues,
     bottomOverlayPadding: Dp = 0.dp,
     onManageServers: () -> Unit,
@@ -137,6 +139,7 @@ fun BrowseScreen(
     onPlaySongs: (List<Song>, Int) -> Unit,
     onQueueSong: (Song) -> Unit,
     onPlaySongNext: (Song) -> Unit,
+    onOfflineSongUnavailable: () -> Unit,
     onToggleSongDownload: (Song) -> Unit,
     onOpenSettings: () -> Unit,
     onImportConfig: (android.net.Uri) -> Unit,
@@ -151,6 +154,17 @@ fun BrowseScreen(
     }
     var actionSong by remember { mutableStateOf<Song?>(null) }
     var detailSong by remember { mutableStateOf<Song?>(null) }
+    val offlineAwarePlaySongs: (List<Song>, Int) -> Unit = { songs, startIndex ->
+        playOfflineAwareSongs(
+            songs = songs,
+            startIndex = startIndex,
+            isOfflineDegraded = isOfflineDegraded,
+            cachedSongsBySongId = cachedSongsBySongId,
+            streamCachedSongIds = uiState.streamCachedSongIds,
+            onPlaySongs = onPlaySongs,
+            onUnavailable = onOfflineSongUnavailable,
+        )
+    }
 
     BackHandler(
         enabled = uiState.selectedArtist != null ||
@@ -184,6 +198,9 @@ fun BrowseScreen(
                 onImportBackup = { importLauncher.launch(arrayOf("application/json", "*/*")) },
             )
         } else {
+            if (isOfflineDegraded) {
+                OfflineModeBanner(modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+            }
             AnimatedContent(
                 targetState = BrowseDetailTarget(
                     hasArtist = uiState.selectedArtist != null,
@@ -216,7 +233,8 @@ fun BrowseScreen(
                         isLoading = uiState.isAlbumLoading,
                         error = uiState.albumError?.asString(),
                         bottomOverlayPadding = bottomOverlayPadding,
-                        onPlaySongs = onPlaySongs,
+                        isOfflineDegraded = isOfflineDegraded,
+                        onPlaySongs = offlineAwarePlaySongs,
                         onShowActions = { actionSong = it },
                     )
 
@@ -230,8 +248,9 @@ fun BrowseScreen(
                         isLoading = uiState.isArtistLoading,
                         error = uiState.artistError?.asString(),
                         bottomOverlayPadding = bottomOverlayPadding,
+                        isOfflineDegraded = isOfflineDegraded,
                         onOpenAlbum = onOpenAlbum,
-                        onPlaySongs = onPlaySongs,
+                        onPlaySongs = offlineAwarePlaySongs,
                         onShowActions = { actionSong = it },
                     )
 
@@ -244,7 +263,8 @@ fun BrowseScreen(
                         isLoading = uiState.isPlaylistLoading,
                         error = uiState.playlistError?.asString(),
                         bottomOverlayPadding = bottomOverlayPadding,
-                        onPlaySongs = onPlaySongs,
+                        isOfflineDegraded = isOfflineDegraded,
+                        onPlaySongs = offlineAwarePlaySongs,
                         onShowActions = { actionSong = it },
                     )
 
@@ -253,6 +273,7 @@ fun BrowseScreen(
                         uiState = uiState,
                         currentServer = currentServer,
                         cachedSongsBySongId = cachedSongsBySongId,
+                        isOfflineDegraded = isOfflineDegraded,
                         bottomOverlayPadding = bottomOverlayPadding,
                         onSelectBrowseSection = onSelectBrowseSection,
                         onSetSearchActive = onSetSearchActive,
@@ -267,6 +288,7 @@ fun BrowseScreen(
                         onOpenAlbum = onOpenAlbum,
                         onOpenPlaylist = onOpenPlaylist,
                         onPlaySongs = onPlaySongs,
+                        onOfflineSongUnavailable = onOfflineSongUnavailable,
                         onShowSongActions = { actionSong = it },
                         onOpenSettings = onOpenSettings,
                     )
@@ -276,17 +298,30 @@ fun BrowseScreen(
     }
 
     actionSong?.let { song ->
+        val isDownloaded = cachedSongsBySongId.containsKey(song.id)
+        val isOfflinePlayable = song.isOfflinePlayable(
+            cachedSongsBySongId = cachedSongsBySongId,
+            streamCachedSongIds = uiState.streamCachedSongIds,
+        )
         SongActionsSheet(
             song = song,
-            isDownloaded = cachedSongsBySongId.containsKey(song.id),
+            isDownloaded = isDownloaded,
             isDownloading = song.id in uiState.downloadingSongIds,
             onDismiss = { actionSong = null },
             onPlayNext = {
-                onPlaySongNext(song)
+                if (isOfflineDegraded && !isOfflinePlayable) {
+                    onOfflineSongUnavailable()
+                } else {
+                    onPlaySongNext(song)
+                }
                 actionSong = null
             },
             onToggleDownload = {
-                onToggleSongDownload(song)
+                if (isOfflineDegraded && !isDownloaded) {
+                    onOfflineSongUnavailable()
+                } else {
+                    onToggleSongDownload(song)
+                }
                 actionSong = null
             },
             onDetails = {
@@ -294,7 +329,11 @@ fun BrowseScreen(
                 actionSong = null
             },
             onQueueSong = {
-                onQueueSong(song)
+                if (isOfflineDegraded && !isOfflinePlayable) {
+                    onOfflineSongUnavailable()
+                } else {
+                    onQueueSong(song)
+                }
                 actionSong = null
             },
         )
@@ -311,6 +350,23 @@ private data class BrowseDetailTarget(
     val hasPlaylist: Boolean,
 )
 
+@Composable
+private fun OfflineModeBanner(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = stringResource(R.string.browse_offline_degraded_banner),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BrowsePager(
@@ -318,6 +374,7 @@ private fun BrowsePager(
     uiState: SakiAppUiState,
     currentServer: ServerConfig,
     cachedSongsBySongId: Map<String, CachedSong>,
+    isOfflineDegraded: Boolean,
     bottomOverlayPadding: Dp,
     onSelectBrowseSection: (BrowseSection) -> Unit,
     onSetSearchActive: (Boolean) -> Unit,
@@ -332,6 +389,7 @@ private fun BrowsePager(
     onOpenAlbum: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
+    onOfflineSongUnavailable: () -> Unit,
     onShowSongActions: (Song) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -381,6 +439,7 @@ private fun BrowsePager(
                 cachedSongsBySongId = cachedSongsBySongId,
                 streamCachedSongIds = uiState.streamCachedSongIds,
                 downloadingSongIds = uiState.downloadingSongIds,
+                isOfflineDegraded = isOfflineDegraded,
                 bottomOverlayPadding = bottomOverlayPadding,
                 onSearchQuery = onUpdateSearchQuery,
                 onRemoveRecentSearchQuery = onRemoveRecentSearchQuery,
@@ -388,6 +447,7 @@ private fun BrowsePager(
                 onOpenArtist = onOpenArtist,
                 onOpenAlbum = onOpenAlbum,
                 onPlaySongs = onPlaySongs,
+                onOfflineSongUnavailable = onOfflineSongUnavailable,
                 onShowSongActions = onShowSongActions,
             )
         } else {
@@ -471,10 +531,12 @@ private fun BrowsePager(
                                 cachedSongsBySongId = cachedSongsBySongId,
                                 streamCachedSongIds = uiState.streamCachedSongIds,
                                 downloadingSongIds = uiState.downloadingSongIds,
+                                isOfflineDegraded = isOfflineDegraded,
                                 isLoading = uiState.isSongsLoading,
                                 error = uiState.songsError?.asString(),
                                 bottomOverlayPadding = bottomOverlayPadding,
                                 onPlaySongs = onPlaySongs,
+                                onOfflineSongUnavailable = onOfflineSongUnavailable,
                                 onShowSongActions = onShowSongActions,
                             )
                         }
@@ -555,6 +617,7 @@ private fun SearchResultsPage(
     cachedSongsBySongId: Map<String, CachedSong>,
     streamCachedSongIds: Set<String>,
     downloadingSongIds: Set<String>,
+    isOfflineDegraded: Boolean,
     bottomOverlayPadding: Dp,
     onSearchQuery: (String) -> Unit,
     onRemoveRecentSearchQuery: (String) -> Unit,
@@ -562,6 +625,7 @@ private fun SearchResultsPage(
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
+    onOfflineSongUnavailable: () -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
     val trimmedQuery = query.trim()
@@ -656,13 +720,26 @@ private fun SearchResultsPage(
                         )
                     }
                     itemsIndexed(visibleSongs, key = { _, s -> "song-${s.id}" }) { index, song ->
+                        val isOfflinePlayable = song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
                         SongRow(
                             song = song,
                             server = currentServer,
                             cachedSong = cachedSongsBySongId[song.id],
                             isStreamCached = song.id in streamCachedSongIds,
                             isDownloading = song.id in downloadingSongIds,
-                            onClick = { onPlaySongs(results.songs, index) },
+                            isOfflineDegraded = isOfflineDegraded,
+                            isOfflinePlayable = isOfflinePlayable,
+                            onClick = {
+                                playOfflineAwareSongs(
+                                    songs = results.songs,
+                                    startIndex = index,
+                                    isOfflineDegraded = isOfflineDegraded,
+                                    cachedSongsBySongId = cachedSongsBySongId,
+                                    streamCachedSongIds = streamCachedSongIds,
+                                    onPlaySongs = onPlaySongs,
+                                    onUnavailable = onOfflineSongUnavailable,
+                                )
+                            },
                             onMore = { onShowSongActions(song) },
                         )
                     }
@@ -1292,10 +1369,12 @@ private fun SongsPage(
     cachedSongsBySongId: Map<String, CachedSong>,
     streamCachedSongIds: Set<String>,
     downloadingSongIds: Set<String>,
+    isOfflineDegraded: Boolean,
     isLoading: Boolean,
     error: String?,
     bottomOverlayPadding: Dp,
     onPlaySongs: (List<Song>, Int) -> Unit,
+    onOfflineSongUnavailable: () -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
     if (isLoading && songs.isEmpty()) {
@@ -1318,16 +1397,64 @@ private fun SongsPage(
         contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
         itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
+            val isOfflinePlayable = song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
             SongRow(
                 song = song,
                 server = server,
                 cachedSong = cachedSongsBySongId[song.id],
                 isStreamCached = song.id in streamCachedSongIds,
                 isDownloading = song.id in downloadingSongIds,
-                onClick = { onPlaySongs(songs, index) },
+                isOfflineDegraded = isOfflineDegraded,
+                isOfflinePlayable = isOfflinePlayable,
+                onClick = {
+                    playOfflineAwareSongs(
+                        songs = songs,
+                        startIndex = index,
+                        isOfflineDegraded = isOfflineDegraded,
+                        cachedSongsBySongId = cachedSongsBySongId,
+                        streamCachedSongIds = streamCachedSongIds,
+                        onPlaySongs = onPlaySongs,
+                        onUnavailable = onOfflineSongUnavailable,
+                    )
+                },
                 onMore = { onShowSongActions(song) },
             )
         }
+    }
+}
+
+private fun Song.isOfflinePlayable(
+    cachedSongsBySongId: Map<String, CachedSong>,
+    streamCachedSongIds: Set<String>,
+): Boolean = id in cachedSongsBySongId || id in streamCachedSongIds
+
+private fun playOfflineAwareSongs(
+    songs: List<Song>,
+    startIndex: Int,
+    isOfflineDegraded: Boolean,
+    cachedSongsBySongId: Map<String, CachedSong>,
+    streamCachedSongIds: Set<String>,
+    onPlaySongs: (List<Song>, Int) -> Unit,
+    onUnavailable: () -> Unit,
+) {
+    if (!isOfflineDegraded) {
+        onPlaySongs(songs, startIndex)
+        return
+    }
+    val startSong = songs.getOrNull(startIndex)
+    if (startSong == null || !startSong.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)) {
+        onUnavailable()
+        return
+    }
+
+    val playableSongs = songs.filter { song -> song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds) }
+    val playableStartIndex = songs.take(startIndex).count { song ->
+        song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
+    }
+    if (playableSongs.isEmpty()) {
+        onUnavailable()
+    } else {
+        onPlaySongs(playableSongs, playableStartIndex)
     }
 }
 

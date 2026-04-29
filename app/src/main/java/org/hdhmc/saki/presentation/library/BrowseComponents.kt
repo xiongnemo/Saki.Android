@@ -47,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,6 +76,7 @@ fun ArtistDetailScreen(
     isLoading: Boolean,
     error: String?,
     bottomOverlayPadding: Dp = 0.dp,
+    isOfflineDegraded: Boolean = false,
     onOpenAlbum: (String) -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
@@ -98,12 +100,15 @@ fun ArtistDetailScreen(
                         )
                     }
                     itemsIndexed(topSongs, key = { _, s -> s.id }) { index, song ->
+                        val isOfflinePlayable = song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
                         SongRow(
                             song = song,
                             server = server,
                             cachedSong = cachedSongsBySongId[song.id],
                             isStreamCached = song.id in streamCachedSongIds,
                             isDownloading = song.id in downloadingSongIds,
+                            isOfflineDegraded = isOfflineDegraded,
+                            isOfflinePlayable = isOfflinePlayable,
                             onClick = { onPlaySongs(topSongs, index) },
                             onMore = { onShowActions(song) },
                         )
@@ -139,6 +144,7 @@ fun AlbumDetailScreen(
     isLoading: Boolean,
     error: String?,
     bottomOverlayPadding: Dp = 0.dp,
+    isOfflineDegraded: Boolean = false,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
@@ -163,16 +169,31 @@ fun AlbumDetailScreen(
                         title = stringResource(R.string.library_track_list),
                         subtitle = album.genre ?: stringResource(R.string.library_album_details),
                         actionLabel = stringResource(R.string.library_play_album),
-                        onAction = { if (album.songs.isNotEmpty()) onPlaySongs(album.songs, 0) },
+                        onAction = {
+                            if (album.songs.isNotEmpty()) {
+                                val startIndex = if (isOfflineDegraded) {
+                                    album.songs.firstOfflinePlayableIndex(
+                                        cachedSongsBySongId,
+                                        streamCachedSongIds,
+                                    )
+                                } else {
+                                    0
+                                }
+                                onPlaySongs(album.songs, startIndex)
+                            }
+                        },
                     )
                 }
                 itemsIndexed(album.songs, key = { _, s -> s.id }) { index, song ->
+                    val isOfflinePlayable = song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
                     SongRow(
                         song = song,
                         server = server,
                         cachedSong = cachedSongsBySongId[song.id],
                         isStreamCached = song.id in streamCachedSongIds,
                         isDownloading = song.id in downloadingSongIds,
+                        isOfflineDegraded = isOfflineDegraded,
+                        isOfflinePlayable = isOfflinePlayable,
                         onClick = { onPlaySongs(album.songs, index) },
                         onMore = { onShowActions(song) },
                     )
@@ -192,6 +213,7 @@ fun PlaylistDetailScreen(
     isLoading: Boolean,
     error: String?,
     bottomOverlayPadding: Dp = 0.dp,
+    isOfflineDegraded: Boolean = false,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
@@ -215,16 +237,31 @@ fun PlaylistDetailScreen(
                         title = stringResource(R.string.library_tracks),
                         subtitle = stringResource(R.string.library_playlist_sequence),
                         actionLabel = stringResource(R.string.library_play_playlist),
-                        onAction = { if (playlist.songs.isNotEmpty()) onPlaySongs(playlist.songs, 0) },
+                        onAction = {
+                            if (playlist.songs.isNotEmpty()) {
+                                val startIndex = if (isOfflineDegraded) {
+                                    playlist.songs.firstOfflinePlayableIndex(
+                                        cachedSongsBySongId,
+                                        streamCachedSongIds,
+                                    )
+                                } else {
+                                    0
+                                }
+                                onPlaySongs(playlist.songs, startIndex)
+                            }
+                        },
                     )
                 }
                 itemsIndexed(playlist.songs, key = { index, s -> "${s.id}_$index" }) { index, song ->
+                    val isOfflinePlayable = song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
                     SongRow(
                         song = song,
                         server = server,
                         cachedSong = cachedSongsBySongId[song.id],
                         isStreamCached = song.id in streamCachedSongIds,
                         isDownloading = song.id in downloadingSongIds,
+                        isOfflineDegraded = isOfflineDegraded,
+                        isOfflinePlayable = isOfflinePlayable,
                         onClick = { onPlaySongs(playlist.songs, index) },
                         onMore = { onShowActions(song) },
                     )
@@ -411,6 +448,18 @@ private fun AlbumMiniCard(album: AlbumSummary, server: ServerConfig, onOpenAlbum
     }
 }
 
+private fun Song.isOfflinePlayable(
+    cachedSongsBySongId: Map<String, CachedSong>,
+    streamCachedSongIds: Set<String>,
+): Boolean = cachedSongsBySongId.containsKey(id) || id in streamCachedSongIds
+
+private fun List<Song>.firstOfflinePlayableIndex(
+    cachedSongsBySongId: Map<String, CachedSong>,
+    streamCachedSongIds: Set<String>,
+): Int = indexOfFirst { song ->
+    song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
+}
+
 @Composable
 fun SongRow(
     song: Song,
@@ -418,13 +467,17 @@ fun SongRow(
     cachedSong: CachedSong?,
     isStreamCached: Boolean,
     isDownloading: Boolean,
+    isOfflineDegraded: Boolean = false,
+    isOfflinePlayable: Boolean = true,
     onClick: () -> Unit,
     onMore: () -> Unit,
 ) {
+    val isUnavailableOffline = isOfflineDegraded && !isOfflinePlayable
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
+            .alpha(if (isUnavailableOffline) 0.5f else 1f)
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -457,6 +510,13 @@ fun SongRow(
                     isDownloading -> CircularProgressIndicator(
                         modifier = Modifier.size(12.dp),
                         strokeWidth = 2.dp,
+                    )
+
+                    isUnavailableOffline -> Icon(
+                        Icons.Rounded.ErrorOutline,
+                        contentDescription = stringResource(R.string.library_unavailable_offline),
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(
