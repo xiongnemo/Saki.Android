@@ -297,6 +297,170 @@ object DatabaseModule {
         }
     }
 
+    private val migration11To12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_song_metadata` (
+                    `serverId` INTEGER NOT NULL,
+                    `songId` TEXT NOT NULL,
+                    `parentId` TEXT,
+                    `title` TEXT NOT NULL COLLATE NOCASE,
+                    `album` TEXT,
+                    `albumId` TEXT,
+                    `artist` TEXT,
+                    `artistId` TEXT,
+                    `coverArtId` TEXT,
+                    `durationSeconds` INTEGER,
+                    `track` INTEGER,
+                    `discNumber` INTEGER,
+                    `year` INTEGER,
+                    `genre` TEXT,
+                    `bitRate` INTEGER,
+                    `sampleRate` INTEGER,
+                    `suffix` TEXT,
+                    `contentType` TEXT,
+                    `sizeBytes` INTEGER,
+                    `path` TEXT,
+                    `created` TEXT,
+                    `cachedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`serverId`, `songId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_song_metadata_serverId_albumId` ON `cached_song_metadata` (`serverId`, `albumId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_song_metadata_serverId_artistId` ON `cached_song_metadata` (`serverId`, `artistId`)")
+            db.execSQL(
+                """
+                INSERT OR REPLACE INTO `cached_song_metadata` (
+                    `serverId`, `songId`, `parentId`, `title`, `album`, `albumId`, `artist`, `artistId`,
+                    `coverArtId`, `durationSeconds`, `track`, `discNumber`, `year`, `genre`, `bitRate`,
+                    `sampleRate`, `suffix`, `contentType`, `sizeBytes`, `path`, `created`, `cachedAt`
+                )
+                SELECT
+                    `serverId`, `songId`, `parentId`, `title`, `album`, `albumId`, `artist`, `artistId`,
+                    `coverArtId`, `durationSeconds`, `track`, `discNumber`, `year`, `genre`, `bitRate`,
+                    `sampleRate`, `suffix`, `contentType`, `sizeBytes`, `path`, `created`, 0
+                FROM `cached_library_songs`
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_artist_details` (
+                    `serverId` INTEGER NOT NULL,
+                    `artistId` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `coverArtId` TEXT,
+                    `artistImageUrl` TEXT,
+                    `albumCount` INTEGER,
+                    `cachedAt` INTEGER NOT NULL,
+                    `isComplete` INTEGER NOT NULL,
+                    PRIMARY KEY(`serverId`, `artistId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_artist_detail_albums` (
+                    `serverId` INTEGER NOT NULL,
+                    `artistId` TEXT NOT NULL,
+                    `albumId` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `artist` TEXT,
+                    `albumArtistId` TEXT,
+                    `coverArtId` TEXT,
+                    `songCount` INTEGER,
+                    `durationSeconds` INTEGER,
+                    `year` INTEGER,
+                    `genre` TEXT,
+                    `created` TEXT,
+                    `sortOrder` INTEGER NOT NULL,
+                    PRIMARY KEY(`serverId`, `artistId`, `albumId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_artist_detail_albums_serverId_artistId_sortOrder` ON `cached_artist_detail_albums` (`serverId`, `artistId`, `sortOrder`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_artist_detail_songs` (
+                    `serverId` INTEGER NOT NULL,
+                    `artistId` TEXT NOT NULL,
+                    `songId` TEXT NOT NULL,
+                    `sortOrder` INTEGER NOT NULL,
+                    PRIMARY KEY(`serverId`, `artistId`, `sortOrder`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_artist_detail_songs_serverId_artistId` ON `cached_artist_detail_songs` (`serverId`, `artistId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_artist_detail_songs_serverId_songId` ON `cached_artist_detail_songs` (`serverId`, `songId`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_album_details` (
+                    `serverId` INTEGER NOT NULL,
+                    `albumId` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `artist` TEXT,
+                    `artistId` TEXT,
+                    `coverArtId` TEXT,
+                    `songCount` INTEGER,
+                    `durationSeconds` INTEGER,
+                    `year` INTEGER,
+                    `genre` TEXT,
+                    `created` TEXT,
+                    `cachedAt` INTEGER NOT NULL,
+                    `isComplete` INTEGER NOT NULL,
+                    PRIMARY KEY(`serverId`, `albumId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_album_detail_songs` (
+                    `serverId` INTEGER NOT NULL,
+                    `albumId` TEXT NOT NULL,
+                    `songId` TEXT NOT NULL,
+                    `sortOrder` INTEGER NOT NULL,
+                    PRIMARY KEY(`serverId`, `albumId`, `sortOrder`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_album_detail_songs_serverId_albumId` ON `cached_album_detail_songs` (`serverId`, `albumId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_album_detail_songs_serverId_songId` ON `cached_album_detail_songs` (`serverId`, `songId`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_playlist_details` (
+                    `serverId` INTEGER NOT NULL,
+                    `playlistId` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `owner` TEXT,
+                    `isPublic` INTEGER,
+                    `songCount` INTEGER,
+                    `durationSeconds` INTEGER,
+                    `coverArtId` TEXT,
+                    `created` TEXT,
+                    `changed` TEXT,
+                    `cachedAt` INTEGER NOT NULL,
+                    `isComplete` INTEGER NOT NULL,
+                    PRIMARY KEY(`serverId`, `playlistId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `cached_playlist_detail_songs` (
+                    `serverId` INTEGER NOT NULL,
+                    `playlistId` TEXT NOT NULL,
+                    `songId` TEXT NOT NULL,
+                    `sortOrder` INTEGER NOT NULL,
+                    PRIMARY KEY(`serverId`, `playlistId`, `sortOrder`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_playlist_detail_songs_serverId_playlistId` ON `cached_playlist_detail_songs` (`serverId`, `playlistId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_playlist_detail_songs_serverId_songId` ON `cached_playlist_detail_songs` (`serverId`, `songId`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideSakiDatabase(
@@ -313,7 +477,7 @@ object DatabaseModule {
     fun allMigrations() = arrayOf(
         migration1To2, migration2To3, migration3To4, migration4To5,
         migration5To6, migration6To7, migration7To8, migration8To9,
-        migration9To10, migration10To11,
+        migration9To10, migration10To11, migration11To12,
     )
 
     @Provides
