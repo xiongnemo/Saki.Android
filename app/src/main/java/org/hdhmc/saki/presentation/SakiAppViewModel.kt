@@ -1591,7 +1591,6 @@ data class EndpointStatus(
 ) {
     val isOfflineDegraded: Boolean
         get() = !isProbing &&
-            activeEndpointId == null &&
             probeResults.isNotEmpty() &&
             probeResults.none { it.reachable }
 }

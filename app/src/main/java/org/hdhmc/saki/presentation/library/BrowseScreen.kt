@@ -234,6 +234,7 @@ fun BrowseScreen(
                         error = uiState.albumError?.asString(),
                         bottomOverlayPadding = bottomOverlayPadding,
                         isOfflineDegraded = isOfflineDegraded,
+                        onOfflineSongUnavailable = onOfflineSongUnavailable,
                         onPlaySongs = offlineAwarePlaySongs,
                         onShowActions = { actionSong = it },
                     )
@@ -264,6 +265,7 @@ fun BrowseScreen(
                         error = uiState.playlistError?.asString(),
                         bottomOverlayPadding = bottomOverlayPadding,
                         isOfflineDegraded = isOfflineDegraded,
+                        onOfflineSongUnavailable = onOfflineSongUnavailable,
                         onPlaySongs = offlineAwarePlaySongs,
                         onShowActions = { actionSong = it },
                     )
@@ -1422,11 +1424,6 @@ private fun SongsPage(
         }
     }
 }
-
-private fun Song.isOfflinePlayable(
-    cachedSongsBySongId: Map<String, CachedSong>,
-    streamCachedSongIds: Set<String>,
-): Boolean = id in cachedSongsBySongId || id in streamCachedSongIds
 
 private fun playOfflineAwareSongs(
     songs: List<Song>,

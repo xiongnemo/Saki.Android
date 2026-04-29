@@ -145,6 +145,7 @@ fun AlbumDetailScreen(
     error: String?,
     bottomOverlayPadding: Dp = 0.dp,
     isOfflineDegraded: Boolean = false,
+    onOfflineSongUnavailable: () -> Unit = {},
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
@@ -171,15 +172,19 @@ fun AlbumDetailScreen(
                         actionLabel = stringResource(R.string.library_play_album),
                         onAction = {
                             if (album.songs.isNotEmpty()) {
-                                val startIndex = if (isOfflineDegraded) {
-                                    album.songs.firstOfflinePlayableIndex(
+                                if (isOfflineDegraded) {
+                                    val startIndex = album.songs.firstOfflinePlayableIndexOrNull(
                                         cachedSongsBySongId,
                                         streamCachedSongIds,
                                     )
+                                    if (startIndex != null) {
+                                        onPlaySongs(album.songs, startIndex)
+                                    } else {
+                                        onOfflineSongUnavailable()
+                                    }
                                 } else {
-                                    0
+                                    onPlaySongs(album.songs, 0)
                                 }
-                                onPlaySongs(album.songs, startIndex)
                             }
                         },
                     )
@@ -214,6 +219,7 @@ fun PlaylistDetailScreen(
     error: String?,
     bottomOverlayPadding: Dp = 0.dp,
     isOfflineDegraded: Boolean = false,
+    onOfflineSongUnavailable: () -> Unit = {},
     onPlaySongs: (List<Song>, Int) -> Unit,
     onShowActions: (Song) -> Unit,
 ) {
@@ -239,15 +245,19 @@ fun PlaylistDetailScreen(
                         actionLabel = stringResource(R.string.library_play_playlist),
                         onAction = {
                             if (playlist.songs.isNotEmpty()) {
-                                val startIndex = if (isOfflineDegraded) {
-                                    playlist.songs.firstOfflinePlayableIndex(
+                                if (isOfflineDegraded) {
+                                    val startIndex = playlist.songs.firstOfflinePlayableIndexOrNull(
                                         cachedSongsBySongId,
                                         streamCachedSongIds,
                                     )
+                                    if (startIndex != null) {
+                                        onPlaySongs(playlist.songs, startIndex)
+                                    } else {
+                                        onOfflineSongUnavailable()
+                                    }
                                 } else {
-                                    0
+                                    onPlaySongs(playlist.songs, 0)
                                 }
-                                onPlaySongs(playlist.songs, startIndex)
                             }
                         },
                     )
@@ -446,18 +456,6 @@ private fun AlbumMiniCard(album: AlbumSummary, server: ServerConfig, onOpenAlbum
             )
         }
     }
-}
-
-private fun Song.isOfflinePlayable(
-    cachedSongsBySongId: Map<String, CachedSong>,
-    streamCachedSongIds: Set<String>,
-): Boolean = cachedSongsBySongId.containsKey(id) || id in streamCachedSongIds
-
-private fun List<Song>.firstOfflinePlayableIndex(
-    cachedSongsBySongId: Map<String, CachedSong>,
-    streamCachedSongIds: Set<String>,
-): Int = indexOfFirst { song ->
-    song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
 }
 
 @Composable
