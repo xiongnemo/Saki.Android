@@ -46,6 +46,11 @@ data class Artist(
     val albums: List<AlbumSummary>,
 )
 
+data class CachedArtistDetail(
+    val artist: Artist,
+    val topSongs: List<Song>,
+)
+
 enum class AlbumListType(val apiValue: String) {
     RANDOM("random"),
     NEWEST("newest"),
