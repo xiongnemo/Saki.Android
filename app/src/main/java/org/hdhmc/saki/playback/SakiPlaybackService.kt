@@ -31,7 +31,10 @@ import org.hdhmc.saki.MainActivity
 import org.hdhmc.saki.R
 import org.hdhmc.saki.data.remote.HTTP_USER_AGENT
 import org.hdhmc.saki.domain.model.LyricLine
+import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshot
+import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.domain.model.SoundBalancingMode
+import org.hdhmc.saki.domain.repository.LocalPlayQueueRepository
 import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
 import org.hdhmc.saki.domain.repository.SubsonicRepository
 import com.google.common.util.concurrent.ListenableFuture
@@ -77,6 +80,9 @@ class SakiPlaybackService : MediaSessionService() {
 
     @Inject
     lateinit var playbackPreferencesRepository: PlaybackPreferencesRepository
+
+    @Inject
+    lateinit var localPlayQueueRepository: LocalPlayQueueRepository
 
     @Inject
     lateinit var streamCache: SimpleCache
@@ -448,16 +454,27 @@ class SakiPlaybackService : MediaSessionService() {
         val itemCount = activePlayer.mediaItemCount
         if (itemCount == 0) return
         val request = activePlayer.currentMediaItem?.toPlaybackRequestOrNull() ?: return
-        val songIds = (0 until itemCount).mapNotNull { i ->
-            activePlayer.getMediaItemAt(i).toPlaybackRequestOrNull()?.songId
-        }
+        val queueRequests = (0 until itemCount)
+            .mapNotNull { i -> activePlayer.getMediaItemAt(i).toPlaybackRequestOrNull() }
+            .filter { itemRequest -> itemRequest.serverId == request.serverId }
+        val songIds = queueRequests.map(PlaybackRequest::songId)
         if (songIds.isEmpty()) return
         val positionMs = activePlayer.currentPosition
         val serverId = request.serverId
         val currentSongId = request.songId
+        val snapshot = LocalPlayQueueSnapshot(
+            serverId = serverId,
+            songs = queueRequests.map(PlaybackRequest::toSong),
+            currentSongId = currentSongId,
+            positionMs = positionMs,
+            updatedAt = System.currentTimeMillis(),
+        )
         savePlayQueueJob?.cancel()
         savePlayQueueJob = serviceScope.launch {
             if (!immediate) kotlinx.coroutines.delay(500)
+            runCatching {
+                localPlayQueueRepository.save(snapshot)
+            }
             runCatching {
                 subsonicRepository.savePlayQueue(
                     serverId = serverId,
@@ -745,6 +762,31 @@ class SakiPlaybackService : MediaSessionService() {
             }
         }.getOrNull()
     }
+}
+
+private fun PlaybackRequest.toSong(): Song {
+    return Song(
+        id = songId,
+        parentId = null,
+        title = title,
+        album = album,
+        albumId = albumId,
+        artist = artist,
+        artistId = artistId,
+        coverArtId = coverArtId,
+        durationSeconds = durationMs?.div(1_000L)?.toInt(),
+        track = track,
+        discNumber = discNumber,
+        year = null,
+        genre = null,
+        bitRate = sourceBitRate ?: bitRate,
+        sampleRate = sampleRate,
+        suffix = suffix,
+        contentType = mimeType,
+        sizeBytes = null,
+        path = null,
+        created = null,
+    )
 }
 
 private fun PlaybackException.shouldRetryNextEndpoint(): Boolean {

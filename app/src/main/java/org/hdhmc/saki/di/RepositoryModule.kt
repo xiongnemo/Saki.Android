@@ -9,9 +9,11 @@ import org.hdhmc.saki.data.repository.DefaultLibraryCacheRepository
 import org.hdhmc.saki.data.repository.DefaultServerConfigRepository
 import org.hdhmc.saki.data.repository.DefaultStreamCacheRepository
 import org.hdhmc.saki.data.repository.DefaultSubsonicRepository
+import org.hdhmc.saki.data.repository.FileLocalPlayQueueRepository
 import org.hdhmc.saki.domain.repository.AppPreferencesRepository
 import org.hdhmc.saki.domain.repository.CachedSongRepository
 import org.hdhmc.saki.domain.repository.LibraryCacheRepository
+import org.hdhmc.saki.domain.repository.LocalPlayQueueRepository
 import org.hdhmc.saki.domain.repository.PlaybackManager
 import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
 import org.hdhmc.saki.domain.repository.ServerConfigRepository
@@ -61,6 +63,11 @@ abstract class RepositoryModule {
     abstract fun bindLibraryCacheRepository(
         repository: DefaultLibraryCacheRepository,
     ): LibraryCacheRepository
+
+    @Binds
+    abstract fun bindLocalPlayQueueRepository(
+        repository: FileLocalPlayQueueRepository,
+    ): LocalPlayQueueRepository
 
     @Binds
     @UnstableApi
