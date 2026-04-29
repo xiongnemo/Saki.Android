@@ -136,37 +136,33 @@ class DefaultLibraryCacheRepository @Inject constructor(
 
     override suspend fun saveSongs(serverId: Long, songs: List<Song>) = withContext(ioDispatcher) {
         val cachedAt = System.currentTimeMillis()
-        val entities = songs.map { song ->
-            CachedLibrarySongEntity(
-                serverId = serverId,
-                songId = song.id,
-                parentId = song.parentId,
-                title = song.title,
-                album = song.album,
-                albumId = song.albumId,
-                artist = song.artist,
-                artistId = song.artistId,
-                coverArtId = song.coverArtId,
-                durationSeconds = song.durationSeconds,
-                track = song.track,
-                discNumber = song.discNumber,
-                year = song.year,
-                genre = song.genre,
-                bitRate = song.bitRate,
-                sampleRate = song.sampleRate,
-                suffix = song.suffix,
-                contentType = song.contentType,
-                sizeBytes = song.sizeBytes,
-                path = song.path,
-                created = song.created,
-            )
-        }
-        dao.replaceSongs(serverId, entities)
+        replaceLibrarySongs(serverId, songs)
         dao.pruneUnreferencedSongMetadata(serverId)
-        songs.asSequence()
-            .map { song -> song.toMetadataEntity(serverId, cachedAt) }
-            .chunked(SONG_METADATA_WRITE_CHUNK_SIZE)
-            .forEach { chunk -> dao.insertSongMetadata(chunk) }
+        saveSongMetadataPageInternal(serverId, songs, cachedAt)
+    }
+
+    override suspend fun saveSongsWindow(
+        serverId: Long,
+        songs: List<Song>,
+        cachedAt: Long,
+    ): Unit = withContext(ioDispatcher) {
+        replaceLibrarySongs(serverId, songs)
+        saveSongMetadataPageInternal(serverId, songs, cachedAt)
+    }
+
+    override suspend fun saveSongMetadataPage(
+        serverId: Long,
+        songs: List<Song>,
+        cachedAt: Long,
+    ): Unit = withContext(ioDispatcher) {
+        saveSongMetadataPageInternal(serverId, songs, cachedAt)
+    }
+
+    override suspend fun pruneSongMetadataBefore(
+        serverId: Long,
+        cachedAt: Long,
+    ): Unit = withContext(ioDispatcher) {
+        dao.pruneSongMetadataBefore(serverId, cachedAt)
     }
 
     override suspend fun getArtistDetail(
@@ -302,6 +298,45 @@ class DefaultLibraryCacheRepository @Inject constructor(
 
     private fun CachedLibrarySongEntity.toDomain() = Song(
         id = songId,
+        parentId = parentId,
+        title = title,
+        album = album,
+        albumId = albumId,
+        artist = artist,
+        artistId = artistId,
+        coverArtId = coverArtId,
+        durationSeconds = durationSeconds,
+        track = track,
+        discNumber = discNumber,
+        year = year,
+        genre = genre,
+        bitRate = bitRate,
+        sampleRate = sampleRate,
+        suffix = suffix,
+        contentType = contentType,
+        sizeBytes = sizeBytes,
+        path = path,
+        created = created,
+    )
+
+    private suspend fun replaceLibrarySongs(serverId: Long, songs: List<Song>) {
+        dao.replaceSongs(serverId, songs.map { song -> song.toLibraryEntity(serverId) })
+    }
+
+    private suspend fun saveSongMetadataPageInternal(
+        serverId: Long,
+        songs: List<Song>,
+        cachedAt: Long,
+    ) {
+        songs.asSequence()
+            .map { song -> song.toMetadataEntity(serverId, cachedAt) }
+            .chunked(SONG_METADATA_WRITE_CHUNK_SIZE)
+            .forEach { chunk -> dao.insertSongMetadata(chunk) }
+    }
+
+    private fun Song.toLibraryEntity(serverId: Long) = CachedLibrarySongEntity(
+        serverId = serverId,
+        songId = id,
         parentId = parentId,
         title = title,
         album = album,

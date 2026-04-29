@@ -212,6 +212,7 @@
     <string name="browse_loading_songs">Loading songs</string>
     <string name="browse_no_songs">No songs</string>
     <string name="browse_no_songs_body">The current song feed is empty.</string>
+    <string name="browse_songs_windowed">Showing first %1$d songs</string>
     <string name="browse_section_artists_headline">Browse the library</string>
     <string name="browse_section_albums_headline">Flip through releases</string>
     <string name="browse_section_playlists_headline">Queue curated mixes</string>

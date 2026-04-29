@@ -204,6 +204,7 @@
     <string name="browse_loading_songs">正在加载歌曲</string>
     <string name="browse_no_songs">无歌曲</string>
     <string name="browse_no_songs_body">当前歌曲列表为空。</string>
+    <string name="browse_songs_windowed">显示前 %1$d 首歌曲</string>
     <string name="browse_section_artists_headline">浏览曲库</string>
     <string name="browse_section_albums_headline">翻阅专辑</string>
     <string name="browse_section_playlists_headline">播放精选合集</string>

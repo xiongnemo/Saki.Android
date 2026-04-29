@@ -67,6 +67,8 @@ import kotlinx.coroutines.launch
 private const val ALBUMS_PAGE_SIZE = 36
 private const val PLAYLIST_DETAIL_PREFETCH_LIMIT = 12
 private const val PLAYLIST_DETAIL_PREFETCH_MAX_SONGS = 500
+private const val SONGS_PAGE_SIZE = 500
+private const val SONGS_DISPLAY_WINDOW_SIZE = 5_000
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -396,6 +398,8 @@ class SakiAppViewModel @Inject constructor(
                 albumFeeds = emptyAlbumFeedStates(),
                 selectedAlbum = null,
                 selectedPlaylist = null,
+                songs = emptyList(),
+                isSongsWindowed = false,
             )
         }
         viewModelScope.launch {
@@ -1137,6 +1141,8 @@ class SakiAppViewModel @Inject constructor(
                 albumFeeds = if (serverChanged) emptyAlbumFeedStates() else state.albumFeeds,
                 selectedAlbum = if (serverChanged) null else state.selectedAlbum,
                 selectedPlaylist = if (serverChanged) null else state.selectedPlaylist,
+                songs = if (serverChanged) emptyList() else state.songs,
+                isSongsWindowed = if (serverChanged) false else state.isSongsWindowed,
             )
         }
 
@@ -1328,7 +1334,12 @@ class SakiAppViewModel @Inject constructor(
             }
             val songs = loadCachedOrNull { libraryCacheRepository.getSongs(serverId) }
             if (!songs.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
-                mutableUiState.update { it.copy(songs = songs) }
+                mutableUiState.update {
+                    it.copy(
+                        songs = songs,
+                        isSongsWindowed = songs.size >= SONGS_DISPLAY_WINDOW_SIZE,
+                    )
+                }
             }
         }
     }
@@ -1549,7 +1560,12 @@ class SakiAppViewModel @Inject constructor(
             if (!forceRefresh) {
                 val cached = runCatching { libraryCacheRepository.getSongs(serverId) }.getOrNull()
                 if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { it.copy(songs = cached) }
+                    mutableUiState.update {
+                        it.copy(
+                            songs = cached,
+                            isSongsWindowed = cached.size >= SONGS_DISPLAY_WINDOW_SIZE,
+                        )
+                    }
                 }
             }
 
@@ -1557,15 +1573,21 @@ class SakiAppViewModel @Inject constructor(
                 mutableUiState.update { it.copy(isSongsLoading = true, songsError = null) }
             }
 
-            runCatching {
-                fetchAllSongs(serverId)
-            }.onSuccess { songs ->
+            try {
+                val result = syncSongsWindow(serverId)
                 if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { it.copy(songs = songs, isSongsLoading = false, songsError = null) }
+                    mutableUiState.update {
+                        it.copy(
+                            songs = result.songs,
+                            isSongsWindowed = result.isWindowed,
+                            isSongsLoading = false,
+                            songsError = null,
+                        )
+                    }
                 }
-                runCatching { libraryCacheRepository.saveSongs(serverId, songs) }
-                    .onFailure { Log.w("SakiApp", "Failed to cache songs", it) }
-            }.onFailure { throwable ->
+            } catch (e: CancellationException) {
+                throw e
+            } catch (throwable: Throwable) {
                 if (uiState.value.selectedServerId == serverId) {
                     mutableUiState.update {
                         it.copy(isSongsLoading = false, songsError = throwable.localizedOr(R.string.error_load_songs))
@@ -1577,28 +1599,41 @@ class SakiAppViewModel @Inject constructor(
 
     // Navidrome supports empty query in search3 to return all songs.
     // This is not standard Subsonic behavior and may not work on other servers.
-    private suspend fun fetchAllSongs(serverId: Long): List<Song> = withContext(Dispatchers.IO) {
-        val pageSize = 500
-        val maxPages = 100
-        val allSongs = mutableListOf<Song>()
+    private suspend fun syncSongsWindow(serverId: Long): SongsSyncResult = withContext(Dispatchers.IO) {
+        val cachedAt = System.currentTimeMillis()
+        val displaySongs = mutableListOf<Song>()
+        var isWindowed = false
         var offset = 0
-        var page = 0
-        while (page < maxPages) {
+        while (true) {
             val results = subsonicRepository.search(
                 serverId = serverId,
                 query = "",
                 artistCount = 0,
                 albumCount = 0,
-                songCount = pageSize,
+                songCount = SONGS_PAGE_SIZE,
                 songOffset = offset,
             ).data
-            allSongs.addAll(results.songs)
-            if (results.songs.isEmpty() || results.songs.size < pageSize) break
-            offset += pageSize
-            page++
+            val pageSongs = results.songs
+            if (pageSongs.isEmpty()) break
+
+            libraryCacheRepository.saveSongMetadataPage(serverId, pageSongs, cachedAt)
+
+            if (displaySongs.size < SONGS_DISPLAY_WINDOW_SIZE) {
+                val remaining = SONGS_DISPLAY_WINDOW_SIZE - displaySongs.size
+                displaySongs.addAll(pageSongs.take(remaining))
+                if (pageSongs.size > remaining) {
+                    isWindowed = true
+                }
+            } else {
+                isWindowed = true
+            }
+            if (pageSongs.size < SONGS_PAGE_SIZE) break
+            offset += SONGS_PAGE_SIZE
         }
-        allSongs.sortBy { it.title.lowercase() }
-        allSongs
+        displaySongs.sortBy { it.title.lowercase() }
+        libraryCacheRepository.saveSongsWindow(serverId, displaySongs, cachedAt)
+        libraryCacheRepository.pruneSongMetadataBefore(serverId, cachedAt)
+        SongsSyncResult(songs = displaySongs, isWindowed = isWindowed)
     }
 
     private suspend fun buildArtistTopSongs(
@@ -1827,6 +1862,11 @@ private data class LocalPlayQueueRestorePlan(
     val positionMs: Long,
 )
 
+private data class SongsSyncResult(
+    val songs: List<Song>,
+    val isWindowed: Boolean,
+)
+
 enum class BrowseSection {
     ARTISTS,
     ALBUMS,
@@ -1878,6 +1918,7 @@ data class SakiAppUiState(
     val isPlaylistLoading: Boolean = false,
     val playlistError: UiText? = null,
     val songs: List<Song> = emptyList(),
+    val isSongsWindowed: Boolean = false,
     val isSongsLoading: Boolean = false,
     val songsError: UiText? = null,
     val isSearchActive: Boolean = false,

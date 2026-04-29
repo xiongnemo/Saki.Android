@@ -240,6 +240,30 @@ interface LibraryCacheDao {
         """
         DELETE FROM cached_song_metadata
         WHERE serverId = :serverId
+            AND cachedAt < :cachedAt
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_artist_detail_songs
+                WHERE cached_artist_detail_songs.serverId = cached_song_metadata.serverId
+                    AND cached_artist_detail_songs.songId = cached_song_metadata.songId
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_album_detail_songs
+                WHERE cached_album_detail_songs.serverId = cached_song_metadata.serverId
+                    AND cached_album_detail_songs.songId = cached_song_metadata.songId
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_playlist_detail_songs
+                WHERE cached_playlist_detail_songs.serverId = cached_song_metadata.serverId
+                    AND cached_playlist_detail_songs.songId = cached_song_metadata.songId
+            )
+        """,
+    )
+    suspend fun pruneSongMetadataBefore(serverId: Long, cachedAt: Long)
+
+    @Query(
+        """
+        DELETE FROM cached_song_metadata
+        WHERE serverId = :serverId
             AND NOT EXISTS (
                 SELECT 1 FROM cached_library_songs
                 WHERE cached_library_songs.serverId = cached_song_metadata.serverId

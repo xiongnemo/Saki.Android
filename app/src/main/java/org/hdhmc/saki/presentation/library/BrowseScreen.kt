@@ -530,6 +530,7 @@ private fun BrowsePager(
 
                             BrowseSection.SONGS -> SongsPage(
                                 songs = uiState.songs,
+                                isWindowed = uiState.isSongsWindowed,
                                 server = currentServer,
                                 cachedSongsBySongId = cachedSongsBySongId,
                                 streamCachedSongIds = uiState.streamCachedSongIds,
@@ -1368,6 +1369,7 @@ private fun PlaylistsPage(
 @Composable
 private fun SongsPage(
     songs: List<Song>,
+    isWindowed: Boolean,
     server: ServerConfig,
     cachedSongsBySongId: Map<String, CachedSong>,
     streamCachedSongIds: Set<String>,
@@ -1422,6 +1424,16 @@ private fun SongsPage(
                 },
                 onMore = { onShowSongActions(song) },
             )
+        }
+        if (isWindowed) {
+            item {
+                Text(
+                    text = stringResource(R.string.browse_songs_windowed, songs.size),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
