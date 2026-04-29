@@ -332,6 +332,20 @@ object DatabaseModule {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_song_metadata_serverId_artistId` ON `cached_song_metadata` (`serverId`, `artistId`)")
             db.execSQL(
                 """
+                INSERT OR REPLACE INTO `cached_song_metadata` (
+                    `serverId`, `songId`, `parentId`, `title`, `album`, `albumId`, `artist`, `artistId`,
+                    `coverArtId`, `durationSeconds`, `track`, `discNumber`, `year`, `genre`, `bitRate`,
+                    `sampleRate`, `suffix`, `contentType`, `sizeBytes`, `path`, `created`, `cachedAt`
+                )
+                SELECT
+                    `serverId`, `songId`, `parentId`, `title`, `album`, `albumId`, `artist`, `artistId`,
+                    `coverArtId`, `durationSeconds`, `track`, `discNumber`, `year`, `genre`, `bitRate`,
+                    `sampleRate`, `suffix`, `contentType`, `sizeBytes`, `path`, `created`, 0
+                FROM `cached_library_songs`
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
                 CREATE TABLE IF NOT EXISTS `cached_artist_details` (
                     `serverId` INTEGER NOT NULL,
                     `artistId` TEXT NOT NULL,

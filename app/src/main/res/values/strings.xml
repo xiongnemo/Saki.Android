@@ -125,6 +125,8 @@
     <string name="library_loading_artist">Loading artist</string>
     <string name="library_popular_songs">Popular songs</string>
     <string name="library_popular_songs_subtitle">Quick picks for %1$s</string>
+    <string name="library_artist_songs">Songs</string>
+    <string name="library_artist_songs_subtitle">Songs by %1$s</string>
     <string name="library_albums">Albums</string>
     <string name="library_albums_subtitle_full_release">Tap into the full release page</string>
     <string name="library_loading_album">Loading album</string>

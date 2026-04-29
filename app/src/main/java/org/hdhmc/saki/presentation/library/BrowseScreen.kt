@@ -242,7 +242,8 @@ fun BrowseScreen(
                     target.hasArtist && uiState.selectedArtist != null -> ArtistDetailScreen(
                         server = currentServer,
                         artist = uiState.selectedArtist,
-                        topSongs = uiState.selectedArtistTopSongs,
+                        songs = uiState.selectedArtistSongs,
+                        songsAreTopSongs = uiState.selectedArtistSongsAreTopSongs,
                         cachedSongsBySongId = cachedSongsBySongId,
                         streamCachedSongIds = uiState.streamCachedSongIds,
                         downloadingSongIds = uiState.downloadingSongIds,

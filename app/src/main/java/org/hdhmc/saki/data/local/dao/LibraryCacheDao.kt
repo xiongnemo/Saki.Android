@@ -24,6 +24,9 @@ interface LibraryCacheDao {
     @Query("SELECT * FROM cached_artists WHERE serverId = :serverId ORDER BY sectionName, name")
     suspend fun getArtists(serverId: Long): List<CachedArtistEntity>
 
+    @Query("SELECT * FROM cached_artists WHERE serverId = :serverId AND artistId = :artistId LIMIT 1")
+    suspend fun getArtistSummary(serverId: Long, artistId: String): CachedArtistEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArtists(artists: List<CachedArtistEntity>)
 
@@ -38,6 +41,12 @@ interface LibraryCacheDao {
 
     @Query("SELECT * FROM cached_albums WHERE serverId = :serverId AND listType = :listType ORDER BY sortOrder")
     suspend fun getAlbums(serverId: Long, listType: String): List<CachedAlbumEntity>
+
+    @Query("SELECT * FROM cached_albums WHERE serverId = :serverId AND albumId = :albumId ORDER BY sortOrder LIMIT 1")
+    suspend fun getAlbumSummary(serverId: Long, albumId: String): CachedAlbumEntity?
+
+    @Query("SELECT * FROM cached_albums WHERE serverId = :serverId AND artistId = :artistId ORDER BY year DESC, name COLLATE NOCASE")
+    suspend fun getAlbumSummariesByArtistId(serverId: Long, artistId: String): List<CachedAlbumEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAlbums(albums: List<CachedAlbumEntity>)
@@ -69,6 +78,15 @@ interface LibraryCacheDao {
     @Query("SELECT * FROM cached_library_songs WHERE serverId = :serverId ORDER BY title COLLATE NOCASE")
     suspend fun getSongs(serverId: Long): List<CachedLibrarySongEntity>
 
+    @Query("SELECT * FROM cached_library_songs WHERE serverId = :serverId AND songId IN (:songIds)")
+    suspend fun getLibrarySongs(serverId: Long, songIds: List<String>): List<CachedLibrarySongEntity>
+
+    @Query("SELECT * FROM cached_library_songs WHERE serverId = :serverId AND albumId = :albumId ORDER BY CASE WHEN discNumber IS NULL THEN 1 ELSE 0 END, discNumber, CASE WHEN track IS NULL THEN 1 ELSE 0 END, track, title COLLATE NOCASE")
+    suspend fun getLibrarySongsByAlbumId(serverId: Long, albumId: String): List<CachedLibrarySongEntity>
+
+    @Query("SELECT * FROM cached_library_songs WHERE serverId = :serverId AND artistId = :artistId ORDER BY album COLLATE NOCASE, CASE WHEN discNumber IS NULL THEN 1 ELSE 0 END, discNumber, CASE WHEN track IS NULL THEN 1 ELSE 0 END, track, title COLLATE NOCASE")
+    suspend fun getLibrarySongsByArtistId(serverId: Long, artistId: String): List<CachedLibrarySongEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSongs(songs: List<CachedLibrarySongEntity>)
 
@@ -78,7 +96,7 @@ interface LibraryCacheDao {
     @Transaction
     suspend fun replaceSongs(serverId: Long, songs: List<CachedLibrarySongEntity>) {
         clearSongs(serverId)
-        insertSongs(songs)
+        if (songs.isNotEmpty()) insertSongs(songs)
     }
 
     @Query("SELECT * FROM cached_artist_details WHERE serverId = :serverId AND artistId = :artistId LIMIT 1")
@@ -191,4 +209,10 @@ interface LibraryCacheDao {
 
     @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId AND songId IN (:songIds)")
     suspend fun getSongMetadata(serverId: Long, songIds: List<String>): List<CachedSongMetadataEntity>
+
+    @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId AND albumId = :albumId ORDER BY CASE WHEN discNumber IS NULL THEN 1 ELSE 0 END, discNumber, CASE WHEN track IS NULL THEN 1 ELSE 0 END, track, title COLLATE NOCASE")
+    suspend fun getSongMetadataByAlbumId(serverId: Long, albumId: String): List<CachedSongMetadataEntity>
+
+    @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId AND artistId = :artistId ORDER BY album COLLATE NOCASE, CASE WHEN discNumber IS NULL THEN 1 ELSE 0 END, discNumber, CASE WHEN track IS NULL THEN 1 ELSE 0 END, track, title COLLATE NOCASE")
+    suspend fun getSongMetadataByArtistId(serverId: Long, artistId: String): List<CachedSongMetadataEntity>
 }

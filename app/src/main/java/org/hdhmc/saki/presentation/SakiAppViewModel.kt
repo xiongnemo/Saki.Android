@@ -389,7 +389,8 @@ class SakiAppViewModel @Inject constructor(
             state.copy(
                 selectedServerId = serverId,
                 selectedArtist = null,
-                selectedArtistTopSongs = emptyList(),
+                selectedArtistSongs = emptyList(),
+                selectedArtistSongsAreTopSongs = true,
                 albumFeeds = emptyAlbumFeedStates(),
                 selectedAlbum = null,
                 selectedPlaylist = null,
@@ -504,7 +505,8 @@ class SakiAppViewModel @Inject constructor(
         mutableUiState.update { state ->
             state.copy(
                 selectedArtist = fallbackArtist,
-                selectedArtistTopSongs = emptyList(),
+                selectedArtistSongs = emptyList(),
+                selectedArtistSongsAreTopSongs = true,
                 isArtistLoading = true,
                 artistError = null,
                 selectedAlbum = null,
@@ -517,7 +519,8 @@ class SakiAppViewModel @Inject constructor(
                 mutableUiState.update { state ->
                     state.copy(
                         selectedArtist = cached.artist,
-                        selectedArtistTopSongs = cached.topSongs,
+                        selectedArtistSongs = cached.songs,
+                        selectedArtistSongsAreTopSongs = cached.songsAreTopSongs,
                         isArtistLoading = !endpointStatus.value.isOfflineDegraded,
                         artistError = null,
                     )
@@ -542,7 +545,8 @@ class SakiAppViewModel @Inject constructor(
                     mutableUiState.update { state ->
                         state.copy(
                             selectedArtist = artist,
-                            selectedArtistTopSongs = topSongs,
+                            selectedArtistSongs = topSongs,
+                            selectedArtistSongsAreTopSongs = true,
                             isArtistLoading = false,
                             artistError = null,
                         )
@@ -551,7 +555,7 @@ class SakiAppViewModel @Inject constructor(
                 runCatching {
                     libraryCacheRepository.saveArtistDetail(
                         serverId = serverId,
-                        detail = CachedArtistDetail(artist = artist, topSongs = topSongs),
+                        detail = CachedArtistDetail(artist = artist, songs = topSongs, songsAreTopSongs = true),
                     )
                 }.onFailure { Log.w("SakiApp", "Failed to cache artist detail", it) }
             }.onFailure { throwable ->
@@ -575,7 +579,8 @@ class SakiAppViewModel @Inject constructor(
         mutableUiState.update { state ->
             state.copy(
                 selectedArtist = null,
-                selectedArtistTopSongs = emptyList(),
+                selectedArtistSongs = emptyList(),
+                selectedArtistSongsAreTopSongs = true,
                 selectedAlbum = null,
                 artistError = null,
                 albumError = null,
@@ -1125,7 +1130,8 @@ class SakiAppViewModel @Inject constructor(
                 servers = servers,
                 selectedServerId = selectedServerId,
                 selectedArtist = if (serverChanged) null else state.selectedArtist,
-                selectedArtistTopSongs = if (serverChanged) emptyList() else state.selectedArtistTopSongs,
+                selectedArtistSongs = if (serverChanged) emptyList() else state.selectedArtistSongs,
+                selectedArtistSongsAreTopSongs = if (serverChanged) true else state.selectedArtistSongsAreTopSongs,
                 albumFeeds = if (serverChanged) emptyAlbumFeedStates() else state.albumFeeds,
                 selectedAlbum = if (serverChanged) null else state.selectedAlbum,
                 selectedPlaylist = if (serverChanged) null else state.selectedPlaylist,
@@ -1816,7 +1822,8 @@ data class SakiAppUiState(
     val isArtistsLoading: Boolean = false,
     val artistsError: UiText? = null,
     val selectedArtist: Artist? = null,
-    val selectedArtistTopSongs: List<Song> = emptyList(),
+    val selectedArtistSongs: List<Song> = emptyList(),
+    val selectedArtistSongsAreTopSongs: Boolean = true,
     val isArtistLoading: Boolean = false,
     val artistError: UiText? = null,
     val albumFeeds: Map<AlbumListType, AlbumFeedState> = emptyAlbumFeedStates(),

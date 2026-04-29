@@ -117,6 +117,8 @@
     <string name="library_loading_artist">正在加载艺术家</string>
     <string name="library_popular_songs">热门歌曲</string>
     <string name="library_popular_songs_subtitle">%1$s 的精选</string>
+    <string name="library_artist_songs">歌曲</string>
+    <string name="library_artist_songs_subtitle">%1$s 的歌曲</string>
     <string name="library_albums">专辑</string>
     <string name="library_albums_subtitle_full_release">查看完整专辑页面</string>
     <string name="library_loading_album">正在加载专辑</string>

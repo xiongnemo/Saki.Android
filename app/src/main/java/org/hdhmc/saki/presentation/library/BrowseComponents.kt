@@ -69,7 +69,8 @@ import org.hdhmc.saki.domain.model.Song
 fun ArtistDetailScreen(
     server: ServerConfig,
     artist: Artist,
-    topSongs: List<Song>,
+    songs: List<Song>,
+    songsAreTopSongs: Boolean,
     cachedSongsBySongId: Map<String, CachedSong>,
     streamCachedSongIds: Set<String>,
     downloadingSongIds: Set<String>,
@@ -89,17 +90,25 @@ fun ArtistDetailScreen(
         bottomOverlayPadding = bottomOverlayPadding,
     ) {
         when {
-            isLoading && topSongs.isEmpty() -> item { LoadingStateCard(stringResource(R.string.library_loading_artist)) }
-            error != null && topSongs.isEmpty() -> item { ErrorStateCard(error) }
+            isLoading && songs.isEmpty() -> item { LoadingStateCard(stringResource(R.string.library_loading_artist)) }
+            error != null && songs.isEmpty() -> item { ErrorStateCard(error) }
             else -> {
-                if (topSongs.isNotEmpty()) {
+                if (songs.isNotEmpty()) {
                     item {
                         SectionTitle(
-                            stringResource(R.string.library_popular_songs),
-                            stringResource(R.string.library_popular_songs_subtitle, artist.name),
+                            if (songsAreTopSongs) {
+                                stringResource(R.string.library_popular_songs)
+                            } else {
+                                stringResource(R.string.library_artist_songs)
+                            },
+                            if (songsAreTopSongs) {
+                                stringResource(R.string.library_popular_songs_subtitle, artist.name)
+                            } else {
+                                stringResource(R.string.library_artist_songs_subtitle, artist.name)
+                            },
                         )
                     }
-                    itemsIndexed(topSongs, key = { _, s -> s.id }) { index, song ->
+                    itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
                         val isOfflinePlayable = song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
                         SongRow(
                             song = song,
@@ -109,7 +118,7 @@ fun ArtistDetailScreen(
                             isDownloading = song.id in downloadingSongIds,
                             isOfflineDegraded = isOfflineDegraded,
                             isOfflinePlayable = isOfflinePlayable,
-                            onClick = { onPlaySongs(topSongs, index) },
+                            onClick = { onPlaySongs(songs, index) },
                             onMore = { onShowActions(song) },
                         )
                     }

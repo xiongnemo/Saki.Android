@@ -48,7 +48,8 @@ data class Artist(
 
 data class CachedArtistDetail(
     val artist: Artist,
-    val topSongs: List<Song>,
+    val songs: List<Song>,
+    val songsAreTopSongs: Boolean = true,
 )
 
 enum class AlbumListType(val apiValue: String) {
