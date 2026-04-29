@@ -202,6 +202,9 @@ interface LibraryCacheDao {
     @Query("SELECT * FROM cached_playlist_details WHERE serverId = :serverId AND playlistId = :playlistId LIMIT 1")
     suspend fun getPlaylistDetail(serverId: Long, playlistId: String): CachedPlaylistDetailEntity?
 
+    @Query("SELECT playlistId FROM cached_playlist_details WHERE serverId = :serverId AND playlistId IN (:playlistIds)")
+    suspend fun getCachedPlaylistDetailIds(serverId: Long, playlistIds: List<String>): List<String>
+
     @Query("SELECT * FROM cached_playlist_detail_songs WHERE serverId = :serverId AND playlistId = :playlistId ORDER BY sortOrder")
     suspend fun getPlaylistDetailSongs(serverId: Long, playlistId: String): List<CachedPlaylistDetailSongEntity>
 

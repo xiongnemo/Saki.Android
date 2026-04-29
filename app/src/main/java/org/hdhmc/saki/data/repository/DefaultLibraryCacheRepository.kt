@@ -119,6 +119,17 @@ class DefaultLibraryCacheRepository @Inject constructor(
         dao.replacePlaylists(serverId, entities)
     }
 
+    override suspend fun getCachedPlaylistDetailIds(
+        serverId: Long,
+        playlistIds: List<String>,
+    ): Set<String> = withContext(ioDispatcher) {
+        if (playlistIds.isEmpty()) return@withContext emptySet()
+        playlistIds.distinct()
+            .chunked(SONG_METADATA_QUERY_CHUNK_SIZE)
+            .flatMap { chunk -> dao.getCachedPlaylistDetailIds(serverId, chunk) }
+            .toSet()
+    }
+
     override suspend fun getSongs(serverId: Long): List<Song> = withContext(ioDispatcher) {
         dao.getSongs(serverId).map { it.toDomain() }
     }

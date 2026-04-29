@@ -16,6 +16,7 @@ interface LibraryCacheRepository {
     suspend fun saveAlbums(serverId: Long, type: AlbumListType, albums: List<AlbumSummary>)
     suspend fun getPlaylists(serverId: Long): List<PlaylistSummary>
     suspend fun savePlaylists(serverId: Long, playlists: List<PlaylistSummary>)
+    suspend fun getCachedPlaylistDetailIds(serverId: Long, playlistIds: List<String>): Set<String>
     suspend fun getSongs(serverId: Long): List<Song>
     suspend fun saveSongs(serverId: Long, songs: List<Song>)
     suspend fun getArtistDetail(serverId: Long, artistId: String): CachedArtistDetail?

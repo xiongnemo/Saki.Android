@@ -65,6 +65,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val ALBUMS_PAGE_SIZE = 36
+private const val PLAYLIST_DETAIL_PREFETCH_LIMIT = 12
+private const val PLAYLIST_DETAIL_PREFETCH_MAX_SONGS = 500
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -1490,10 +1492,40 @@ class SakiAppViewModel @Inject constructor(
                 }
                 runCatching { libraryCacheRepository.savePlaylists(serverId, playlists) }
                     .onFailure { Log.w("SakiApp", "Failed to cache playlists", it) }
+                prefetchPlaylistDetails(serverId, playlists)
             }.onFailure { throwable ->
                 mutableUiState.update {
                     it.copy(isPlaylistsLoading = false, playlistsError = throwable.localizedOr(R.string.error_load_playlists))
                 }
+            }
+        }
+    }
+
+    private suspend fun prefetchPlaylistDetails(
+        serverId: Long,
+        playlists: List<PlaylistSummary>,
+    ) {
+        val candidates = playlists.asSequence()
+            .filter { playlist -> (playlist.songCount ?: Int.MAX_VALUE) <= PLAYLIST_DETAIL_PREFETCH_MAX_SONGS }
+            .take(PLAYLIST_DETAIL_PREFETCH_LIMIT)
+            .toList()
+        if (candidates.isEmpty()) return
+
+        val cachedIds = runCatching {
+            libraryCacheRepository.getCachedPlaylistDetailIds(serverId, candidates.map(PlaylistSummary::id))
+        }.onFailure {
+            Log.w("SakiApp", "Failed to read cached playlist detail ids", it)
+        }.getOrDefault(emptySet())
+
+        candidates.filterNot { playlist -> playlist.id in cachedIds }.forEach { playlistSummary ->
+            if (uiState.value.selectedServerId != serverId || endpointStatus.value.isOfflineDegraded) return
+            runCatching {
+                subsonicRepository.getPlaylist(serverId, playlistSummary.id).data
+            }.onSuccess { playlist ->
+                runCatching { libraryCacheRepository.savePlaylistDetail(serverId, playlist) }
+                    .onFailure { Log.w("SakiApp", "Failed to prefetch playlist detail", it) }
+            }.onFailure {
+                Log.w("SakiApp", "Failed to prefetch playlist detail", it)
             }
         }
     }
