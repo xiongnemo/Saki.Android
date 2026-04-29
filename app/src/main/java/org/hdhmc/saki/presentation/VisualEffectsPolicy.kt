@@ -65,7 +65,9 @@ private fun detectDeviceCapability(context: Context): DeviceCapability {
         0
     }
     val tier = when {
-        isLowRamDevice || memoryClassMb in 1..LOW_MEMORY_CLASS_MB -> DeviceCapabilityTier.LOW
+        memoryClassMb == UNKNOWN_MEMORY_CLASS_MB ||
+            isLowRamDevice ||
+            memoryClassMb in 1..LOW_MEMORY_CLASS_MB -> DeviceCapabilityTier.LOW
         Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q -> DeviceCapabilityTier.LEGACY
         mediaPerformanceClass >= Build.VERSION_CODES.TIRAMISU &&
             memoryClassMb >= HIGH_MEMORY_CLASS_MB -> DeviceCapabilityTier.HIGH
@@ -79,6 +81,7 @@ private fun detectDeviceCapability(context: Context): DeviceCapability {
     )
 }
 
+private const val UNKNOWN_MEMORY_CLASS_MB = 0
 private const val LOW_MEMORY_CLASS_MB = 128
 private const val HIGH_MEMORY_CLASS_MB = 384
 private const val LOW_ARTWORK_PREWARM_RADIUS = 0
