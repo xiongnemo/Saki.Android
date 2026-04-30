@@ -2,7 +2,9 @@ package org.hdhmc.saki.data.repository
 
 import android.content.Context
 import org.hdhmc.saki.data.local.dao.CachedSongDao
+import org.hdhmc.saki.data.local.dao.LibraryCacheDao
 import org.hdhmc.saki.data.local.entity.CachedSongEntity
+import org.hdhmc.saki.data.local.entity.CachedSongMetadataEntity
 import org.hdhmc.saki.di.IoDispatcher
 import org.hdhmc.saki.domain.model.AuthenticatedUrlCandidate
 import org.hdhmc.saki.domain.model.CacheStorageSummary
@@ -24,6 +26,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -33,21 +37,27 @@ import okhttp3.Request
 class DefaultCachedSongRepository @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
     private val cachedSongDao: CachedSongDao,
+    private val libraryCacheDao: LibraryCacheDao,
     private val okHttpClient: OkHttpClient,
     private val playbackPreferencesRepository: PlaybackPreferencesRepository,
     private val subsonicRepository: SubsonicRepository,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : CachedSongRepository {
     override fun observeCachedSongs(): Flow<List<CachedSong>> {
-        return cachedSongDao.observeCachedSongs()
-            .map { songs -> songs.map(CachedSongEntity::toDomain) }
+        return combine(
+            cachedSongDao.observeCachedSongs(),
+            libraryCacheDao.observeSongMetadataInvalidations(),
+        ) { songs, _ -> songs }
+            .map { songs -> songs.toDomainWithMetadata(libraryCacheDao) }
+            .flowOn(ioDispatcher)
     }
 
     override suspend fun getCachedSong(
         serverId: Long,
         songId: String,
     ): CachedSong? = withContext(ioDispatcher) {
-        cachedSongDao.getCachedSong(serverId, songId)?.toDomain()
+        cachedSongDao.getCachedSong(serverId, songId)
+            ?.let { entity -> entity.toDomainWithMetadata(libraryCacheDao) }
     }
 
     override suspend fun getPlayableCachedSong(
@@ -56,7 +66,7 @@ class DefaultCachedSongRepository @Inject constructor(
         preferredQuality: StreamQuality,
     ): CachedSong? = withContext(ioDispatcher) {
         cachedSongDao.getCachedSong(serverId, songId)
-            ?.toDomain()
+            ?.let { entity -> entity.toDomainWithMetadata(libraryCacheDao) }
             ?.takeIf { song -> song.canPlayAt(preferredQuality) }
     }
 
@@ -65,8 +75,8 @@ class DefaultCachedSongRepository @Inject constructor(
         preferredQuality: StreamQuality,
     ): Map<String, CachedSong> = withContext(ioDispatcher) {
         cachedSongDao.getCachedSongsForServer(serverId)
+            .toDomainWithMetadata(libraryCacheDao)
             .asSequence()
-            .map(CachedSongEntity::toDomain)
             .filter { song -> song.canPlayAt(preferredQuality) }
             .associateBy(CachedSong::songId)
     }
@@ -321,27 +331,64 @@ private data class DownloadedBinary(
     val suffix: String?,
 )
 
-private fun CachedSongEntity.toDomain(): CachedSong {
+private data class CachedSongMetadataKey(
+    val serverId: Long,
+    val songId: String,
+)
+
+private suspend fun CachedSongEntity.toDomainWithMetadata(
+    libraryCacheDao: LibraryCacheDao,
+): CachedSong {
+    val metadata = libraryCacheDao.getSongMetadata(serverId, listOf(songId)).firstOrNull()
+    return toDomain(metadata)
+}
+
+private suspend fun List<CachedSongEntity>.toDomainWithMetadata(
+    libraryCacheDao: LibraryCacheDao,
+): List<CachedSong> {
+    if (isEmpty()) return emptyList()
+
+    val metadataByKey = groupBy(CachedSongEntity::serverId)
+        .flatMap { (serverId, songs) ->
+            songs.map(CachedSongEntity::songId)
+                .distinct()
+                .chunked(IN_CLAUSE_QUERY_CHUNK_SIZE)
+                .flatMap { songIds ->
+                    libraryCacheDao.getSongMetadata(serverId, songIds)
+                        .map { metadata -> CachedSongMetadataKey(serverId, metadata.songId) to metadata }
+                }
+        }
+        .toMap()
+
+    return map { entity ->
+        entity.toDomain(metadataByKey[CachedSongMetadataKey(entity.serverId, entity.songId)])
+    }
+}
+
+private fun CachedSongEntity.toDomain(metadata: CachedSongMetadataEntity? = null): CachedSong {
+    val quality = StreamQuality.fromStorageKey(qualityKey)
     return CachedSong(
         cacheId = cacheId,
         serverId = serverId,
         songId = songId,
-        title = title,
-        album = album,
-        albumId = albumId,
-        artist = artist,
-        artistId = artistId,
-        coverArtId = coverArtId,
+        title = metadata?.title ?: title,
+        album = metadata?.album ?: album,
+        albumId = metadata?.albumId ?: albumId,
+        artist = metadata?.artist ?: artist,
+        artistId = metadata?.artistId ?: artistId,
+        coverArtId = metadata?.coverArtId ?: coverArtId,
         coverArtPath = coverArtPath,
         localPath = localPath,
-        durationSeconds = durationSeconds,
-        track = track,
-        discNumber = discNumber,
-        suffix = suffix,
-        contentType = contentType,
-        bitRateKbps = bitRate,
-        sampleRate = sampleRate,
-        quality = StreamQuality.fromStorageKey(qualityKey),
+        durationSeconds = metadata?.durationSeconds ?: durationSeconds,
+        track = metadata?.track ?: track,
+        discNumber = metadata?.discNumber ?: discNumber,
+        suffix = suffix ?: metadata?.suffix.takeIf { quality.preferOriginalDownload },
+        contentType = contentType ?: metadata?.contentType.takeIf { quality.preferOriginalDownload },
+        bitRateKbps = bitRate
+            ?: quality.maxBitRate.takeIf { bitrate -> !quality.preferOriginalDownload && bitrate != null && bitrate > 0 }
+            ?: metadata?.bitRate.takeIf { quality.preferOriginalDownload },
+        sampleRate = sampleRate ?: metadata?.sampleRate,
+        quality = quality,
         fileSizeBytes = fileSizeBytes,
         downloadedAt = downloadedAt,
     )
@@ -395,3 +442,5 @@ private fun IOException.shouldRetryNextEndpoint(): Boolean {
         this is SocketTimeoutException ||
         this is NoRouteToHostException
 }
+
+private const val IN_CLAUSE_QUERY_CHUNK_SIZE = 500

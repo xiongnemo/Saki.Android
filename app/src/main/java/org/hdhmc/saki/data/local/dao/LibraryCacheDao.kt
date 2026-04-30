@@ -18,6 +18,7 @@ import org.hdhmc.saki.data.local.entity.CachedPlaylistDetailSongEntity
 import org.hdhmc.saki.data.local.entity.CachedPlaylistEntity
 import org.hdhmc.saki.data.local.entity.CachedSongMetadataEntity
 import org.hdhmc.saki.data.local.entity.CachedSongMetadataOrder
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface LibraryCacheDao {
@@ -305,6 +306,11 @@ interface LibraryCacheDao {
                 WHERE cached_playlist_detail_songs.serverId = cached_song_metadata.serverId
                     AND cached_playlist_detail_songs.songId = cached_song_metadata.songId
             )
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_songs
+                WHERE cached_songs.serverId = cached_song_metadata.serverId
+                    AND cached_songs.songId = cached_song_metadata.songId
+            )
         """,
     )
     suspend fun pruneSongMetadataBefore(serverId: Long, cachedAt: Long)
@@ -333,12 +339,20 @@ interface LibraryCacheDao {
                 WHERE cached_playlist_detail_songs.serverId = cached_song_metadata.serverId
                     AND cached_playlist_detail_songs.songId = cached_song_metadata.songId
             )
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_songs
+                WHERE cached_songs.serverId = cached_song_metadata.serverId
+                    AND cached_songs.songId = cached_song_metadata.songId
+            )
         """,
     )
     suspend fun pruneUnreferencedSongMetadata(serverId: Long)
 
     @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId AND songId IN (:songIds)")
     suspend fun getSongMetadata(serverId: Long, songIds: List<String>): List<CachedSongMetadataEntity>
+
+    @Query("SELECT COUNT(*) FROM cached_song_metadata")
+    fun observeSongMetadataInvalidations(): Flow<Int>
 
     @Query("SELECT songId, libraryOrder FROM cached_song_metadata WHERE serverId = :serverId AND songId IN (:songIds)")
     suspend fun getSongMetadataOrders(serverId: Long, songIds: List<String>): List<CachedSongMetadataOrder>
