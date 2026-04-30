@@ -168,6 +168,9 @@
     <string name="detail_quality">Quality</string>
     <string name="detail_server">Server</string>
     <string name="detail_mode">Mode</string>
+    <string name="detail_source_media">Source</string>
+    <string name="detail_requested_quality">Request</string>
+    <string name="detail_playing_media">Playing</string>
     <string name="detail_mime_type">MIME type</string>
     <string name="detail_container">Container</string>
     <string name="detail_codec">Codec</string>
