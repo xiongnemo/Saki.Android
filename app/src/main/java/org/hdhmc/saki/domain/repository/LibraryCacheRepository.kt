@@ -7,6 +7,7 @@ import org.hdhmc.saki.domain.model.CachedArtistDetail
 import org.hdhmc.saki.domain.model.LibraryIndexes
 import org.hdhmc.saki.domain.model.Playlist
 import org.hdhmc.saki.domain.model.PlaylistSummary
+import org.hdhmc.saki.domain.model.SearchResults
 import org.hdhmc.saki.domain.model.Song
 
 interface LibraryCacheRepository {
@@ -18,10 +19,18 @@ interface LibraryCacheRepository {
     suspend fun savePlaylists(serverId: Long, playlists: List<PlaylistSummary>)
     suspend fun getCachedPlaylistDetailIds(serverId: Long, playlistIds: List<String>): Set<String>
     suspend fun getSongs(serverId: Long): List<Song>
+    suspend fun getSongsPage(serverId: Long, limit: Int, offset: Int): List<Song>
     suspend fun saveSongs(serverId: Long, songs: List<Song>)
     suspend fun saveSongsWindow(serverId: Long, songs: List<Song>, cachedAt: Long)
     suspend fun saveSongMetadataPage(serverId: Long, songs: List<Song>, cachedAt: Long)
     suspend fun pruneSongMetadataBefore(serverId: Long, cachedAt: Long)
+    suspend fun searchCached(
+        serverId: Long,
+        query: String,
+        artistCount: Int,
+        albumCount: Int,
+        songCount: Int,
+    ): SearchResults
     suspend fun getArtistDetail(serverId: Long, artistId: String): CachedArtistDetail?
     suspend fun saveArtistDetail(serverId: Long, detail: CachedArtistDetail)
     suspend fun getAlbumDetail(serverId: Long, albumId: String): Album?

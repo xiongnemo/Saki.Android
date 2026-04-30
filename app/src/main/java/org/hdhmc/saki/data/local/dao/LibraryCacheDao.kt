@@ -104,6 +104,24 @@ interface LibraryCacheDao {
     @Query("SELECT * FROM cached_library_songs WHERE serverId = :serverId ORDER BY title COLLATE NOCASE")
     suspend fun getSongs(serverId: Long): List<CachedLibrarySongEntity>
 
+    @Query("SELECT * FROM cached_artists WHERE serverId = :serverId AND name LIKE :query COLLATE NOCASE ORDER BY name COLLATE NOCASE LIMIT :limit")
+    suspend fun searchArtists(serverId: Long, query: String, limit: Int): List<CachedArtistEntity>
+
+    @Query(
+        """
+        SELECT * FROM cached_albums
+        WHERE serverId = :serverId
+            AND (
+                name LIKE :query COLLATE NOCASE
+                OR artist LIKE :query COLLATE NOCASE
+            )
+        GROUP BY albumId
+        ORDER BY name COLLATE NOCASE
+        LIMIT :limit
+        """,
+    )
+    suspend fun searchAlbums(serverId: Long, query: String, limit: Int): List<CachedAlbumEntity>
+
     @Query("SELECT * FROM cached_library_songs WHERE serverId = :serverId AND songId IN (:songIds)")
     suspend fun getLibrarySongs(serverId: Long, songIds: List<String>): List<CachedLibrarySongEntity>
 
@@ -290,6 +308,24 @@ interface LibraryCacheDao {
 
     @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId AND songId IN (:songIds)")
     suspend fun getSongMetadata(serverId: Long, songIds: List<String>): List<CachedSongMetadataEntity>
+
+    @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId ORDER BY title COLLATE NOCASE, songId LIMIT :limit OFFSET :offset")
+    suspend fun getSongMetadataPage(serverId: Long, limit: Int, offset: Int): List<CachedSongMetadataEntity>
+
+    @Query(
+        """
+        SELECT * FROM cached_song_metadata
+        WHERE serverId = :serverId
+            AND (
+                title LIKE :query COLLATE NOCASE
+                OR album LIKE :query COLLATE NOCASE
+                OR artist LIKE :query COLLATE NOCASE
+            )
+        ORDER BY title COLLATE NOCASE, songId
+        LIMIT :limit
+        """,
+    )
+    suspend fun searchSongMetadata(serverId: Long, query: String, limit: Int): List<CachedSongMetadataEntity>
 
     @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId AND albumId = :albumId ORDER BY CASE WHEN discNumber IS NULL THEN 1 ELSE 0 END, discNumber, CASE WHEN track IS NULL THEN 1 ELSE 0 END, track, title COLLATE NOCASE")
     suspend fun getSongMetadataByAlbumId(serverId: Long, albumId: String): List<CachedSongMetadataEntity>

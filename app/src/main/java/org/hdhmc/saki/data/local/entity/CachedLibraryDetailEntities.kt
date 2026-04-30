@@ -10,6 +10,7 @@ import androidx.room.Index
     indices = [
         Index(value = ["serverId", "albumId"]),
         Index(value = ["serverId", "artistId"]),
+        Index(value = ["serverId", "title", "songId"]),
     ],
 )
 data class CachedSongMetadataEntity(

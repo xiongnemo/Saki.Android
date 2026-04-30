@@ -461,6 +461,12 @@ object DatabaseModule {
         }
     }
 
+    private val migration12To13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_song_metadata_serverId_title_songId` ON `cached_song_metadata` (`serverId`, `title`, `songId`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideSakiDatabase(
@@ -477,7 +483,7 @@ object DatabaseModule {
     fun allMigrations() = arrayOf(
         migration1To2, migration2To3, migration3To4, migration4To5,
         migration5To6, migration6To7, migration7To8, migration8To9,
-        migration9To10, migration10To11, migration11To12,
+        migration9To10, migration10To11, migration11To12, migration12To13,
     )
 
     @Provides

@@ -24,6 +24,7 @@ import org.hdhmc.saki.domain.model.CachedArtistDetail
 import org.hdhmc.saki.domain.model.LibraryIndexes
 import org.hdhmc.saki.domain.model.Playlist
 import org.hdhmc.saki.domain.model.PlaylistSummary
+import org.hdhmc.saki.domain.model.SearchResults
 import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.domain.repository.LibraryCacheRepository
 import kotlinx.coroutines.CoroutineDispatcher
@@ -134,6 +135,18 @@ class DefaultLibraryCacheRepository @Inject constructor(
         dao.getSongs(serverId).map { it.toDomain() }
     }
 
+    override suspend fun getSongsPage(
+        serverId: Long,
+        limit: Int,
+        offset: Int,
+    ): List<Song> = withContext(ioDispatcher) {
+        dao.getSongMetadataPage(
+            serverId = serverId,
+            limit = limit.coerceAtLeast(0),
+            offset = offset.coerceAtLeast(0),
+        ).map { it.toDomain() }
+    }
+
     override suspend fun saveSongs(serverId: Long, songs: List<Song>) = withContext(ioDispatcher) {
         val cachedAt = System.currentTimeMillis()
         replaceLibrarySongs(serverId, songs)
@@ -163,6 +176,36 @@ class DefaultLibraryCacheRepository @Inject constructor(
         cachedAt: Long,
     ): Unit = withContext(ioDispatcher) {
         dao.pruneSongMetadataBefore(serverId, cachedAt)
+    }
+
+    override suspend fun searchCached(
+        serverId: Long,
+        query: String,
+        artistCount: Int,
+        albumCount: Int,
+        songCount: Int,
+    ): SearchResults = withContext(ioDispatcher) {
+        val queryPattern = "%${query.trim()}%"
+        SearchResults(
+            artists = if (artistCount > 0) {
+                dao.searchArtists(serverId, queryPattern, artistCount).map { it.toDomain() }
+            } else {
+                emptyList()
+            },
+            albums = if (albumCount > 0) {
+                dao.searchAlbums(serverId, queryPattern, albumCount * SEARCH_DUPLICATE_BUFFER_MULTIPLIER)
+                    .map { it.toDomain() }
+                    .distinctBy(AlbumSummary::id)
+                    .take(albumCount)
+            } else {
+                emptyList()
+            },
+            songs = if (songCount > 0) {
+                dao.searchSongMetadata(serverId, queryPattern, songCount).map { it.toDomain() }
+            } else {
+                emptyList()
+            },
+        )
     }
 
     override suspend fun getArtistDetail(
@@ -650,5 +693,6 @@ class DefaultLibraryCacheRepository @Inject constructor(
     private companion object {
         const val IN_CLAUSE_QUERY_CHUNK_SIZE = 500
         const val SONG_METADATA_WRITE_CHUNK_SIZE = 500
+        const val SEARCH_DUPLICATE_BUFFER_MULTIPLIER = 4
     }
 }

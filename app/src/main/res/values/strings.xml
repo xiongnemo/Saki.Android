@@ -28,6 +28,11 @@
     <string name="settings_cache_count_on_server">%1$s on %2$s</string>
     <string name="settings_cache_limit">/ %1$s</string>
     <string name="settings_clear_stream_cache">Clear stream cache</string>
+    <string name="settings_song_metadata_title">Song metadata</string>
+    <string name="settings_song_metadata_body">Update the cached song index used for offline search and library fallback.</string>
+    <string name="settings_song_metadata_body_server">Update the cached song index for %1$s.</string>
+    <string name="settings_update_song_metadata">Update all metadata</string>
+    <string name="settings_song_metadata_syncing">Updating metadata… %1$d songs indexed</string>
     <string name="settings_cover_art_cache_title">Cover art cache</string>
     <string name="settings_cover_art_cache_body">Album artwork cached across all servers.</string>
     <string name="settings_clear_cover_art_cache">Clear cover art cache</string>
@@ -212,7 +217,6 @@
     <string name="browse_loading_songs">Loading songs</string>
     <string name="browse_no_songs">No songs</string>
     <string name="browse_no_songs_body">The current song feed is empty.</string>
-    <string name="browse_songs_windowed">Showing first %1$d songs</string>
     <string name="browse_section_artists_headline">Browse the library</string>
     <string name="browse_section_albums_headline">Flip through releases</string>
     <string name="browse_section_playlists_headline">Queue curated mixes</string>
@@ -282,6 +286,8 @@
     <string name="error_clear_stream_cache">Unable to clear stream cache.</string>
     <string name="message_cover_art_cache_cleared">Cover art cache cleared.</string>
     <string name="error_clear_cover_art_cache">Unable to clear cover art cache.</string>
+    <string name="message_song_metadata_updated">Updated metadata for %1$d songs.</string>
+    <string name="error_update_song_metadata">Unable to update song metadata.</string>
     <string name="message_stream_quality_set">Streaming quality set to %1$s.</string>
     <string name="error_update_stream_quality">Unable to update stream quality.</string>
     <string name="settings_download_quality">Download quality</string>
