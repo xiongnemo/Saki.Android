@@ -32,6 +32,14 @@ interface PlaybackManager {
         libraryOffset: Int = 0,
     )
 
+    suspend fun restoreLibraryQueue(
+        serverId: Long,
+        songs: List<Song>,
+        currentLibraryIndex: Int,
+        libraryOffset: Int = 0,
+        positionMs: Long = 0,
+    )
+
     suspend fun restoreQueue(
         serverId: Long,
         songs: List<Song>,

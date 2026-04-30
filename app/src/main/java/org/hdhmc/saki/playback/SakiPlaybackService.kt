@@ -32,6 +32,8 @@ import org.hdhmc.saki.R
 import org.hdhmc.saki.data.remote.HTTP_USER_AGENT
 import org.hdhmc.saki.domain.model.LyricLine
 import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshot
+import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshotSource
+import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshotSourceType
 import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.domain.model.SoundBalancingMode
 import org.hdhmc.saki.domain.model.StreamQuality
@@ -495,6 +497,7 @@ class SakiPlaybackService : MediaSessionService() {
             currentSongId = currentSongId,
             positionMs = positionMs,
             updatedAt = System.currentTimeMillis(),
+            source = queueRequests.toSnapshotSource(request),
         )
         savePlayQueueJob?.cancel()
         if (immediate) {
@@ -550,6 +553,22 @@ class SakiPlaybackService : MediaSessionService() {
             throw exception
         } catch (_: Exception) {
         }
+    }
+
+    private fun List<PlaybackRequest>.toSnapshotSource(
+        currentRequest: PlaybackRequest,
+    ): LocalPlayQueueSnapshotSource? {
+        if (currentRequest.queueSource != PLAYBACK_QUEUE_SOURCE_LIBRARY_SONGS) return null
+        val currentIndex = currentRequest.libraryIndex ?: return null
+        val libraryIndexes = mapNotNull { request ->
+            request.libraryIndex.takeIf { request.queueSource == PLAYBACK_QUEUE_SOURCE_LIBRARY_SONGS }
+        }
+        if (libraryIndexes.size != size) return null
+        return LocalPlayQueueSnapshotSource(
+            type = LocalPlayQueueSnapshotSourceType.LIBRARY_SONGS,
+            currentIndex = currentIndex,
+            windowOffset = libraryIndexes.minOrNull() ?: currentIndex,
+        )
     }
 
     private inner class SakiMediaSessionCallback : MediaSession.Callback {

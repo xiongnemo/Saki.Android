@@ -22,6 +22,7 @@ import org.hdhmc.saki.domain.model.CachedSong
 import org.hdhmc.saki.domain.model.DefaultBrowseTab
 import org.hdhmc.saki.domain.model.LibraryIndexes
 import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshot
+import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshotSourceType
 import org.hdhmc.saki.domain.model.regroupByLocale
 import org.hdhmc.saki.domain.model.PlaybackProgressState
 import org.hdhmc.saki.domain.model.PlaybackSessionState
@@ -1348,6 +1349,12 @@ class SakiAppViewModel @Inject constructor(
 
     private fun restorePlayQueue(serverId: Long) {
         viewModelScope.launch {
+            val offlineOnly = endpointStatus.value.isOfflineDegraded
+            val localSnapshot = runCatching { localPlayQueueRepository.get(serverId) }.getOrNull()
+            if (!offlineOnly && localSnapshot?.hasLibrarySongsSource() == true) {
+                restoreLocalPlayQueueSnapshot(serverId, offlineOnly = false)
+                return@launch
+            }
             runCatching {
                 subsonicRepository.getPlayQueue(serverId).data
             }.onSuccess { savedQueue ->
@@ -1368,7 +1375,7 @@ class SakiAppViewModel @Inject constructor(
                 if (e is CancellationException) throw e
                 restoreLocalPlayQueueSnapshot(
                     serverId = serverId,
-                    offlineOnly = endpointStatus.value.isOfflineDegraded,
+                    offlineOnly = offlineOnly,
                 )
             }
         }
@@ -1393,6 +1400,18 @@ class SakiAppViewModel @Inject constructor(
         val snapshot = localPlayQueueRepository.get(serverId) ?: return
         if (snapshot.songs.isEmpty()) return
 
+        val source = snapshot.source
+        if (!offlineOnly && source?.type == LocalPlayQueueSnapshotSourceType.LIBRARY_SONGS) {
+            playbackManager.restoreLibraryQueue(
+                serverId = serverId,
+                songs = snapshot.songs,
+                currentLibraryIndex = source.currentIndex,
+                libraryOffset = source.windowOffset,
+                positionMs = snapshot.positionMs,
+            )
+            return
+        }
+
         val restored = if (offlineOnly) {
             snapshot.offlinePlayableRestorePlan(serverId) ?: return
         } else {
@@ -1409,6 +1428,10 @@ class SakiAppViewModel @Inject constructor(
             startIndex = restored.startIndex,
             positionMs = restored.positionMs,
         )
+    }
+
+    private fun LocalPlayQueueSnapshot.hasLibrarySongsSource(): Boolean {
+        return source?.type == LocalPlayQueueSnapshotSourceType.LIBRARY_SONGS
     }
 
     private suspend fun LocalPlayQueueSnapshot.offlinePlayableRestorePlan(
