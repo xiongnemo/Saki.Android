@@ -26,6 +26,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -42,8 +44,12 @@ class DefaultCachedSongRepository @Inject constructor(
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : CachedSongRepository {
     override fun observeCachedSongs(): Flow<List<CachedSong>> {
-        return cachedSongDao.observeCachedSongs()
+        return combine(
+            cachedSongDao.observeCachedSongs(),
+            libraryCacheDao.observeSongMetadataInvalidations(),
+        ) { songs, _ -> songs }
             .map { songs -> songs.toDomainWithMetadata(libraryCacheDao) }
+            .flowOn(ioDispatcher)
     }
 
     override suspend fun getCachedSong(
