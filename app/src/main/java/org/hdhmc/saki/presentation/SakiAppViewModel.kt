@@ -406,7 +406,9 @@ class SakiAppViewModel @Inject constructor(
                 songs = emptyList(),
                 hasMoreSongs = true,
                 hasLoadedSongsFromNetwork = false,
+                isSongsLoading = false,
                 isSongsLoadingMore = false,
+                songsError = null,
             )
         }
         viewModelScope.launch {
@@ -538,10 +540,12 @@ class SakiAppViewModel @Inject constructor(
                 }
                 if (uiState.value.selectedServerId == serverId) {
                     mutableUiState.update { current ->
-                        val mergedSongs = (current.songs + page.songs).distinctBy(Song::id)
+                        val existingSongIds = current.songs.mapTo(HashSet(current.songs.size)) { it.id }
+                        val newSongs = page.songs.filterNot { it.id in existingSongIds }
+                        val mergedSongs = if (newSongs.isEmpty()) current.songs else current.songs + newSongs
                         current.copy(
                             songs = mergedSongs,
-                            hasMoreSongs = page.hasMore && mergedSongs.size > current.songs.size,
+                            hasMoreSongs = page.hasMore && newSongs.isNotEmpty(),
                             hasLoadedSongsFromNetwork = current.hasLoadedSongsFromNetwork || loadedFromNetwork,
                             isSongsLoadingMore = false,
                             songsError = null,
@@ -579,7 +583,6 @@ class SakiAppViewModel @Inject constructor(
             }
             try {
                 val syncedCount = syncAllSongMetadata(serverId)
-                if (syncedCount == 0) error("No song metadata returned")
                 mutableUiState.update {
                     it.copy(
                         isSongMetadataSyncing = false,

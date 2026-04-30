@@ -110,14 +110,44 @@ interface LibraryCacheDao {
 
     @Query(
         """
-        SELECT * FROM cached_albums
-        WHERE serverId = :serverId
+        SELECT * FROM cached_albums AS album
+        WHERE album.serverId = :serverId
             AND (
-                name LIKE :query COLLATE NOCASE
-                OR artist LIKE :query COLLATE NOCASE
+                album.name LIKE :query COLLATE NOCASE
+                OR album.artist LIKE :query COLLATE NOCASE
             )
-        GROUP BY albumId
-        ORDER BY name COLLATE NOCASE
+            AND album.listType = (
+                SELECT candidate.listType FROM cached_albums AS candidate
+                WHERE candidate.serverId = album.serverId
+                    AND candidate.albumId = album.albumId
+                    AND (
+                        candidate.name LIKE :query COLLATE NOCASE
+                        OR candidate.artist LIKE :query COLLATE NOCASE
+                    )
+                ORDER BY
+                    CASE WHEN candidate.artist IS NOT NULL THEN 1 ELSE 0 END
+                        + CASE WHEN candidate.artistId IS NOT NULL THEN 1 ELSE 0 END
+                        + CASE WHEN candidate.coverArtId IS NOT NULL THEN 1 ELSE 0 END
+                        + CASE WHEN candidate.songCount IS NOT NULL THEN 1 ELSE 0 END
+                        + CASE WHEN candidate.durationSeconds IS NOT NULL THEN 1 ELSE 0 END
+                        + CASE WHEN candidate.year IS NOT NULL THEN 1 ELSE 0 END
+                        + CASE WHEN candidate.genre IS NOT NULL THEN 1 ELSE 0 END DESC,
+                    CASE candidate.listType
+                        WHEN 'newest' THEN 0
+                        WHEN 'recent' THEN 1
+                        WHEN 'highest' THEN 2
+                        WHEN 'frequent' THEN 3
+                        WHEN 'alphabeticalByName' THEN 4
+                        WHEN 'alphabeticalByArtist' THEN 5
+                        WHEN 'starred' THEN 6
+                        WHEN 'random' THEN 7
+                        ELSE 99
+                    END,
+                    candidate.sortOrder,
+                    candidate.listType
+                LIMIT 1
+            )
+        ORDER BY album.name COLLATE NOCASE, album.albumId
         LIMIT :limit
         """,
     )
