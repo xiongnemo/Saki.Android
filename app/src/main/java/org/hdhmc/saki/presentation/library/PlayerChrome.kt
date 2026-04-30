@@ -975,7 +975,7 @@ fun NowPlayingOverlay(
                         // Tech info bar
                         val runtimeInfo = playbackState.runtimeInfo
                         val format = track.stableFormatLabel()
-                        val sampleRate = track.stableSampleRateLabel()
+                        val sampleRate = track.sampleRate?.let(::formatSampleRateShort)
                         val bitrate = track.displayBitrate(
                             runtimeInfo = runtimeInfo,
                             preferStableMetadata = true,
@@ -2107,8 +2107,6 @@ private fun PlaybackQueueItem.prefersMetadataBitrate(): Boolean {
 }
 
 private fun PlaybackQueueItem.stableFormatLabel(): String? {
-    if (!usesOriginalPlaybackMetadata()) return null
-
     suffix?.trim()
         ?.takeIf(String::isNotEmpty)
         ?.let { return it.uppercase(java.util.Locale.ROOT) }
@@ -2129,15 +2127,6 @@ private fun PlaybackQueueItem.stableFormatLabel(): String? {
                 else -> subtype.uppercase(java.util.Locale.ROOT)
             }
         }
-}
-
-private fun PlaybackQueueItem.stableSampleRateLabel(): String? {
-    if (!usesOriginalPlaybackMetadata()) return null
-    return sampleRate?.let(::formatSampleRateShort)
-}
-
-private fun PlaybackQueueItem.usesOriginalPlaybackMetadata(): Boolean {
-    return qualityLabel.equals(StreamQuality.ORIGINAL.label, ignoreCase = true)
 }
 
 private fun formatSampleRateShort(sampleRate: Int): String {
