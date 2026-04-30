@@ -26,6 +26,11 @@
     <string name="settings_cache_count_on_server">%1$s（%2$s）</string>
     <string name="settings_cache_limit">/ %1$s</string>
     <string name="settings_clear_stream_cache">清除串流缓存</string>
+    <string name="settings_song_metadata_title">歌曲元数据</string>
+    <string name="settings_song_metadata_body">更新用于离线搜索和曲库详情回退的歌曲索引。</string>
+    <string name="settings_song_metadata_body_server">更新 %1$s 的歌曲缓存索引。</string>
+    <string name="settings_update_song_metadata">更新全部元数据</string>
+    <string name="settings_song_metadata_syncing">正在更新元数据…已索引 %1$d 首歌曲</string>
     <string name="settings_cover_art_cache_title">封面缓存</string>
     <string name="settings_cover_art_cache_body">所有服务器的专辑封面缓存。</string>
     <string name="settings_clear_cover_art_cache">清除封面缓存</string>
@@ -273,6 +278,8 @@
     <string name="error_clear_stream_cache">无法清除串流缓存。</string>
     <string name="message_cover_art_cache_cleared">封面缓存已清除。</string>
     <string name="error_clear_cover_art_cache">无法清除封面缓存。</string>
+    <string name="message_song_metadata_updated">已更新 %1$d 首歌曲的元数据。</string>
+    <string name="error_update_song_metadata">无法更新歌曲元数据。</string>
     <string name="message_stream_quality_set">串流质量已设为 %1$s。</string>
     <string name="error_update_stream_quality">无法更新串流质量。</string>
     <string name="settings_download_quality">下载音质</string>

@@ -67,6 +67,8 @@ import kotlinx.coroutines.launch
 private const val ALBUMS_PAGE_SIZE = 36
 private const val PLAYLIST_DETAIL_PREFETCH_LIMIT = 12
 private const val PLAYLIST_DETAIL_PREFETCH_MAX_SONGS = 500
+private const val SONGS_PAGE_SIZE = 500
+private const val SONGS_DISPLAY_WINDOW_SIZE = 5_000
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -239,7 +241,12 @@ class SakiAppViewModel @Inject constructor(
             BrowseSection.ARTISTS -> if (uiState.value.libraryIndexes == null) loadArtists(serverId)
             BrowseSection.ALBUMS -> if (uiState.value.albums.isEmpty()) loadAlbums(serverId, uiState.value.selectedAlbumFeed)
             BrowseSection.PLAYLISTS -> if (uiState.value.playlists.isEmpty()) loadPlaylists(serverId)
-            BrowseSection.SONGS -> if (uiState.value.songs.isEmpty()) loadSongs(serverId)
+            BrowseSection.SONGS -> if (
+                uiState.value.songs.isEmpty() ||
+                (!uiState.value.hasLoadedSongsFromNetwork && !endpointStatus.value.isOfflineDegraded)
+            ) {
+                loadSongs(serverId)
+            }
         }
     }
 
@@ -396,6 +403,12 @@ class SakiAppViewModel @Inject constructor(
                 albumFeeds = emptyAlbumFeedStates(),
                 selectedAlbum = null,
                 selectedPlaylist = null,
+                songs = emptyList(),
+                hasMoreSongs = true,
+                hasLoadedSongsFromNetwork = false,
+                isSongsLoading = false,
+                isSongsLoadingMore = false,
+                songsError = null,
             )
         }
         viewModelScope.launch {
@@ -487,6 +500,104 @@ class SakiAppViewModel @Inject constructor(
                         )
                     }
                 }
+            }
+        }
+    }
+
+    fun loadMoreSongs() {
+        val state = uiState.value
+        val serverId = state.selectedServerId ?: return
+        if (
+            !state.hasMoreSongs ||
+            state.isSongsLoading ||
+            state.isSongsLoadingMore ||
+            state.songs.isEmpty()
+        ) {
+            return
+        }
+        val offset = state.songs.size
+
+        viewModelScope.launch {
+            mutableUiState.update { it.copy(isSongsLoadingMore = true, songsError = null) }
+
+            val cachedAt = System.currentTimeMillis()
+            try {
+                var loadedFromNetwork = false
+                val page = if (endpointStatus.value.isOfflineDegraded) {
+                    loadCachedSongsPage(serverId, offset)
+                } else {
+                    try {
+                        fetchSongsPage(serverId, offset, cachedAt).also {
+                            loadedFromNetwork = true
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (networkError: Throwable) {
+                        val cachedPage = loadCachedSongsPage(serverId, offset)
+                        if (cachedPage.songs.isEmpty()) throw networkError
+                        cachedPage
+                    }
+                }
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { current ->
+                        val existingSongIds = current.songs.mapTo(HashSet(current.songs.size)) { it.id }
+                        val newSongs = page.songs.filterNot { it.id in existingSongIds }
+                        val mergedSongs = if (newSongs.isEmpty()) current.songs else current.songs + newSongs
+                        current.copy(
+                            songs = mergedSongs,
+                            hasMoreSongs = page.hasMore && newSongs.isNotEmpty(),
+                            hasLoadedSongsFromNetwork = current.hasLoadedSongsFromNetwork || loadedFromNetwork,
+                            isSongsLoadingMore = false,
+                            songsError = null,
+                        )
+                    }
+                }
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update {
+                        it.copy(
+                            isSongsLoadingMore = false,
+                            songsError = throwable.localizedOr(R.string.error_load_songs),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun updateAllSongMetadata() {
+        val serverId = uiState.value.selectedServerId ?: return
+        if (uiState.value.isSongMetadataSyncing) return
+        if (endpointStatus.value.isOfflineDegraded) {
+            snackbarMessages.tryEmit(SnackbarMessage(UiText.resource(R.string.error_update_song_metadata)))
+            return
+        }
+
+        viewModelScope.launch {
+            mutableUiState.update {
+                it.copy(
+                    isSongMetadataSyncing = true,
+                    songMetadataSyncCount = 0,
+                )
+            }
+            try {
+                val syncedCount = syncAllSongMetadata(serverId)
+                mutableUiState.update {
+                    it.copy(
+                        isSongMetadataSyncing = false,
+                        songMetadataSyncCount = syncedCount,
+                    )
+                }
+                snackbarMessages.emit(SnackbarMessage(UiText.resource(R.string.message_song_metadata_updated, syncedCount)))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.w("SakiApp", "Failed to update song metadata", e)
+                mutableUiState.update {
+                    it.copy(isSongMetadataSyncing = false)
+                }
+                snackbarMessages.emit(SnackbarMessage(UiText.resource(R.string.error_update_song_metadata)))
             }
         }
     }
@@ -1137,6 +1248,10 @@ class SakiAppViewModel @Inject constructor(
                 albumFeeds = if (serverChanged) emptyAlbumFeedStates() else state.albumFeeds,
                 selectedAlbum = if (serverChanged) null else state.selectedAlbum,
                 selectedPlaylist = if (serverChanged) null else state.selectedPlaylist,
+                songs = if (serverChanged) emptyList() else state.songs,
+                hasMoreSongs = if (serverChanged) true else state.hasMoreSongs,
+                hasLoadedSongsFromNetwork = if (serverChanged) false else state.hasLoadedSongsFromNetwork,
+                isSongsLoadingMore = if (serverChanged) false else state.isSongsLoadingMore,
             )
         }
 
@@ -1326,9 +1441,14 @@ class SakiAppViewModel @Inject constructor(
             if (!playlists.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
                 mutableUiState.update { it.copy(playlists = playlists) }
             }
-            val songs = loadCachedOrNull { libraryCacheRepository.getSongs(serverId) }
+            val songs = loadCachedOrNull { libraryCacheRepository.getSongsPage(serverId, SONGS_PAGE_SIZE, 0) }
             if (!songs.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
-                mutableUiState.update { it.copy(songs = songs) }
+                mutableUiState.update {
+                    it.copy(
+                        songs = songs,
+                        hasMoreSongs = songs.size >= SONGS_PAGE_SIZE,
+                    )
+                }
             }
         }
     }
@@ -1345,7 +1465,9 @@ class SakiAppViewModel @Inject constructor(
         loadArtists(serverId, forceRefresh)
         loadAlbums(serverId, uiState.value.selectedAlbumFeed, forceRefresh)
         loadPlaylists(serverId, forceRefresh)
-        loadSongs(serverId, forceRefresh)
+        if (uiState.value.selectedBrowseSection == BrowseSection.SONGS) {
+            loadSongs(serverId, forceRefresh)
+        }
     }
 
     private fun loadArtists(
@@ -1543,62 +1665,169 @@ class SakiAppViewModel @Inject constructor(
         serverId: Long,
         forceRefresh: Boolean = false,
     ) {
-        if (!forceRefresh && uiState.value.songs.isNotEmpty()) return
+        val currentState = uiState.value
+        if (
+            !forceRefresh &&
+            currentState.songs.isNotEmpty() &&
+            (currentState.hasLoadedSongsFromNetwork || endpointStatus.value.isOfflineDegraded)
+        ) {
+            return
+        }
 
         viewModelScope.launch {
-            if (!forceRefresh) {
-                val cached = runCatching { libraryCacheRepository.getSongs(serverId) }.getOrNull()
+            if (!forceRefresh || endpointStatus.value.isOfflineDegraded) {
+                val cached = runCatching { libraryCacheRepository.getSongsPage(serverId, SONGS_PAGE_SIZE, 0) }.getOrNull()
                 if (!cached.isNullOrEmpty() && uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { it.copy(songs = cached) }
+                    mutableUiState.update {
+                        it.copy(
+                            songs = cached,
+                            hasMoreSongs = cached.size >= SONGS_PAGE_SIZE,
+                        )
+                    }
                 }
+            }
+
+            if (endpointStatus.value.isOfflineDegraded) {
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update {
+                        it.copy(
+                            isSongsLoading = false,
+                            isSongsLoadingMore = false,
+                            songsError = null,
+                        )
+                    }
+                }
+                return@launch
             }
 
             if (uiState.value.selectedServerId == serverId) {
-                mutableUiState.update { it.copy(isSongsLoading = true, songsError = null) }
+                mutableUiState.update {
+                    it.copy(
+                        isSongsLoading = true,
+                        isSongsLoadingMore = false,
+                        songsError = null,
+                    )
+                }
             }
 
-            runCatching {
-                fetchAllSongs(serverId)
-            }.onSuccess { songs ->
-                if (uiState.value.selectedServerId == serverId) {
-                    mutableUiState.update { it.copy(songs = songs, isSongsLoading = false, songsError = null) }
-                }
-                runCatching { libraryCacheRepository.saveSongs(serverId, songs) }
-                    .onFailure { Log.w("SakiApp", "Failed to cache songs", it) }
-            }.onFailure { throwable ->
+            try {
+                val cachedAt = System.currentTimeMillis()
+                val result = fetchSongsPage(serverId, offset = 0, cachedAt = cachedAt)
                 if (uiState.value.selectedServerId == serverId) {
                     mutableUiState.update {
-                        it.copy(isSongsLoading = false, songsError = throwable.localizedOr(R.string.error_load_songs))
+                        it.copy(
+                            songs = result.songs,
+                            hasMoreSongs = result.hasMore,
+                            hasLoadedSongsFromNetwork = true,
+                            isSongsLoading = false,
+                            isSongsLoadingMore = false,
+                            songsError = null,
+                        )
+                    }
+                }
+                libraryCacheRepository.saveSongsWindow(
+                    serverId = serverId,
+                    songs = result.songs.take(SONGS_DISPLAY_WINDOW_SIZE),
+                    cachedAt = cachedAt,
+                    startOrder = 0,
+                )
+                if (!result.hasMore) {
+                    libraryCacheRepository.pruneSongMetadataBefore(serverId, cachedAt)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (throwable: Throwable) {
+                if (uiState.value.selectedServerId == serverId) {
+                    val cached = runCatching { libraryCacheRepository.getSongsPage(serverId, SONGS_PAGE_SIZE, 0) }.getOrNull()
+                    mutableUiState.update {
+                        if (!cached.isNullOrEmpty()) {
+                            it.copy(
+                                songs = cached,
+                                hasMoreSongs = cached.size >= SONGS_PAGE_SIZE,
+                                hasLoadedSongsFromNetwork = false,
+                                isSongsLoading = false,
+                                isSongsLoadingMore = false,
+                                songsError = null,
+                            )
+                        } else {
+                            it.copy(
+                                isSongsLoading = false,
+                                isSongsLoadingMore = false,
+                                songsError = throwable.localizedOr(R.string.error_load_songs),
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
+    private suspend fun loadCachedSongsPage(
+        serverId: Long,
+        offset: Int,
+    ): SongsPageResult {
+        val songs = libraryCacheRepository.getSongsPage(serverId, SONGS_PAGE_SIZE, offset)
+        return SongsPageResult(
+            songs = songs,
+            hasMore = songs.size >= SONGS_PAGE_SIZE,
+        )
+    }
+
     // Navidrome supports empty query in search3 to return all songs.
     // This is not standard Subsonic behavior and may not work on other servers.
-    private suspend fun fetchAllSongs(serverId: Long): List<Song> = withContext(Dispatchers.IO) {
-        val pageSize = 500
-        val maxPages = 100
-        val allSongs = mutableListOf<Song>()
+    private suspend fun fetchSongsPage(
+        serverId: Long,
+        offset: Int,
+        cachedAt: Long,
+    ): SongsPageResult = withContext(Dispatchers.IO) {
+        val songs = subsonicRepository.search(
+            serverId = serverId,
+            query = "",
+            artistCount = 0,
+            albumCount = 0,
+            songCount = SONGS_PAGE_SIZE,
+            songOffset = offset,
+        ).data.songs
+        libraryCacheRepository.saveSongMetadataPage(serverId, songs, cachedAt, startOrder = offset)
+        SongsPageResult(
+            songs = songs,
+            hasMore = songs.size >= SONGS_PAGE_SIZE,
+        )
+    }
+
+    private suspend fun syncAllSongMetadata(
+        serverId: Long,
+    ): Int = withContext(Dispatchers.IO) {
+        val cachedAt = System.currentTimeMillis()
+        val displaySongs = mutableListOf<Song>()
+        var syncedCount = 0
         var offset = 0
-        var page = 0
-        while (page < maxPages) {
-            val results = subsonicRepository.search(
+        while (true) {
+            val songs = subsonicRepository.search(
                 serverId = serverId,
                 query = "",
                 artistCount = 0,
                 albumCount = 0,
-                songCount = pageSize,
+                songCount = SONGS_PAGE_SIZE,
                 songOffset = offset,
-            ).data
-            allSongs.addAll(results.songs)
-            if (results.songs.isEmpty() || results.songs.size < pageSize) break
-            offset += pageSize
-            page++
+            ).data.songs
+            if (songs.isEmpty()) break
+            libraryCacheRepository.saveSongMetadataPage(serverId, songs, cachedAt, startOrder = offset)
+            syncedCount += songs.size
+            if (displaySongs.size < SONGS_DISPLAY_WINDOW_SIZE) {
+                displaySongs.addAll(songs.take(SONGS_DISPLAY_WINDOW_SIZE - displaySongs.size))
+            }
+            if (uiState.value.selectedServerId == serverId) {
+                mutableUiState.update { it.copy(songMetadataSyncCount = syncedCount) }
+            }
+            if (songs.size < SONGS_PAGE_SIZE) break
+            offset += songs.size
         }
-        allSongs.sortBy { it.title.lowercase() }
-        allSongs
+        if (syncedCount > 0) {
+            libraryCacheRepository.saveSongsWindow(serverId, displaySongs, cachedAt, startOrder = 0)
+            libraryCacheRepository.pruneSongMetadataBefore(serverId, cachedAt)
+        }
+        syncedCount
     }
 
     private suspend fun buildArtistTopSongs(
@@ -1641,15 +1870,24 @@ class SakiAppViewModel @Inject constructor(
             )
         }
 
-        runCatching {
-            subsonicRepository.search(
-                serverId = serverId,
-                query = query,
-                artistCount = 8,
-                albumCount = 10,
-                songCount = 20,
-            ).data
-        }.onSuccess { results ->
+        try {
+            val results = if (endpointStatus.value.isOfflineDegraded) {
+                libraryCacheRepository.searchCached(
+                    serverId = serverId,
+                    query = query,
+                    artistCount = 8,
+                    albumCount = 10,
+                    songCount = 20,
+                )
+            } else {
+                subsonicRepository.search(
+                    serverId = serverId,
+                    query = query,
+                    artistCount = 8,
+                    albumCount = 10,
+                    songCount = 20,
+                ).data
+            }
             if (
                 uiState.value.selectedServerId == serverId &&
                 uiState.value.isSearchActive &&
@@ -1662,27 +1900,53 @@ class SakiAppViewModel @Inject constructor(
                         searchError = null,
                     )
                 }
-                runCatching { appPreferencesRepository.addRecentSearchQuery(query) }
-                    .onFailure { throwable ->
-                        if (throwable is CancellationException) throw throwable
-                        Log.w("SakiApp", "Failed to save recent search query", throwable)
-                    }
+                saveRecentSearchQuery(query)
             }
-        }.onFailure { throwable ->
+        } catch (e: CancellationException) {
+            throw e
+        } catch (throwable: Throwable) {
             if (
                 uiState.value.selectedServerId == serverId &&
                 uiState.value.isSearchActive &&
                 uiState.value.searchQuery.trim() == query
             ) {
-                mutableUiState.update { state ->
-                    state.copy(
-                        searchResults = SearchResults(),
-                        isSearchLoading = false,
-                        searchError = throwable.localizedOr(R.string.error_search_server),
+                val cachedResults = runCatching {
+                    libraryCacheRepository.searchCached(
+                        serverId = serverId,
+                        query = query,
+                        artistCount = 8,
+                        albumCount = 10,
+                        songCount = 20,
                     )
+                }.getOrNull()
+                if (cachedResults != null && !cachedResults.isEmpty()) {
+                    mutableUiState.update { state ->
+                        state.copy(
+                            searchResults = cachedResults,
+                            isSearchLoading = false,
+                            searchError = null,
+                        )
+                    }
+                    saveRecentSearchQuery(query)
+                } else {
+                    mutableUiState.update { state ->
+                        state.copy(
+                            searchResults = SearchResults(),
+                            isSearchLoading = false,
+                            searchError = throwable.localizedOr(R.string.error_search_server),
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private suspend fun saveRecentSearchQuery(query: String) {
+        runCatching { appPreferencesRepository.addRecentSearchQuery(query) }
+            .onFailure { throwable ->
+                if (throwable is CancellationException) throw throwable
+                Log.w("SakiApp", "Failed to save recent search query", throwable)
+            }
     }
 
     private fun clearSearchState() {
@@ -1827,6 +2091,13 @@ private data class LocalPlayQueueRestorePlan(
     val positionMs: Long,
 )
 
+private data class SongsPageResult(
+    val songs: List<Song>,
+    val hasMore: Boolean,
+)
+
+private fun SearchResults.isEmpty(): Boolean = artists.isEmpty() && albums.isEmpty() && songs.isEmpty()
+
 enum class BrowseSection {
     ARTISTS,
     ALBUMS,
@@ -1878,8 +2149,13 @@ data class SakiAppUiState(
     val isPlaylistLoading: Boolean = false,
     val playlistError: UiText? = null,
     val songs: List<Song> = emptyList(),
+    val hasMoreSongs: Boolean = true,
+    val hasLoadedSongsFromNetwork: Boolean = false,
     val isSongsLoading: Boolean = false,
+    val isSongsLoadingMore: Boolean = false,
     val songsError: UiText? = null,
+    val isSongMetadataSyncing: Boolean = false,
+    val songMetadataSyncCount: Int = 0,
     val isSearchActive: Boolean = false,
     val searchQuery: String = "",
     val searchResults: SearchResults = SearchResults(),

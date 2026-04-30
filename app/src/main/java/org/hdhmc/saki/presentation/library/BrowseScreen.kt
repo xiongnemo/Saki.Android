@@ -129,6 +129,7 @@ fun BrowseScreen(
     onRefreshCurrentTab: () -> Unit,
     onSelectAlbumFeed: (AlbumListType) -> Unit,
     onLoadMoreAlbums: () -> Unit,
+    onLoadMoreSongs: () -> Unit,
     onUpdateAlbumViewMode: (AlbumViewMode) -> Unit,
     onOpenArtist: (String) -> Unit,
     onCloseArtist: () -> Unit,
@@ -286,6 +287,7 @@ fun BrowseScreen(
                         onRefreshCurrentTab = onRefreshCurrentTab,
                         onSelectAlbumFeed = onSelectAlbumFeed,
                         onLoadMoreAlbums = onLoadMoreAlbums,
+                        onLoadMoreSongs = onLoadMoreSongs,
                         onUpdateAlbumViewMode = onUpdateAlbumViewMode,
                         onOpenArtist = onOpenArtist,
                         onOpenAlbum = onOpenAlbum,
@@ -387,6 +389,7 @@ private fun BrowsePager(
     onRefreshCurrentTab: () -> Unit,
     onSelectAlbumFeed: (AlbumListType) -> Unit,
     onLoadMoreAlbums: () -> Unit,
+    onLoadMoreSongs: () -> Unit,
     onUpdateAlbumViewMode: (AlbumViewMode) -> Unit,
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
@@ -530,14 +533,17 @@ private fun BrowsePager(
 
                             BrowseSection.SONGS -> SongsPage(
                                 songs = uiState.songs,
+                                hasMore = uiState.hasMoreSongs,
                                 server = currentServer,
                                 cachedSongsBySongId = cachedSongsBySongId,
                                 streamCachedSongIds = uiState.streamCachedSongIds,
                                 downloadingSongIds = uiState.downloadingSongIds,
                                 isOfflineDegraded = isOfflineDegraded,
                                 isLoading = uiState.isSongsLoading,
+                                isLoadingMore = uiState.isSongsLoadingMore,
                                 error = uiState.songsError?.asString(),
                                 bottomOverlayPadding = bottomOverlayPadding,
+                                onLoadMore = onLoadMoreSongs,
                                 onPlaySongs = onPlaySongs,
                                 onOfflineSongUnavailable = onOfflineSongUnavailable,
                                 onShowSongActions = onShowSongActions,
@@ -1368,18 +1374,37 @@ private fun PlaylistsPage(
 @Composable
 private fun SongsPage(
     songs: List<Song>,
+    hasMore: Boolean,
     server: ServerConfig,
     cachedSongsBySongId: Map<String, CachedSong>,
     streamCachedSongIds: Set<String>,
     downloadingSongIds: Set<String>,
     isOfflineDegraded: Boolean,
     isLoading: Boolean,
+    isLoadingMore: Boolean,
     error: String?,
     bottomOverlayPadding: Dp,
+    onLoadMore: () -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onOfflineSongUnavailable: () -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(listState, hasMore, isLoading, isLoadingMore, songs.size) {
+        snapshotFlow {
+            if (!hasMore || isLoading || isLoadingMore || songs.isEmpty()) {
+                false
+            } else {
+                val layoutInfo = listState.layoutInfo
+                val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                lastVisibleIndex >= layoutInfo.totalItemsCount - 8
+            }
+        }
+            .distinctUntilChanged()
+            .filter { shouldLoad -> shouldLoad }
+            .collect { onLoadMore() }
+    }
+
     if (isLoading && songs.isEmpty()) {
         LoadingStateCard(stringResource(R.string.browse_loading_songs))
         return
@@ -1396,6 +1421,7 @@ private fun SongsPage(
         return
     }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
@@ -1422,6 +1448,11 @@ private fun SongsPage(
                 },
                 onMore = { onShowSongActions(song) },
             )
+        }
+        if (isLoadingMore) {
+            item {
+                LoadingStateCard(stringResource(R.string.browse_loading_songs))
+            }
         }
     }
 }

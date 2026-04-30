@@ -99,6 +99,7 @@ fun SettingsScreen(
     onClearStreamCache: () -> Unit,
     onUpdateImageCacheSizeMb: (Int) -> Unit,
     onClearImageCache: () -> Unit,
+    onUpdateSongMetadata: () -> Unit,
     onUpdateTextScale: (TextScale) -> Unit,
     onUpdateLanguage: (AppLanguage) -> Unit,
     onUpdateThemeMode: (ThemeMode) -> Unit,
@@ -556,6 +557,34 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Rounded.DeleteOutline, contentDescription = null)
                     Text(stringResource(R.string.settings_clear_stream_cache), modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
+
+        item {
+            val metadataBody = selectedServer?.let { server ->
+                stringResource(R.string.settings_song_metadata_body_server, server.name)
+            } ?: stringResource(R.string.settings_song_metadata_body)
+            SettingsSectionCard(
+                title = stringResource(R.string.settings_song_metadata_title),
+                body = metadataBody,
+                action = null,
+            ) {
+                if (uiState.isSongMetadataSyncing) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text(
+                        text = stringResource(R.string.settings_song_metadata_syncing, uiState.songMetadataSyncCount),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                OutlinedButton(
+                    onClick = onUpdateSongMetadata,
+                    enabled = selectedServer != null && !uiState.isSongMetadataSyncing,
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Icon(Icons.Rounded.Storage, contentDescription = null)
+                    Text(stringResource(R.string.settings_update_song_metadata), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
