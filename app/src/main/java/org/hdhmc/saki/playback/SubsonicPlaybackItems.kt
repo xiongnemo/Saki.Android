@@ -37,6 +37,10 @@ private const val EXTRA_SUFFIX = "saki.playback.suffix"
 private const val EXTRA_BIT_RATE = "saki.playback.bit_rate"
 private const val EXTRA_SOURCE_BIT_RATE = "saki.playback.source_bit_rate"
 private const val EXTRA_SAMPLE_RATE = "saki.playback.sample_rate"
+private const val EXTRA_QUEUE_SOURCE = "saki.playback.queue_source"
+private const val EXTRA_LIBRARY_INDEX = "saki.playback.library_index"
+
+internal const val PLAYBACK_QUEUE_SOURCE_LIBRARY_SONGS = "library_songs"
 
 internal data class PlaybackRequest(
     val serverId: Long,
@@ -63,6 +67,8 @@ internal data class PlaybackRequest(
     val bitRate: Int?,
     val sourceBitRate: Int?,
     val sampleRate: Int?,
+    val queueSource: String?,
+    val libraryIndex: Int?,
 )
 
 internal fun estimatedPlaybackBitRateKbps(
@@ -82,6 +88,8 @@ internal fun Song.toPlaybackRequestMediaItem(
     artworkUri: String? = null,
     maxBitRate: Int? = null,
     format: String? = null,
+    queueSource: String? = null,
+    libraryIndex: Int? = null,
 ): MediaItem {
     val request = PlaybackRequest(
         serverId = serverId,
@@ -108,6 +116,8 @@ internal fun Song.toPlaybackRequestMediaItem(
         bitRate = estimatedPlaybackBitRateKbps(bitRate, maxBitRate),
         sourceBitRate = bitRate,
         sampleRate = sampleRate,
+        queueSource = queueSource,
+        libraryIndex = libraryIndex,
     )
 
     return MediaItem.Builder()
@@ -121,7 +131,10 @@ internal fun Song.toPlaybackRequestMediaItem(
         .build()
 }
 
-internal fun CachedSong.toCachedMediaItem(): MediaItem {
+internal fun CachedSong.toCachedMediaItem(
+    queueSource: String? = null,
+    libraryIndex: Int? = null,
+): MediaItem {
     val localUri = Uri.fromFile(File(localPath))
     val request = PlaybackRequest(
         serverId = serverId,
@@ -148,6 +161,8 @@ internal fun CachedSong.toCachedMediaItem(): MediaItem {
         bitRate = bitRateKbps,
         sourceBitRate = bitRateKbps,
         sampleRate = sampleRate,
+        queueSource = queueSource,
+        libraryIndex = libraryIndex,
     )
 
     return MediaItem.Builder()
@@ -200,6 +215,8 @@ internal fun MediaItem.toPlaybackRequestOrNull(): PlaybackRequest? {
         sourceBitRate = extras.getInt(EXTRA_SOURCE_BIT_RATE)
             .takeIf { extras.containsKey(EXTRA_SOURCE_BIT_RATE) },
         sampleRate = extras.getInt(EXTRA_SAMPLE_RATE).takeIf { extras.containsKey(EXTRA_SAMPLE_RATE) },
+        queueSource = extras.getString(EXTRA_QUEUE_SOURCE),
+        libraryIndex = extras.getInt(EXTRA_LIBRARY_INDEX).takeIf { extras.containsKey(EXTRA_LIBRARY_INDEX) },
     )
 }
 
@@ -322,6 +339,8 @@ internal fun PlaybackRequest.toBundle(): Bundle {
         bitRate?.let { putInt(EXTRA_BIT_RATE, it) }
         sourceBitRate?.let { putInt(EXTRA_SOURCE_BIT_RATE, it) }
         sampleRate?.let { putInt(EXTRA_SAMPLE_RATE, it) }
+        putString(EXTRA_QUEUE_SOURCE, queueSource)
+        libraryIndex?.let { putInt(EXTRA_LIBRARY_INDEX, it) }
     }
 }
 

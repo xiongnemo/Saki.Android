@@ -140,10 +140,27 @@ class DefaultLibraryCacheRepository @Inject constructor(
         limit: Int,
         offset: Int,
     ): List<Song> = withContext(ioDispatcher) {
+        val safeLimit = limit.coerceAtLeast(0)
+        val safeOffset = offset.coerceAtLeast(0)
+        if (safeLimit == 0) return@withContext emptyList()
+        val safeEnd = safeOffset.toLong()
+            .plus(safeLimit)
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
+
+        val orderedPage = dao.getSongMetadataPageByLibraryOrder(
+            serverId = serverId,
+            startOrder = safeOffset,
+            endOrder = safeEnd,
+        )
+        if (orderedPage.isNotEmpty() || dao.countOrderedSongMetadata(serverId, LIBRARY_ORDER_UNSET) > 0) {
+            return@withContext orderedPage.map { it.toDomain() }
+        }
+
         dao.getSongMetadataPage(
             serverId = serverId,
-            limit = limit.coerceAtLeast(0),
-            offset = offset.coerceAtLeast(0),
+            limit = safeLimit,
+            offset = safeOffset,
         ).map { it.toDomain() }
     }
 

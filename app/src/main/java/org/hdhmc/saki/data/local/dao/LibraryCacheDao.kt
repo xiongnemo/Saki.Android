@@ -357,6 +357,9 @@ interface LibraryCacheDao {
     @Query("SELECT songId, libraryOrder FROM cached_song_metadata WHERE serverId = :serverId AND songId IN (:songIds)")
     suspend fun getSongMetadataOrders(serverId: Long, songIds: List<String>): List<CachedSongMetadataOrder>
 
+    @Query("SELECT COUNT(*) FROM cached_song_metadata WHERE serverId = :serverId AND libraryOrder != :unsetOrder")
+    suspend fun countOrderedSongMetadata(serverId: Long, unsetOrder: Int): Int
+
     @Query(
         """
         SELECT * FROM cached_song_metadata
@@ -366,6 +369,21 @@ interface LibraryCacheDao {
         """,
     )
     suspend fun getSongMetadataPage(serverId: Long, limit: Int, offset: Int): List<CachedSongMetadataEntity>
+
+    @Query(
+        """
+        SELECT * FROM cached_song_metadata
+        WHERE serverId = :serverId
+            AND libraryOrder >= :startOrder
+            AND libraryOrder < :endOrder
+        ORDER BY libraryOrder, title COLLATE NOCASE, songId
+        """,
+    )
+    suspend fun getSongMetadataPageByLibraryOrder(
+        serverId: Long,
+        startOrder: Int,
+        endOrder: Int,
+    ): List<CachedSongMetadataEntity>
 
     @Query(
         """

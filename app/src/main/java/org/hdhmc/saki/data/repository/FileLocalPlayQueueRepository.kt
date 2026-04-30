@@ -11,6 +11,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import org.hdhmc.saki.di.IoDispatcher
 import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshot
+import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshotSource
+import org.hdhmc.saki.domain.model.LocalPlayQueueSnapshotSourceType
 import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.domain.repository.LocalPlayQueueRepository
 
@@ -114,6 +116,14 @@ internal data class LocalPlayQueueSnapshotDto(
     val currentSongId: String?,
     val positionMs: Long,
     val updatedAt: Long,
+    val source: LocalPlayQueueSnapshotSourceDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
+internal data class LocalPlayQueueSnapshotSourceDto(
+    val type: String,
+    val currentIndex: Int?,
+    val windowOffset: Int?,
 )
 
 @JsonClass(generateAdapter = true)
@@ -146,6 +156,7 @@ private fun LocalPlayQueueSnapshot.toDto() = LocalPlayQueueSnapshotDto(
     currentSongId = currentSongId,
     positionMs = positionMs,
     updatedAt = updatedAt,
+    source = source?.toDto(),
 )
 
 private fun LocalPlayQueueSnapshotDto.toDomain() = LocalPlayQueueSnapshot(
@@ -154,7 +165,28 @@ private fun LocalPlayQueueSnapshotDto.toDomain() = LocalPlayQueueSnapshot(
     currentSongId = currentSongId,
     positionMs = positionMs,
     updatedAt = updatedAt,
+    source = source?.toDomain(),
 )
+
+private fun LocalPlayQueueSnapshotSource.toDto() = LocalPlayQueueSnapshotSourceDto(
+    type = when (type) {
+        LocalPlayQueueSnapshotSourceType.LIBRARY_SONGS -> LOCAL_QUEUE_SOURCE_LIBRARY_SONGS
+    },
+    currentIndex = currentIndex,
+    windowOffset = windowOffset,
+)
+
+private fun LocalPlayQueueSnapshotSourceDto.toDomain(): LocalPlayQueueSnapshotSource? {
+    val sourceType = when (type) {
+        LOCAL_QUEUE_SOURCE_LIBRARY_SONGS -> LocalPlayQueueSnapshotSourceType.LIBRARY_SONGS
+        else -> return null
+    }
+    return LocalPlayQueueSnapshotSource(
+        type = sourceType,
+        currentIndex = currentIndex ?: return null,
+        windowOffset = windowOffset ?: return null,
+    )
+}
 
 private fun Song.toDto() = LocalPlayQueueSongDto(
     id = id,
@@ -201,3 +233,5 @@ private fun LocalPlayQueueSongDto.toDomain() = Song(
     path = path,
     created = created,
 )
+
+private const val LOCAL_QUEUE_SOURCE_LIBRARY_SONGS = "library_songs"

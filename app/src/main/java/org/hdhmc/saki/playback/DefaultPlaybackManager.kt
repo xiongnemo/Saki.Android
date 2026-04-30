@@ -31,6 +31,7 @@ import org.hdhmc.saki.domain.repository.LibraryCacheRepository
 import org.hdhmc.saki.domain.repository.PlaybackManager
 import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
 import org.hdhmc.saki.domain.repository.StreamCacheRepository
+import org.hdhmc.saki.domain.repository.SubsonicRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutionException
@@ -66,6 +67,7 @@ class DefaultPlaybackManager @Inject constructor(
     private val libraryCacheRepository: LibraryCacheRepository,
     private val cachedSongRepository: CachedSongRepository,
     private val streamCacheRepository: StreamCacheRepository,
+    private val subsonicRepository: SubsonicRepository,
     private val networkTypeProvider: NetworkTypeProvider,
     private val endpointSelector: EndpointSelector,
 ) : PlaybackManager {
@@ -136,9 +138,14 @@ class DefaultPlaybackManager @Inject constructor(
         serverId: Long,
         preferredQuality: StreamQuality,
         cachedSong: CachedSong?,
+        queueSource: String? = null,
+        libraryIndex: Int? = null,
     ): MediaItem {
         if (cachedSong != null) {
-            return cachedSong.toCachedMediaItem()
+            return cachedSong.toCachedMediaItem(
+                queueSource = queueSource,
+                libraryIndex = libraryIndex,
+            )
         }
 
         val quality = resolveQualityForSong(serverId, id, preferredQuality)
@@ -149,6 +156,8 @@ class DefaultPlaybackManager @Inject constructor(
             artworkUri = null,
             maxBitRate = quality.maxBitRate,
             format = quality.format,
+            queueSource = queueSource,
+            libraryIndex = libraryIndex,
         )
     }
 
@@ -156,7 +165,10 @@ class DefaultPlaybackManager @Inject constructor(
         val preferredQuality = playbackQuality(serverId)
         val cachedSong = cachedSongRepository.getPlayableCachedSong(serverId, songId, preferredQuality)
         if (cachedSong != null) {
-            return cachedSong.toCachedMediaItem()
+            return cachedSong.toCachedMediaItem(
+                queueSource = queueSource,
+                libraryIndex = libraryIndex,
+            )
         }
 
         val quality = resolveQualityForSong(serverId, songId, preferredQuality)
@@ -306,22 +318,58 @@ class DefaultPlaybackManager @Inject constructor(
         libraryOffset: Int,
     ) {
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
-        cancelVirtualQueue()
-        val generation = beginDeferredQueueLoad()
         val safeStartIndex = startIndex.coerceIn(songs.indices)
         val safeLibraryOffset = libraryOffset.coerceAtLeast(0)
-        val startLibraryIndex = safeLibraryOffset + safeStartIndex
+        startLibraryQueue(
+            serverId = serverId,
+            seedSongs = songs,
+            currentLibraryIndex = safeLibraryOffset + safeStartIndex,
+            libraryOffset = safeLibraryOffset,
+            positionMs = C.TIME_UNSET,
+            playWhenReady = true,
+        )
+    }
+
+    override suspend fun restoreLibraryQueue(
+        serverId: Long,
+        songs: List<Song>,
+        currentLibraryIndex: Int,
+        libraryOffset: Int,
+        positionMs: Long,
+    ) {
+        if (songs.isEmpty()) return
+        startLibraryQueue(
+            serverId = serverId,
+            seedSongs = songs,
+            currentLibraryIndex = currentLibraryIndex.coerceAtLeast(0),
+            libraryOffset = libraryOffset.coerceAtLeast(0),
+            positionMs = positionMs.coerceAtLeast(0L),
+            playWhenReady = false,
+        )
+    }
+
+    private suspend fun startLibraryQueue(
+        serverId: Long,
+        seedSongs: List<Song>,
+        currentLibraryIndex: Int,
+        libraryOffset: Int,
+        positionMs: Long,
+        playWhenReady: Boolean,
+    ) {
+        cancelVirtualQueue()
+        val generation = beginDeferredQueueLoad()
         val preferredQuality = playbackQuality(serverId)
         val window = buildVirtualQueueWindow(
             serverId = serverId,
-            focusIndex = startLibraryIndex,
-            seedSongs = songs,
-            seedOffset = safeLibraryOffset,
+            focusIndex = currentLibraryIndex,
+            seedSongs = seedSongs,
+            seedOffset = libraryOffset,
         )
         val mediaItems = buildMediaItems(
             serverId = serverId,
             songs = window.songs,
             preferredQuality = preferredQuality,
+            libraryStartIndex = window.start,
         )
 
         withController { activeController ->
@@ -339,10 +387,12 @@ class DefaultPlaybackManager @Inject constructor(
             shuffleDisplayOrder = null
             activeController.shuffleModeEnabled = false
             persistShuffleState()
-            val windowStartIndex = (startLibraryIndex - window.start).coerceIn(mediaItems.indices)
-            activeController.setMediaItems(mediaItems, windowStartIndex, C.TIME_UNSET)
+            val windowStartIndex = (currentLibraryIndex - window.start).coerceIn(mediaItems.indices)
+            activeController.setMediaItems(mediaItems, windowStartIndex, positionMs)
             activeController.prepare()
-            activeController.play()
+            if (playWhenReady) {
+                activeController.play()
+            }
             syncState(activeController)
             maybeScheduleVirtualQueueWindowUpdate(activeController)
         }
@@ -577,7 +627,7 @@ class DefaultPlaybackManager @Inject constructor(
         seedOffset: Int,
     ): VirtualQueueWindow {
         val preferredStart = (focusIndex - VIRTUAL_QUEUE_KEEP_BEFORE).coerceAtLeast(0)
-        val cachedSongs = libraryCacheRepository.getSongsPage(
+        val cachedSongs = getLibrarySongsPage(
             serverId = serverId,
             limit = VIRTUAL_QUEUE_INITIAL_LOAD_SIZE,
             offset = preferredStart,
@@ -604,6 +654,7 @@ class DefaultPlaybackManager @Inject constructor(
         serverId: Long,
         songs: List<Song>,
         preferredQuality: StreamQuality,
+        libraryStartIndex: Int? = null,
     ): List<MediaItem> = withContext(defaultDispatcher) {
         if (songs.isEmpty()) return@withContext emptyList()
         val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(
@@ -612,15 +663,50 @@ class DefaultPlaybackManager @Inject constructor(
             preferredQuality = preferredQuality,
         )
         val mediaItems = ArrayList<MediaItem>(songs.size)
-        for (song in songs) {
+        for ((index, song) in songs.withIndex()) {
             currentCoroutineContext().ensureActive()
             mediaItems += song.toPreferredMediaItem(
                 serverId = serverId,
                 preferredQuality = preferredQuality,
                 cachedSong = cachedSongsById[song.id],
+                queueSource = libraryStartIndex?.let { PLAYBACK_QUEUE_SOURCE_LIBRARY_SONGS },
+                libraryIndex = libraryStartIndex?.plus(index),
             )
         }
         mediaItems
+    }
+
+    private suspend fun getLibrarySongsPage(
+        serverId: Long,
+        limit: Int,
+        offset: Int,
+    ): List<Song> {
+        val cachedSongs = libraryCacheRepository.getSongsPage(serverId, limit, offset)
+        if (cachedSongs.size >= limit || shouldPreferLocalCache(serverId)) {
+            return cachedSongs
+        }
+
+        return runCatching {
+            val fetchedSongs = subsonicRepository.search(
+                serverId = serverId,
+                query = "",
+                artistCount = 0,
+                albumCount = 0,
+                songCount = limit,
+                songOffset = offset,
+            ).data.songs
+            if (fetchedSongs.isNotEmpty()) {
+                libraryCacheRepository.saveSongMetadataPage(
+                    serverId = serverId,
+                    songs = fetchedSongs,
+                    cachedAt = System.currentTimeMillis(),
+                    startOrder = offset,
+                )
+            }
+            fetchedSongs.ifEmpty { cachedSongs }
+        }.getOrElse {
+            cachedSongs
+        }
     }
 
     private fun maybeScheduleVirtualQueueWindowUpdate(player: Player) {
@@ -663,7 +749,7 @@ class DefaultPlaybackManager @Inject constructor(
             ?.takeIf { queue -> queue.generation == generation && queue.hasMoreAfter }
             ?: return
         val offset = currentVirtualQueue.windowStart + currentVirtualQueue.itemCount
-        val songs = libraryCacheRepository.getSongsPage(
+        val songs = getLibrarySongsPage(
             serverId = currentVirtualQueue.serverId,
             limit = VIRTUAL_QUEUE_PAGE_SIZE,
             offset = offset,
@@ -677,6 +763,7 @@ class DefaultPlaybackManager @Inject constructor(
             serverId = currentVirtualQueue.serverId,
             songs = songs,
             preferredQuality = playbackQuality(currentVirtualQueue.serverId),
+            libraryStartIndex = offset,
         )
         withController { activeController ->
             val latest = virtualQueue
@@ -708,7 +795,7 @@ class DefaultPlaybackManager @Inject constructor(
             return
         }
 
-        val songs = libraryCacheRepository.getSongsPage(
+        val songs = getLibrarySongsPage(
             serverId = currentVirtualQueue.serverId,
             limit = limit,
             offset = offset,
@@ -722,6 +809,7 @@ class DefaultPlaybackManager @Inject constructor(
             serverId = currentVirtualQueue.serverId,
             songs = songs,
             preferredQuality = playbackQuality(currentVirtualQueue.serverId),
+            libraryStartIndex = offset,
         )
         withController { activeController ->
             val latest = virtualQueue
@@ -845,7 +933,7 @@ class DefaultPlaybackManager @Inject constructor(
         cancelDeferredQueueLoad()
         shuffleDisplayOrder = null
         persistShuffleState()
-        val mediaItems = songs.map(CachedSong::toCachedMediaItem)
+        val mediaItems = songs.map { song -> song.toCachedMediaItem() }
 
         withController { activeController ->
             val safeStartIndex = startIndex.coerceIn(mediaItems.indices)
