@@ -384,9 +384,11 @@ private fun CachedSongEntity.toDomain(metadata: CachedSongMetadataEntity? = null
         discNumber = metadata?.discNumber ?: discNumber,
         suffix = suffix ?: metadata?.suffix.takeIf { quality.preferOriginalDownload },
         contentType = contentType ?: metadata?.contentType.takeIf { quality.preferOriginalDownload },
-        bitRateKbps = bitRate
-            ?: quality.maxBitRate.takeIf { bitrate -> !quality.preferOriginalDownload && bitrate != null && bitrate > 0 }
-            ?: metadata?.bitRate.takeIf { quality.preferOriginalDownload },
+        bitRateKbps = cachedDisplayBitRateKbps(
+            storedBitRate = bitRate,
+            sourceBitRate = metadata?.bitRate,
+            quality = quality,
+        ),
         sampleRate = sampleRate ?: metadata?.sampleRate,
         quality = quality,
         fileSizeBytes = fileSizeBytes,
@@ -399,9 +401,27 @@ private fun CachedSong.canPlayAt(preferredQuality: StreamQuality): Boolean {
 }
 
 private fun Song.cachedBitRateKbps(quality: StreamQuality): Int? {
-    return quality.maxBitRate
+    val requestedMaxBitRate = quality.maxBitRate
         ?.takeIf { bitrate -> bitrate > 0 && !quality.preferOriginalDownload }
-        ?: bitRate
+        ?: return bitRate?.takeIf { bitrate -> bitrate > 0 }
+    return bitRate?.takeIf { bitrate -> bitrate > 0 }?.coerceAtMost(requestedMaxBitRate)
+        ?: requestedMaxBitRate
+}
+
+private fun cachedDisplayBitRateKbps(
+    storedBitRate: Int?,
+    sourceBitRate: Int?,
+    quality: StreamQuality,
+): Int? {
+    val requestedMaxBitRate = quality.maxBitRate
+        ?.takeIf { bitrate -> bitrate > 0 && !quality.preferOriginalDownload }
+        ?: return storedBitRate?.takeIf { bitrate -> bitrate > 0 }
+            ?: sourceBitRate?.takeIf { bitrate -> bitrate > 0 }
+    val knownSourceBitRate = sourceBitRate?.takeIf { bitrate -> bitrate > 0 }
+    if (knownSourceBitRate != null && knownSourceBitRate <= requestedMaxBitRate) {
+        return knownSourceBitRate
+    }
+    return storedBitRate?.takeIf { bitrate -> bitrate > 0 } ?: requestedMaxBitRate
 }
 
 private fun CachedSongEntity.withPlaybackMetadataFrom(

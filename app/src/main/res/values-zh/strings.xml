@@ -160,6 +160,9 @@
     <string name="detail_quality">质量</string>
     <string name="detail_server">服务器</string>
     <string name="detail_mode">模式</string>
+    <string name="detail_source_media">源文件</string>
+    <string name="detail_requested_quality">请求</string>
+    <string name="detail_playing_media">正在播放</string>
     <string name="detail_mime_type">MIME 类型</string>
     <string name="detail_container">容器</string>
     <string name="detail_codec">编解码器</string>

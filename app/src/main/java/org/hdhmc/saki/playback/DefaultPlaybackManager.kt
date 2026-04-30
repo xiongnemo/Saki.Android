@@ -163,8 +163,8 @@ class DefaultPlaybackManager @Inject constructor(
             streamCacheKey = streamCacheRepository.buildCacheKey(serverId, songId, quality),
             maxBitRate = quality.maxBitRate,
             format = quality.format,
-            bitRate = displayBitRateKbps(sourceBitRate ?: bitRate, quality.maxBitRate),
-            sourceBitRate = sourceBitRate ?: bitRate,
+            bitRate = estimatedPlaybackBitRateKbps(sourceBitRate, quality.maxBitRate),
+            sourceBitRate = sourceBitRate,
         ).toLogicalMediaItem()
     }
 
@@ -769,10 +769,11 @@ class DefaultPlaybackManager @Inject constructor(
                     }
                     item.copy(
                         qualityLabel = quality.label,
-                        bitRateKbps = displayBitRateKbps(
-                            sourceBitRate = item.sourceBitRateKbps ?: item.bitRateKbps,
+                        bitRateKbps = estimatedPlaybackBitRateKbps(
+                            sourceBitRate = item.sourceBitRateKbps,
                             maxBitRate = quality.maxBitRate,
                         ),
+                        requestedMaxBitRateKbps = quality.maxBitRate,
                     )
                 } else {
                     item

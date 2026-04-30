@@ -229,6 +229,7 @@ data class PlaybackQueueItem(
     val suffix: String? = null,
     val bitRateKbps: Int? = null,
     val sourceBitRateKbps: Int? = null,
+    val requestedMaxBitRateKbps: Int? = null,
     val sampleRate: Int? = null,
     val contentType: String? = null,
 )

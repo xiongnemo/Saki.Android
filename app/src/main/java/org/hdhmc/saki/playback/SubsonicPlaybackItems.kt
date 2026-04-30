@@ -65,11 +65,14 @@ internal data class PlaybackRequest(
     val sampleRate: Int?,
 )
 
-internal fun displayBitRateKbps(
+internal fun estimatedPlaybackBitRateKbps(
     sourceBitRate: Int?,
     maxBitRate: Int?,
 ): Int? {
-    return maxBitRate?.takeIf { bitrate -> bitrate > 0 } ?: sourceBitRate
+    val knownSourceBitRate = sourceBitRate?.takeIf { bitrate -> bitrate > 0 }
+    val requestedMaxBitRate = maxBitRate?.takeIf { bitrate -> bitrate > 0 }
+        ?: return knownSourceBitRate
+    return knownSourceBitRate?.coerceAtMost(requestedMaxBitRate) ?: requestedMaxBitRate
 }
 
 internal fun Song.toPlaybackRequestMediaItem(
@@ -102,7 +105,7 @@ internal fun Song.toPlaybackRequestMediaItem(
         maxBitRate = maxBitRate,
         format = format,
         suffix = suffix,
-        bitRate = displayBitRateKbps(bitRate, maxBitRate),
+        bitRate = estimatedPlaybackBitRateKbps(bitRate, maxBitRate),
         sourceBitRate = bitRate,
         sampleRate = sampleRate,
     )
@@ -195,8 +198,7 @@ internal fun MediaItem.toPlaybackRequestOrNull(): PlaybackRequest? {
         suffix = extras.getString(EXTRA_SUFFIX),
         bitRate = extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
         sourceBitRate = extras.getInt(EXTRA_SOURCE_BIT_RATE)
-            .takeIf { extras.containsKey(EXTRA_SOURCE_BIT_RATE) }
-            ?: extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
+            .takeIf { extras.containsKey(EXTRA_SOURCE_BIT_RATE) },
         sampleRate = extras.getInt(EXTRA_SAMPLE_RATE).takeIf { extras.containsKey(EXTRA_SAMPLE_RATE) },
     )
 }
@@ -228,8 +230,8 @@ internal fun MediaItem.toQueueItemOrNull(): PlaybackQueueItem? {
         suffix = extras.getString(EXTRA_SUFFIX),
         bitRateKbps = extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
         sourceBitRateKbps = extras.getInt(EXTRA_SOURCE_BIT_RATE)
-            .takeIf { extras.containsKey(EXTRA_SOURCE_BIT_RATE) }
-            ?: extras.getInt(EXTRA_BIT_RATE).takeIf { extras.containsKey(EXTRA_BIT_RATE) },
+            .takeIf { extras.containsKey(EXTRA_SOURCE_BIT_RATE) },
+        requestedMaxBitRateKbps = extras.getInt(EXTRA_MAX_BIT_RATE).takeIf { extras.containsKey(EXTRA_MAX_BIT_RATE) },
         sampleRate = extras.getInt(EXTRA_SAMPLE_RATE).takeIf { extras.containsKey(EXTRA_SAMPLE_RATE) },
         contentType = extras.getString(EXTRA_MIME_TYPE),
     )

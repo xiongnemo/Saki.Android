@@ -105,6 +105,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
@@ -137,7 +138,6 @@ import org.hdhmc.saki.domain.model.PlaybackSessionState
 import org.hdhmc.saki.domain.model.RepeatModeSetting
 import org.hdhmc.saki.domain.model.ServerConfig
 import org.hdhmc.saki.domain.model.SongLyrics
-import org.hdhmc.saki.domain.model.StreamQuality
 import java.io.File
 import coil3.imageLoader
 import coil3.request.ImageRequest
@@ -973,21 +973,50 @@ fun NowPlayingOverlay(
                             )
                         }
                         // Tech info bar
-                        val runtimeInfo = playbackState.runtimeInfo
-                        val format = track.stableFormatLabel()
-                        val sampleRate = track.sampleRate?.let(::formatSampleRateShort)
-                        val bitrate = track.displayBitrate(
-                            runtimeInfo = runtimeInfo,
-                            preferStableMetadata = true,
-                        )
-                        val techParts = listOfNotNull(format, sampleRate, bitrate)
-                        if (techParts.isNotEmpty()) {
+                        val techTextCandidate = track
+                            .compactTechnicalInfoParts(
+                                playbackState.runtimeInfo?.takeIf { runtimeInfo -> runtimeInfo.hasCompactTechnicalInfo() },
+                            )
+                            .joinToString(" | ")
+                        var visibleTechText by remember { mutableStateOf("") }
+                        var visibleTechMediaId by remember { mutableStateOf<String?>(null) }
+                        LaunchedEffect(track.mediaId, techTextCandidate) {
+                            if (visibleTechMediaId != track.mediaId) {
+                                visibleTechMediaId = track.mediaId
+                                visibleTechText = ""
+                            }
+                            if (techTextCandidate.isBlank()) {
+                                visibleTechText = ""
+                            } else {
+                                delay(COMPACT_TECH_INFO_SETTLE_MS)
+                                visibleTechText = techTextCandidate
+                            }
+                        }
+                        AnimatedContent(
+                            targetState = visibleTechText,
+                            modifier = Modifier.fillMaxWidth(),
+                            transitionSpec = {
+                                fadeIn(tween(COMPACT_TECH_INFO_FADE_MS)) togetherWith
+                                    fadeOut(tween(COMPACT_TECH_INFO_FADE_MS))
+                            },
+                            label = "compact-tech-info",
+                        ) { text ->
                             Text(
-                                text = techParts.joinToString(" | "),
+                                text = text,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(
+                                        if (text.isEmpty()) {
+                                            Modifier.clearAndSetSemantics {}
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
                                 textAlign = TextAlign.Center,
+                                minLines = 1,
+                                maxLines = 1,
                             )
                         }
                         // Queue toggle
@@ -1088,10 +1117,22 @@ fun NowPlayingOverlay(
                             },
                         )
                     }
+                    item { DetailLine(stringResource(R.string.detail_source_media), track.sourceMediaInfoLabel()) }
+                    if (!track.isCached) {
+                        item {
+                            DetailLine(
+                                stringResource(R.string.detail_requested_quality),
+                                track.requestedQualityInfoLabel(localizeQualityLabel(track.qualityLabel)),
+                            )
+                        }
+                    }
+                    item { DetailLine(stringResource(R.string.detail_playing_media), track.playingMediaInfoLabel(playbackState.runtimeInfo)) }
                     item { DetailLine(stringResource(R.string.detail_mime_type), playbackState.runtimeInfo?.sampleMimeType ?: track.contentType) }
                     item { DetailLine(stringResource(R.string.detail_container), playbackState.runtimeInfo?.containerMimeType) }
                     item { DetailLine(stringResource(R.string.detail_codec), playbackState.runtimeInfo?.codecs ?: track.suffix?.uppercase(java.util.Locale.ROOT)) }
-                    item { DetailLine(stringResource(R.string.detail_average_bitrate), track.displayBitrate(playbackState.runtimeInfo)) }
+                    playbackState.runtimeInfo?.averageBitrate?.let { averageBitrate ->
+                        item { DetailLine(stringResource(R.string.detail_average_bitrate), formatBitrate(averageBitrate)) }
+                    }
                     item { DetailLine(stringResource(R.string.detail_peak_bitrate), playbackState.runtimeInfo?.peakBitrate?.let(::formatBitrate)) }
                     item { DetailLine(stringResource(R.string.detail_sample_rate), (playbackState.runtimeInfo?.sampleRate ?: track.sampleRate)?.let(::formatSampleRate)) }
                     item { DetailLine(stringResource(R.string.detail_channels), playbackState.runtimeInfo?.channelCount?.toString()) }
@@ -1889,6 +1930,8 @@ private const val ARTWORK_PREWARM_RADIUS_PAGES = 3
 private const val ARTWORK_BACKGROUND_SETTLE_MS = 180
 private const val ARTWORK_BUTTON_SKIP_CONFIRM_TIMEOUT_MS = 900L
 private const val ARTWORK_BUTTON_SKIP_INITIAL_VELOCITY_PAGES = 3.5f
+private const val COMPACT_TECH_INFO_SETTLE_MS = 700L
+private const val COMPACT_TECH_INFO_FADE_MS = 700
 private const val PROGRAMMATIC_ARTWORK_SPRING_BASE_STIFFNESS = 140f
 private const val PROGRAMMATIC_ARTWORK_SPRING_DISTANCE_STIFFNESS = 60f
 private const val PROGRAMMATIC_ARTWORK_MAX_INITIAL_VELOCITY_PAGES = 8f
@@ -2088,22 +2131,82 @@ private fun formatBitrate(bitrate: Int): String {
     }
 }
 
-private fun PlaybackQueueItem.displayBitrate(
-    runtimeInfo: PlaybackRuntimeInfo?,
-    preferStableMetadata: Boolean = false,
-): String? {
-    val metadataBitrate = bitRateKbps?.let { "$it kbps" }
-    val runtimeBitrate = runtimeInfo?.averageBitrate?.let(::formatBitrate)
-    if (preferStableMetadata) return metadataBitrate ?: runtimeBitrate
-    return if (prefersMetadataBitrate()) {
-        metadataBitrate ?: runtimeBitrate
-    } else {
-        runtimeBitrate ?: metadataBitrate
-    }
+private fun PlaybackQueueItem.compactTechnicalInfoParts(runtimeInfo: PlaybackRuntimeInfo?): List<String> {
+    val showSourceTechnicalInfo = shouldShowSourceTechnicalInfo()
+    val stableFormat = stableFormatLabel().takeIf { showSourceTechnicalInfo }
+    val stableSampleRate = sampleRate?.let(::formatSampleRateShort).takeIf { showSourceTechnicalInfo }
+    return listOfNotNull(
+        runtimeInfo?.formatLabel() ?: stableFormat,
+        runtimeInfo?.sampleRate?.let(::formatSampleRateShort) ?: stableSampleRate,
+        runtimeInfo?.averageBitrate?.let(::formatBitrate) ?: stableBitrateDisplay()?.label(),
+    )
 }
 
-private fun PlaybackQueueItem.prefersMetadataBitrate(): Boolean {
-    return !qualityLabel.equals(StreamQuality.ORIGINAL.label, ignoreCase = true) && bitRateKbps != null
+private fun PlaybackQueueItem.sourceMediaInfoLabel(): String? {
+    return listOfNotNull(
+        stableFormatLabel(),
+        sampleRate?.let(::formatSampleRateShort),
+        sourceBitRateKbps?.takeIf { bitrate -> bitrate > 0 }?.let(::formatKbps),
+    ).joinNonEmpty()
+}
+
+private fun PlaybackQueueItem.requestedQualityInfoLabel(localizedQualityLabel: String): String? {
+    val requestedMaxBitRate = requestedMaxBitRateKbps?.takeIf { bitrate -> bitrate > 0 }
+    return requestedMaxBitRate?.let { bitrate -> "<=${formatKbps(bitrate)}" } ?: localizedQualityLabel
+}
+
+private fun PlaybackQueueItem.playingMediaInfoLabel(runtimeInfo: PlaybackRuntimeInfo?): String? {
+    val showSourceTechnicalInfo = shouldShowSourceTechnicalInfo()
+    return listOfNotNull(
+        runtimeInfo?.formatLabel() ?: stableFormatLabel().takeIf { showSourceTechnicalInfo },
+        runtimeInfo?.sampleRate?.let(::formatSampleRateShort)
+            ?: sampleRate?.let(::formatSampleRateShort).takeIf { showSourceTechnicalInfo },
+        runtimeInfo?.averageBitrate?.let(::formatBitrate) ?: stableBitrateDisplay()?.label(),
+    ).joinNonEmpty()
+}
+
+private fun PlaybackQueueItem.shouldShowSourceTechnicalInfo(): Boolean {
+    if (isCached) return true
+    val requestedMaxBitRate = requestedMaxBitRateKbps?.takeIf { bitrate -> bitrate > 0 }
+        ?: return true
+    val sourceBitRate = sourceBitRateKbps?.takeIf { bitrate -> bitrate > 0 } ?: return false
+    return sourceBitRate <= requestedMaxBitRate
+}
+
+private fun PlaybackQueueItem.stableBitrateDisplay(): BitrateDisplay? {
+    val requestedMaxBitRate = requestedMaxBitRateKbps?.takeIf { bitrate -> bitrate > 0 }
+    val sourceBitRate = sourceBitRateKbps?.takeIf { bitrate -> bitrate > 0 }
+    val displayBitRate = bitRateKbps?.takeIf { bitrate -> bitrate > 0 }
+    if (isCached || requestedMaxBitRate == null) {
+        return (displayBitRate ?: sourceBitRate)?.let { bitrate -> BitrateDisplay(bitrate) }
+    }
+    if (sourceBitRate != null && sourceBitRate <= requestedMaxBitRate) {
+        return BitrateDisplay(sourceBitRate)
+    }
+    return BitrateDisplay(requestedMaxBitRate, isUpperBound = true)
+}
+
+private data class BitrateDisplay(
+    val kbps: Int,
+    val isUpperBound: Boolean = false,
+) {
+    fun label(): String = if (isUpperBound) "<=${formatKbps(kbps)}" else formatKbps(kbps)
+}
+
+private fun formatKbps(kbps: Int): String = "$kbps kbps"
+
+private fun PlaybackRuntimeInfo.formatLabel(): String? {
+    return sampleMimeType?.mediaFormatLabel()
+        ?: containerMimeType?.mediaFormatLabel()
+        ?: codecs?.takeIf(String::isNotBlank)
+}
+
+private fun PlaybackRuntimeInfo.hasCompactTechnicalInfo(): Boolean {
+    return formatLabel() != null || sampleRate != null || averageBitrate != null
+}
+
+private fun List<String>.joinNonEmpty(): String? {
+    return takeIf { parts -> parts.isNotEmpty() }?.joinToString(" | ")
 }
 
 private fun PlaybackQueueItem.stableFormatLabel(): String? {
@@ -2111,14 +2214,19 @@ private fun PlaybackQueueItem.stableFormatLabel(): String? {
         ?.takeIf(String::isNotEmpty)
         ?.let { return it.uppercase(java.util.Locale.ROOT) }
 
-    return contentType?.substringAfter("/")
-        ?.substringBefore(";")
-        ?.trim()
-        ?.takeIf(String::isNotEmpty)
+    return contentType?.mediaFormatLabel()
+}
+
+private fun String.mediaFormatLabel(): String? {
+    return substringAfter("/")
+        .substringBefore(";")
+        .trim()
+        .takeIf(String::isNotEmpty)
         ?.let { subtype ->
             when (subtype.lowercase(java.util.Locale.ROOT)) {
                 "mpeg", "mp3" -> "MP3"
                 "mp4", "x-m4a", "m4a" -> "M4A"
+                "mp4a-latm", "aac" -> "AAC"
                 "flac" -> "FLAC"
                 "ogg", "oga" -> "OGG"
                 "opus" -> "Opus"
