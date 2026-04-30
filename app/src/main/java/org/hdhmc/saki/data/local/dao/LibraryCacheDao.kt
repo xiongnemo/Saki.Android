@@ -305,6 +305,11 @@ interface LibraryCacheDao {
                 WHERE cached_playlist_detail_songs.serverId = cached_song_metadata.serverId
                     AND cached_playlist_detail_songs.songId = cached_song_metadata.songId
             )
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_songs
+                WHERE cached_songs.serverId = cached_song_metadata.serverId
+                    AND cached_songs.songId = cached_song_metadata.songId
+            )
         """,
     )
     suspend fun pruneSongMetadataBefore(serverId: Long, cachedAt: Long)
@@ -332,6 +337,11 @@ interface LibraryCacheDao {
                 SELECT 1 FROM cached_playlist_detail_songs
                 WHERE cached_playlist_detail_songs.serverId = cached_song_metadata.serverId
                     AND cached_playlist_detail_songs.songId = cached_song_metadata.songId
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM cached_songs
+                WHERE cached_songs.serverId = cached_song_metadata.serverId
+                    AND cached_songs.songId = cached_song_metadata.songId
             )
         """,
     )
