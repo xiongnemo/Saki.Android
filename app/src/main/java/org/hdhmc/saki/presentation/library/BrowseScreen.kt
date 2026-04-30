@@ -1406,6 +1406,35 @@ private fun SongsPage(
     onShowSongActions: (Song) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    var wasLoadingPrevious by remember { mutableStateOf(isLoadingPrevious) }
+    var previousLoadAnchorIndex by remember { mutableStateOf<Int?>(null) }
+    var previousLoadAnchorScrollOffset by remember { mutableStateOf(0) }
+    LaunchedEffect(songsOffset, isLoadingPrevious, songs.size) {
+        if (!wasLoadingPrevious && isLoadingPrevious) {
+            previousLoadAnchorIndex = songsOffset + listState.firstVisibleItemIndex
+            previousLoadAnchorScrollOffset = listState.firstVisibleItemScrollOffset
+        }
+
+        val finishedPreviousLoad = wasLoadingPrevious && !isLoadingPrevious
+        val anchorIndex = previousLoadAnchorIndex
+        if (finishedPreviousLoad && anchorIndex != null && songs.isNotEmpty()) {
+            val targetIndex = anchorIndex - songsOffset
+            if (
+                targetIndex in songs.indices &&
+                (
+                    listState.firstVisibleItemIndex != targetIndex ||
+                        listState.firstVisibleItemScrollOffset != previousLoadAnchorScrollOffset
+                    )
+            ) {
+                listState.scrollToItem(
+                    index = targetIndex,
+                    scrollOffset = previousLoadAnchorScrollOffset,
+                )
+            }
+            previousLoadAnchorIndex = null
+        }
+        wasLoadingPrevious = isLoadingPrevious
+    }
     LaunchedEffect(listState, hasPrevious, isLoading, isLoadingPrevious, songsOffset, songs.size) {
         snapshotFlow {
             if (!hasPrevious || isLoading || isLoadingPrevious || songs.isEmpty()) {
@@ -1454,11 +1483,6 @@ private fun SongsPage(
         modifier = Modifier.fillMaxSize(),
         contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
-        if (isLoadingPrevious) {
-            item(key = "songs-loading-previous") {
-                LoadingStateCard(stringResource(R.string.browse_loading_songs))
-            }
-        }
         itemsIndexed(songs, key = { index, s -> "${songsOffset + index}-${s.id}" }) { index, song ->
             val isOfflinePlayable = song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
             SongRow(
