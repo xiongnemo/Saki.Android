@@ -18,6 +18,12 @@ interface CachedSongDao {
     @Query("SELECT * FROM cached_songs WHERE serverId = :serverId ORDER BY downloadedAt DESC")
     suspend fun getCachedSongsForServer(serverId: Long): List<CachedSongEntity>
 
+    @Query("SELECT * FROM cached_songs WHERE serverId = :serverId AND songId IN (:songIds)")
+    suspend fun getCachedSongs(
+        serverId: Long,
+        songIds: List<String>,
+    ): List<CachedSongEntity>
+
     @Query("SELECT * FROM cached_songs WHERE serverId = :serverId AND songId = :songId LIMIT 1")
     suspend fun getCachedSong(
         serverId: Long,

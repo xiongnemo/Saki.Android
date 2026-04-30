@@ -138,6 +138,7 @@ fun BrowseScreen(
     onOpenPlaylist: (String) -> Unit,
     onClosePlaylist: () -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
+    onPlayLibrarySongs: (Int) -> Unit,
     onQueueSong: (Song) -> Unit,
     onPlaySongNext: (Song) -> Unit,
     onOfflineSongUnavailable: () -> Unit,
@@ -293,6 +294,7 @@ fun BrowseScreen(
                         onOpenAlbum = onOpenAlbum,
                         onOpenPlaylist = onOpenPlaylist,
                         onPlaySongs = onPlaySongs,
+                        onPlayLibrarySongs = onPlayLibrarySongs,
                         onOfflineSongUnavailable = onOfflineSongUnavailable,
                         onShowSongActions = { actionSong = it },
                         onOpenSettings = onOpenSettings,
@@ -395,6 +397,7 @@ private fun BrowsePager(
     onOpenAlbum: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
+    onPlayLibrarySongs: (Int) -> Unit,
     onOfflineSongUnavailable: () -> Unit,
     onShowSongActions: (Song) -> Unit,
     onOpenSettings: () -> Unit,
@@ -545,6 +548,7 @@ private fun BrowsePager(
                                 bottomOverlayPadding = bottomOverlayPadding,
                                 onLoadMore = onLoadMoreSongs,
                                 onPlaySongs = onPlaySongs,
+                                onPlayLibrarySongs = onPlayLibrarySongs,
                                 onOfflineSongUnavailable = onOfflineSongUnavailable,
                                 onShowSongActions = onShowSongActions,
                             )
@@ -1386,6 +1390,7 @@ private fun SongsPage(
     bottomOverlayPadding: Dp,
     onLoadMore: () -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
+    onPlayLibrarySongs: (Int) -> Unit,
     onOfflineSongUnavailable: () -> Unit,
     onShowSongActions: (Song) -> Unit,
 ) {
@@ -1436,15 +1441,19 @@ private fun SongsPage(
                 isOfflineDegraded = isOfflineDegraded,
                 isOfflinePlayable = isOfflinePlayable,
                 onClick = {
-                    playOfflineAwareSongs(
-                        songs = songs,
-                        startIndex = index,
-                        isOfflineDegraded = isOfflineDegraded,
-                        cachedSongsBySongId = cachedSongsBySongId,
-                        streamCachedSongIds = streamCachedSongIds,
-                        onPlaySongs = onPlaySongs,
-                        onUnavailable = onOfflineSongUnavailable,
-                    )
+                    if (isOfflineDegraded) {
+                        playOfflineAwareSongs(
+                            songs = songs,
+                            startIndex = index,
+                            isOfflineDegraded = true,
+                            cachedSongsBySongId = cachedSongsBySongId,
+                            streamCachedSongIds = streamCachedSongIds,
+                            onPlaySongs = onPlaySongs,
+                            onUnavailable = onOfflineSongUnavailable,
+                        )
+                    } else {
+                        onPlayLibrarySongs(index)
+                    }
                 },
                 onMore = { onShowSongActions(song) },
             )

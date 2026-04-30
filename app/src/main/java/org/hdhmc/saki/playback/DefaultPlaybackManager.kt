@@ -27,6 +27,7 @@ import org.hdhmc.saki.domain.model.RepeatModeSetting
 import org.hdhmc.saki.domain.model.Song
 import org.hdhmc.saki.domain.model.StreamQuality
 import org.hdhmc.saki.domain.repository.CachedSongRepository
+import org.hdhmc.saki.domain.repository.LibraryCacheRepository
 import org.hdhmc.saki.domain.repository.PlaybackManager
 import org.hdhmc.saki.domain.repository.PlaybackPreferencesRepository
 import org.hdhmc.saki.domain.repository.StreamCacheRepository
@@ -62,6 +63,7 @@ class DefaultPlaybackManager @Inject constructor(
     @param:MainDispatcher private val mainDispatcher: CoroutineDispatcher,
     @param:DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
     private val playbackPreferencesRepository: PlaybackPreferencesRepository,
+    private val libraryCacheRepository: LibraryCacheRepository,
     private val cachedSongRepository: CachedSongRepository,
     private val streamCacheRepository: StreamCacheRepository,
     private val networkTypeProvider: NetworkTypeProvider,
@@ -81,11 +83,14 @@ class DefaultPlaybackManager @Inject constructor(
     private var pendingDeferredShuffleEnabled: Boolean? = null
     private var pendingDeferredShuffleSeed: Long = 0L
     private var pendingDeferredShuffleAnchorIndex: Int = 0
+    private var virtualQueue: ActiveVirtualQueue? = null
+    private var virtualQueueUpdateJob: Job? = null
 
     private val controllerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             syncExternalShuffleState(player)
             syncState(player)
+            maybeScheduleVirtualQueueWindowUpdate(player)
         }
     }
 
@@ -227,6 +232,7 @@ class DefaultPlaybackManager @Inject constructor(
         songs: List<Song>,
         startIndex: Int,
     ) {
+        cancelVirtualQueue()
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
         val safeStartIndex = startIndex.coerceIn(songs.indices)
         val startSong = songs[safeStartIndex]
@@ -293,6 +299,55 @@ class DefaultPlaybackManager @Inject constructor(
         }
     }
 
+    override suspend fun playLibraryQueue(
+        serverId: Long,
+        songs: List<Song>,
+        startIndex: Int,
+        libraryOffset: Int,
+    ) {
+        require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
+        cancelVirtualQueue()
+        val generation = beginDeferredQueueLoad()
+        val safeStartIndex = startIndex.coerceIn(songs.indices)
+        val safeLibraryOffset = libraryOffset.coerceAtLeast(0)
+        val startLibraryIndex = safeLibraryOffset + safeStartIndex
+        val preferredQuality = playbackQuality(serverId)
+        val window = buildVirtualQueueWindow(
+            serverId = serverId,
+            focusIndex = startLibraryIndex,
+            seedSongs = songs,
+            seedOffset = safeLibraryOffset,
+        )
+        val mediaItems = buildMediaItems(
+            serverId = serverId,
+            songs = window.songs,
+            preferredQuality = preferredQuality,
+        )
+
+        withController { activeController ->
+            if (generation != queueLoadGeneration) return@withController
+            virtualQueueUpdateJob?.cancel()
+            virtualQueueUpdateJob = null
+            virtualQueue = ActiveVirtualQueue(
+                generation = generation,
+                serverId = serverId,
+                windowStart = window.start,
+                itemCount = mediaItems.size,
+                hasMoreBefore = window.start > 0,
+                hasMoreAfter = window.hasMoreAfter,
+            )
+            shuffleDisplayOrder = null
+            activeController.shuffleModeEnabled = false
+            persistShuffleState()
+            val windowStartIndex = (startLibraryIndex - window.start).coerceIn(mediaItems.indices)
+            activeController.setMediaItems(mediaItems, windowStartIndex, C.TIME_UNSET)
+            activeController.prepare()
+            activeController.play()
+            syncState(activeController)
+            maybeScheduleVirtualQueueWindowUpdate(activeController)
+        }
+    }
+
     private fun beginDeferredQueueLoad(): Long {
         deferredQueueJob?.cancel()
         deferredQueueJob = null
@@ -310,6 +365,12 @@ class DefaultPlaybackManager @Inject constructor(
         if (shouldClearShuffleState) {
             persistShuffleState()
         }
+    }
+
+    private fun cancelVirtualQueue() {
+        virtualQueueUpdateJob?.cancel()
+        virtualQueueUpdateJob = null
+        virtualQueue = null
     }
 
     private fun scheduleDeferredQueueLoad(
@@ -428,6 +489,21 @@ class DefaultPlaybackManager @Inject constructor(
         val after: List<MediaItem>,
     )
 
+    private data class VirtualQueueWindow(
+        val start: Int,
+        val songs: List<Song>,
+        val hasMoreAfter: Boolean,
+    )
+
+    private data class ActiveVirtualQueue(
+        val generation: Long,
+        val serverId: Long,
+        val windowStart: Int,
+        val itemCount: Int,
+        val hasMoreBefore: Boolean,
+        val hasMoreAfter: Boolean,
+    )
+
     private data class PendingDeferredQueue(
         val generation: Long,
         val serverId: Long,
@@ -494,6 +570,231 @@ class DefaultPlaybackManager @Inject constructor(
         return pendingDisplayOrder(pending)?.getOrNull(displayIndex) ?: displayIndex
     }
 
+    private suspend fun buildVirtualQueueWindow(
+        serverId: Long,
+        focusIndex: Int,
+        seedSongs: List<Song>,
+        seedOffset: Int,
+    ): VirtualQueueWindow {
+        val preferredStart = (focusIndex - VIRTUAL_QUEUE_KEEP_BEFORE).coerceAtLeast(0)
+        val cachedSongs = libraryCacheRepository.getSongsPage(
+            serverId = serverId,
+            limit = VIRTUAL_QUEUE_INITIAL_LOAD_SIZE,
+            offset = preferredStart,
+        )
+        if (cachedSongs.isNotEmpty() && focusIndex in preferredStart until preferredStart + cachedSongs.size) {
+            return VirtualQueueWindow(
+                start = preferredStart,
+                songs = cachedSongs,
+                hasMoreAfter = cachedSongs.size >= VIRTUAL_QUEUE_INITIAL_LOAD_SIZE,
+            )
+        }
+
+        val seedFocusIndex = (focusIndex - seedOffset).coerceIn(seedSongs.indices)
+        val seedStart = (seedFocusIndex - VIRTUAL_QUEUE_KEEP_BEFORE).coerceAtLeast(0)
+        val seedEnd = (seedFocusIndex + VIRTUAL_QUEUE_KEEP_AFTER + 1).coerceAtMost(seedSongs.size)
+        return VirtualQueueWindow(
+            start = seedOffset + seedStart,
+            songs = seedSongs.subList(seedStart, seedEnd),
+            hasMoreAfter = seedEnd < seedSongs.size,
+        )
+    }
+
+    private suspend fun buildMediaItems(
+        serverId: Long,
+        songs: List<Song>,
+        preferredQuality: StreamQuality,
+    ): List<MediaItem> = withContext(defaultDispatcher) {
+        if (songs.isEmpty()) return@withContext emptyList()
+        val cachedSongsById = cachedSongRepository.getPlayableCachedSongs(
+            serverId = serverId,
+            songIds = songs.map(Song::id),
+            preferredQuality = preferredQuality,
+        )
+        val mediaItems = ArrayList<MediaItem>(songs.size)
+        for (song in songs) {
+            currentCoroutineContext().ensureActive()
+            mediaItems += song.toPreferredMediaItem(
+                serverId = serverId,
+                preferredQuality = preferredQuality,
+                cachedSong = cachedSongsById[song.id],
+            )
+        }
+        mediaItems
+    }
+
+    private fun maybeScheduleVirtualQueueWindowUpdate(player: Player) {
+        val currentVirtualQueue = virtualQueue ?: return
+        if (virtualQueueUpdateJob?.isActive == true) return
+        if (player.shuffleModeEnabled) return
+        if (player.mediaItemCount != currentVirtualQueue.itemCount) return
+
+        val playerIndex = player.currentMediaItemIndex
+            .takeUnless { it == C.INDEX_UNSET }
+            ?: return
+        val shouldLoadBefore = currentVirtualQueue.hasMoreBefore && playerIndex <= VIRTUAL_QUEUE_PRELOAD_THRESHOLD
+        val shouldLoadAfter = currentVirtualQueue.hasMoreAfter &&
+            player.mediaItemCount - playerIndex - 1 <= VIRTUAL_QUEUE_PRELOAD_THRESHOLD
+        if (!shouldLoadBefore && !shouldLoadAfter) return
+
+        val generation = currentVirtualQueue.generation
+        virtualQueueUpdateJob = scope.launch {
+            if (shouldLoadBefore) extendVirtualQueueBefore(generation)
+            if (shouldLoadAfter) extendVirtualQueueAfter(generation)
+        }
+    }
+
+    private suspend fun prepareVirtualQueueForMove(activeController: MediaController, direction: Int) {
+        val currentVirtualQueue = virtualQueue ?: return
+        if (activeController.shuffleModeEnabled) return
+        if (activeController.mediaItemCount != currentVirtualQueue.itemCount) return
+        val currentIndex = activeController.currentMediaItemIndex
+            .takeUnless { it == C.INDEX_UNSET }
+            ?: return
+        if (direction > 0 && currentVirtualQueue.hasMoreAfter && currentIndex >= activeController.mediaItemCount - 1) {
+            extendVirtualQueueAfter(currentVirtualQueue.generation)
+        } else if (direction < 0 && currentVirtualQueue.hasMoreBefore && currentIndex <= 0) {
+            extendVirtualQueueBefore(currentVirtualQueue.generation)
+        }
+    }
+
+    private suspend fun extendVirtualQueueAfter(generation: Long) {
+        val currentVirtualQueue = virtualQueue
+            ?.takeIf { queue -> queue.generation == generation && queue.hasMoreAfter }
+            ?: return
+        val offset = currentVirtualQueue.windowStart + currentVirtualQueue.itemCount
+        val songs = libraryCacheRepository.getSongsPage(
+            serverId = currentVirtualQueue.serverId,
+            limit = VIRTUAL_QUEUE_PAGE_SIZE,
+            offset = offset,
+        )
+        if (songs.isEmpty()) {
+            updateVirtualQueue(generation) { queue -> queue.copy(hasMoreAfter = false) }
+            return
+        }
+
+        val mediaItems = buildMediaItems(
+            serverId = currentVirtualQueue.serverId,
+            songs = songs,
+            preferredQuality = playbackQuality(currentVirtualQueue.serverId),
+        )
+        withController { activeController ->
+            val latest = virtualQueue
+                ?.takeIf { queue ->
+                    queue.generation == generation &&
+                        !activeController.shuffleModeEnabled &&
+                        activeController.mediaItemCount == queue.itemCount &&
+                        offset == queue.windowStart + queue.itemCount
+                }
+                ?: return@withController
+            activeController.addMediaItems(mediaItems)
+            virtualQueue = latest.copy(
+                itemCount = latest.itemCount + mediaItems.size,
+                hasMoreAfter = mediaItems.size >= VIRTUAL_QUEUE_PAGE_SIZE,
+            )
+            trimVirtualQueueBeforeIfNeeded(activeController)
+            syncState(activeController)
+        }
+    }
+
+    private suspend fun extendVirtualQueueBefore(generation: Long) {
+        val currentVirtualQueue = virtualQueue
+            ?.takeIf { queue -> queue.generation == generation && queue.hasMoreBefore }
+            ?: return
+        val offset = (currentVirtualQueue.windowStart - VIRTUAL_QUEUE_PAGE_SIZE).coerceAtLeast(0)
+        val limit = currentVirtualQueue.windowStart - offset
+        if (limit <= 0) {
+            updateVirtualQueue(generation) { queue -> queue.copy(hasMoreBefore = false) }
+            return
+        }
+
+        val songs = libraryCacheRepository.getSongsPage(
+            serverId = currentVirtualQueue.serverId,
+            limit = limit,
+            offset = offset,
+        )
+        if (songs.isEmpty() || (songs.size < limit && offset > 0)) {
+            updateVirtualQueue(generation) { queue -> queue.copy(hasMoreBefore = false) }
+            return
+        }
+
+        val mediaItems = buildMediaItems(
+            serverId = currentVirtualQueue.serverId,
+            songs = songs,
+            preferredQuality = playbackQuality(currentVirtualQueue.serverId),
+        )
+        withController { activeController ->
+            val latest = virtualQueue
+                ?.takeIf { queue ->
+                    queue.generation == generation &&
+                        !activeController.shuffleModeEnabled &&
+                        activeController.mediaItemCount == queue.itemCount &&
+                        queue.windowStart == currentVirtualQueue.windowStart
+                }
+                ?: return@withController
+            activeController.addMediaItems(0, mediaItems)
+            virtualQueue = latest.copy(
+                windowStart = offset,
+                itemCount = latest.itemCount + mediaItems.size,
+                hasMoreBefore = offset > 0,
+            )
+            trimVirtualQueueAfterIfNeeded(activeController)
+            syncState(activeController)
+        }
+    }
+
+    private suspend fun updateVirtualQueue(
+        generation: Long,
+        transform: (ActiveVirtualQueue) -> ActiveVirtualQueue,
+    ) {
+        withController { activeController ->
+            val latest = virtualQueue
+                ?.takeIf { queue -> queue.generation == generation }
+                ?: return@withController
+            virtualQueue = transform(latest)
+            syncState(activeController)
+        }
+    }
+
+    private fun trimVirtualQueueBeforeIfNeeded(activeController: MediaController) {
+        val currentVirtualQueue = virtualQueue ?: return
+        val overflow = activeController.mediaItemCount - VIRTUAL_QUEUE_MAX_SIZE
+        if (overflow <= 0) return
+        val currentIndex = activeController.currentMediaItemIndex
+            .takeUnless { it == C.INDEX_UNSET }
+            ?: return
+        val removableBefore = (currentIndex - VIRTUAL_QUEUE_KEEP_BEFORE).coerceAtLeast(0)
+        val removeCount = minOf(overflow, removableBefore)
+        if (removeCount <= 0) return
+
+        activeController.removeMediaItems(0, removeCount)
+        virtualQueue = currentVirtualQueue.copy(
+            windowStart = currentVirtualQueue.windowStart + removeCount,
+            itemCount = currentVirtualQueue.itemCount - removeCount,
+            hasMoreBefore = true,
+        )
+    }
+
+    private fun trimVirtualQueueAfterIfNeeded(activeController: MediaController) {
+        val currentVirtualQueue = virtualQueue ?: return
+        val overflow = activeController.mediaItemCount - VIRTUAL_QUEUE_MAX_SIZE
+        if (overflow <= 0) return
+        val currentIndex = activeController.currentMediaItemIndex
+            .takeUnless { it == C.INDEX_UNSET }
+            ?: return
+        val removableAfter = (activeController.mediaItemCount - currentIndex - VIRTUAL_QUEUE_KEEP_AFTER - 1)
+            .coerceAtLeast(0)
+        val removeCount = minOf(overflow, removableAfter)
+        if (removeCount <= 0) return
+
+        val removeFrom = activeController.mediaItemCount - removeCount
+        activeController.removeMediaItems(removeFrom, activeController.mediaItemCount)
+        virtualQueue = currentVirtualQueue.copy(
+            itemCount = currentVirtualQueue.itemCount - removeCount,
+            hasMoreAfter = true,
+        )
+    }
+
     override suspend fun restoreQueue(
         serverId: Long,
         songs: List<Song>,
@@ -501,6 +802,7 @@ class DefaultPlaybackManager @Inject constructor(
         positionMs: Long,
     ) {
         if (songs.isEmpty()) return
+        cancelVirtualQueue()
         cancelDeferredQueueLoad()
         shuffleDisplayOrder = null
         val preferredQuality = playbackQuality(serverId)
@@ -539,6 +841,7 @@ class DefaultPlaybackManager @Inject constructor(
         startIndex: Int,
     ) {
         require(songs.isNotEmpty()) { "Playback queue cannot be empty." }
+        cancelVirtualQueue()
         cancelDeferredQueueLoad()
         shuffleDisplayOrder = null
         persistShuffleState()
@@ -559,6 +862,7 @@ class DefaultPlaybackManager @Inject constructor(
         songs: List<Song>,
     ) {
         if (songs.isEmpty()) return
+        cancelVirtualQueue()
         cancelDeferredQueueLoad(clearPendingShuffleState = true)
         clearShuffleIfActive()
         val preferredQuality = playbackQuality(serverId)
@@ -581,6 +885,7 @@ class DefaultPlaybackManager @Inject constructor(
         serverId: Long,
         song: Song,
     ) {
+        cancelVirtualQueue()
         cancelDeferredQueueLoad(clearPendingShuffleState = true)
         clearShuffleIfActive()
         val preferredQuality = playbackQuality(serverId)
@@ -618,6 +923,7 @@ class DefaultPlaybackManager @Inject constructor(
 
     override suspend fun skipToNext() {
         withController { activeController ->
+            prepareVirtualQueueForMove(activeController, direction = 1)
             // With native ShuffleOrder, seekToNext respects shuffle mode
             val nextIndex = activeController.currentMediaItemIndex + 1
             if (!activeController.shuffleModeEnabled && nextIndex < activeController.mediaItemCount) {
@@ -636,6 +942,7 @@ class DefaultPlaybackManager @Inject constructor(
 
     override suspend fun skipToPrevious() {
         withController { activeController ->
+            prepareVirtualQueueForMove(activeController, direction = -1)
             activeController.seekToPrevious()
             syncState(activeController)
         }
@@ -703,6 +1010,7 @@ class DefaultPlaybackManager @Inject constructor(
         shuffleDisplayOrder?.indexOf(playerIndex)?.takeIf { it >= 0 } ?: playerIndex
 
     override suspend fun toggleShuffle() {
+        cancelVirtualQueue()
         withController { activeController ->
             val count = activeController.mediaItemCount
             pendingDeferredShuffleEnabled?.let { pendingShuffle ->
@@ -814,6 +1122,7 @@ class DefaultPlaybackManager @Inject constructor(
     }
 
     override suspend fun removeQueueItem(index: Int) {
+        cancelVirtualQueue()
         cancelDeferredQueueLoad(clearPendingShuffleState = true)
         withController { activeController ->
             val playerIndex = displayToPlayer(index)
@@ -974,6 +1283,9 @@ class DefaultPlaybackManager @Inject constructor(
             }
             return false
         }
+        if (virtualQueue != null) {
+            cancelVirtualQueue()
+        }
         if (shuffleDisplayOrder != null || player.mediaItemCount <= 1 || restoringExternalShuffleState) return false
 
         restoringExternalShuffleState = true
@@ -1000,6 +1312,15 @@ class DefaultPlaybackManager @Inject constructor(
             delay(100L * (attempt + 1))
         }
         return playbackPreferencesRepository.getShuffleState()
+    }
+
+    private companion object {
+        const val VIRTUAL_QUEUE_KEEP_BEFORE = 40
+        const val VIRTUAL_QUEUE_KEEP_AFTER = 80
+        const val VIRTUAL_QUEUE_INITIAL_LOAD_SIZE = VIRTUAL_QUEUE_KEEP_BEFORE + VIRTUAL_QUEUE_KEEP_AFTER + 1
+        const val VIRTUAL_QUEUE_PAGE_SIZE = 80
+        const val VIRTUAL_QUEUE_MAX_SIZE = 240
+        const val VIRTUAL_QUEUE_PRELOAD_THRESHOLD = 12
     }
 }
 

@@ -25,6 +25,12 @@ interface CachedSongRepository {
         preferredQuality: StreamQuality,
     ): Map<String, CachedSong>
 
+    suspend fun getPlayableCachedSongs(
+        serverId: Long,
+        songIds: List<String>,
+        preferredQuality: StreamQuality,
+    ): Map<String, CachedSong>
+
     suspend fun cacheSong(
         serverId: Long,
         song: Song,

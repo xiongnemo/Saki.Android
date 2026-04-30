@@ -884,6 +884,27 @@ class SakiAppViewModel @Inject constructor(
         }
     }
 
+    fun playLibrarySongs(startIndex: Int = 0) {
+        val state = uiState.value
+        val serverId = state.selectedServerId ?: return
+        val songs = state.songs
+        if (songs.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                playbackManager.playLibraryQueue(
+                    serverId = serverId,
+                    songs = songs,
+                    startIndex = startIndex,
+                    libraryOffset = 0,
+                )
+            }.onSuccess {
+                openNowPlayingRequestsFlow.emit(Unit)
+            }.onFailure { throwable ->
+                snackbarMessages.emit(SnackbarMessage(throwable.localizedOr(R.string.error_start_playback)))
+            }
+        }
+    }
+
     fun queueSong(song: Song) {
         val serverId = uiState.value.selectedServerId ?: return
         viewModelScope.launch {

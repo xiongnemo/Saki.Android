@@ -25,6 +25,13 @@ interface PlaybackManager {
         startIndex: Int = 0,
     )
 
+    suspend fun playLibraryQueue(
+        serverId: Long,
+        songs: List<Song>,
+        startIndex: Int = 0,
+        libraryOffset: Int = 0,
+    )
+
     suspend fun restoreQueue(
         serverId: Long,
         songs: List<Song>,

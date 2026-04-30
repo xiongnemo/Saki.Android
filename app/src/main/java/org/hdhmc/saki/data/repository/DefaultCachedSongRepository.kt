@@ -81,6 +81,21 @@ class DefaultCachedSongRepository @Inject constructor(
             .associateBy(CachedSong::songId)
     }
 
+    override suspend fun getPlayableCachedSongs(
+        serverId: Long,
+        songIds: List<String>,
+        preferredQuality: StreamQuality,
+    ): Map<String, CachedSong> = withContext(ioDispatcher) {
+        if (songIds.isEmpty()) return@withContext emptyMap()
+        songIds.distinct()
+            .chunked(IN_CLAUSE_QUERY_CHUNK_SIZE)
+            .flatMap { chunk -> cachedSongDao.getCachedSongs(serverId, chunk) }
+            .toDomainWithMetadata(libraryCacheDao)
+            .asSequence()
+            .filter { song -> song.canPlayAt(preferredQuality) }
+            .associateBy(CachedSong::songId)
+    }
+
     override suspend fun cacheSong(
         serverId: Long,
         song: Song,
