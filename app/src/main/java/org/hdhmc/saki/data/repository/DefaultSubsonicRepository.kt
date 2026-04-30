@@ -345,6 +345,7 @@ class DefaultSubsonicRepository @Inject constructor(
                     query = query,
                     queryLists = extraQueryLists,
                 )
+                endpointSelector.recordSuccess(serverId, endpoint)
                 return SubsonicCallResult(
                     endpoint = endpoint,
                     data = transform(response),
@@ -437,6 +438,7 @@ class DefaultSubsonicRepository @Inject constructor(
     }
 
     private fun orderedEndpoints(server: ServerConfig): List<ServerEndpoint> {
+        endpointSelector.registerServer(server)
         return endpointSelector.sortedEndpoints(
             serverId = server.id,
             endpoints = server.endpoints.sortedBy(ServerEndpoint::order),

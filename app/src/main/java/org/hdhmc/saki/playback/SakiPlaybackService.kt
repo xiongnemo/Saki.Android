@@ -407,9 +407,11 @@ class SakiPlaybackService : MediaSessionService() {
             if (streamRequest.candidates.isEmpty()) {
                 throw IOException("No stream candidates for song $songId on server $serverId")
             }
+            val candidate = streamRequest.candidates.first()
+            endpointSelector.recordSuccess(serverId, candidate.endpoint)
             val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, requestedQuality)
             return dataSpec.buildUpon()
-                .setUri(streamRequest.candidates.first().url)
+                .setUri(candidate.url)
                 .setKey(cacheKey)
                 .build()
         }
@@ -421,7 +423,9 @@ class SakiPlaybackService : MediaSessionService() {
             throw IOException("No stream candidates for song $songId on server $serverId")
         }
 
-        val realUrl = streamRequest.candidates.first().url
+        val candidate = streamRequest.candidates.first()
+        endpointSelector.recordSuccess(serverId, candidate.endpoint)
+        val realUrl = candidate.url
         val cacheKey = streamCacheRepository.buildCacheKey(serverId, songId, quality)
 
         return dataSpec.buildUpon()
@@ -431,8 +435,7 @@ class SakiPlaybackService : MediaSessionService() {
     }
 
     private fun shouldPreferLocalStreamCache(serverId: Long): Boolean {
-        val probeResults = endpointSelector.getLastProbeResults(serverId)
-        return probeResults.isNotEmpty() && probeResults.none { result -> result.reachable }
+        return endpointSelector.isOfflineDegraded(serverId)
     }
 
     private fun cachedStreamUri(cacheKey: String): Uri {

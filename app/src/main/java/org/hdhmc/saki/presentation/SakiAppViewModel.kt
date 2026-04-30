@@ -392,6 +392,7 @@ class SakiAppViewModel @Inject constructor(
     fun selectServer(serverId: Long) {
         val previousServerId = uiState.value.selectedServerId
         if (previousServerId == serverId) return
+        val server = uiState.value.servers.find { it.id == serverId } ?: return
 
         clearSearchState()
         mutableUiState.update { state ->
@@ -410,6 +411,12 @@ class SakiAppViewModel @Inject constructor(
                 isSongsLoadingMore = false,
                 songsError = null,
             )
+        }
+        endpointSelector.registerServer(server)
+        refreshEndpointStatus()
+        viewModelScope.launch {
+            endpointSelector.probe(serverId, server)
+            refreshEndpointStatus()
         }
         viewModelScope.launch {
             appPreferencesRepository.updateLastSelectedServerId(serverId)
@@ -1254,6 +1261,9 @@ class SakiAppViewModel @Inject constructor(
                 isSongsLoadingMore = if (serverChanged) false else state.isSongsLoadingMore,
             )
         }
+        if (serverChanged) {
+            refreshEndpointStatus()
+        }
 
         viewModelScope.launch {
             refreshCacheStorageSummary(selectedServerId)
@@ -1263,11 +1273,11 @@ class SakiAppViewModel @Inject constructor(
             // Show cached content immediately, then probe + network refresh
             loadCachedContent(selectedServerId)
             viewModelScope.launch {
-                servers.find { it.id == selectedServerId }?.let { server ->
+                val probedEndpoint = servers.find { it.id == selectedServerId }?.let { server ->
                     endpointSelector.probe(selectedServerId, server)
-                    refreshEndpointStatus()
                 }
-                val hasReachableEndpoint = endpointSelector.getActiveEndpointId(selectedServerId) != null &&
+                refreshEndpointStatus()
+                val hasReachableEndpoint = (probedEndpoint != null || endpointSelector.getActiveEndpointId(selectedServerId) != null) &&
                     !endpointStatus.value.isOfflineDegraded
                 if (uiState.value.playbackState.currentItem == null) {
                     if (hasReachableEndpoint) {
@@ -1963,14 +1973,20 @@ class SakiAppViewModel @Inject constructor(
     }
 
     fun refreshEndpointStatus() {
-        val serverId = uiState.value.selectedServerId ?: return
+        val serverId = uiState.value.selectedServerId
+        if (serverId == null) {
+            mutableEndpointStatus.value = EndpointStatus()
+            return
+        }
         val results = endpointSelector.getLastProbeResults(serverId)
-        val activeId = endpointSelector.getActiveEndpointId(serverId)
+        val activeEndpoint = endpointSelector.getActiveEndpoint(serverId)
         mutableEndpointStatus.update { current ->
             current.copy(
-                activeEndpointLabel = results.find { it.endpoint.id == activeId }?.endpoint?.label,
-                activeEndpointId = activeId,
+                activeEndpointLabel = activeEndpoint?.label,
+                activeEndpointId = activeEndpoint?.id,
                 isForced = endpointSelector.isForced(serverId),
+                isProbeComplete = endpointSelector.hasCompletedProbe(serverId),
+                isProbing = endpointSelector.isProbeInProgress(serverId),
                 probeResults = results.map { r ->
                     EndpointProbeInfo(
                         id = r.endpoint.id,
@@ -2002,7 +2018,7 @@ class SakiAppViewModel @Inject constructor(
                 endpointSelector.probe(serverId, server)
                 refreshEndpointStatus()
             } finally {
-                mutableEndpointStatus.update { it.copy(isProbing = false) }
+                refreshEndpointStatus()
             }
         }
     }
@@ -2070,9 +2086,12 @@ data class EndpointStatus(
     val isForced: Boolean = false,
     val probeResults: List<EndpointProbeInfo> = emptyList(),
     val isProbing: Boolean = false,
+    val isProbeComplete: Boolean = false,
 ) {
     val isOfflineDegraded: Boolean
-        get() = !isProbing &&
+        get() = activeEndpointId == null &&
+            isProbeComplete &&
+            !isProbing &&
             probeResults.isNotEmpty() &&
             probeResults.none { it.reachable }
 }
