@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 13,
-    "identityHash": "386603c46d8dc49470332927af89a4dc",
+    "identityHash": "909a167314c1e72cb8e91d82720e0545",
     "entities": [
       {
         "tableName": "app_preferences",
@@ -1004,7 +1004,7 @@
       },
       {
         "tableName": "cached_song_metadata",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `songId` TEXT NOT NULL, `parentId` TEXT, `title` TEXT NOT NULL COLLATE NOCASE, `album` TEXT, `albumId` TEXT, `artist` TEXT, `artistId` TEXT, `coverArtId` TEXT, `durationSeconds` INTEGER, `track` INTEGER, `discNumber` INTEGER, `year` INTEGER, `genre` TEXT, `bitRate` INTEGER, `sampleRate` INTEGER, `suffix` TEXT, `contentType` TEXT, `sizeBytes` INTEGER, `path` TEXT, `created` TEXT, `cachedAt` INTEGER NOT NULL, PRIMARY KEY(`serverId`, `songId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `songId` TEXT NOT NULL, `parentId` TEXT, `title` TEXT NOT NULL COLLATE NOCASE, `album` TEXT, `albumId` TEXT, `artist` TEXT, `artistId` TEXT, `coverArtId` TEXT, `durationSeconds` INTEGER, `track` INTEGER, `discNumber` INTEGER, `year` INTEGER, `genre` TEXT, `bitRate` INTEGER, `sampleRate` INTEGER, `suffix` TEXT, `contentType` TEXT, `sizeBytes` INTEGER, `path` TEXT, `created` TEXT, `cachedAt` INTEGER NOT NULL, `libraryOrder` INTEGER NOT NULL DEFAULT 2147483647, PRIMARY KEY(`serverId`, `songId`))",
         "fields": [
           {
             "fieldPath": "serverId",
@@ -1119,6 +1119,13 @@
             "columnName": "cachedAt",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "libraryOrder",
+            "columnName": "libraryOrder",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "2147483647"
           }
         ],
         "primaryKey": {
@@ -1148,6 +1155,18 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_song_metadata_serverId_artistId` ON `${TABLE_NAME}` (`serverId`, `artistId`)"
+          },
+          {
+            "name": "index_cached_song_metadata_serverId_libraryOrder_title_songId",
+            "unique": false,
+            "columnNames": [
+              "serverId",
+              "libraryOrder",
+              "title",
+              "songId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_song_metadata_serverId_libraryOrder_title_songId` ON `${TABLE_NAME}` (`serverId`, `libraryOrder`, `title`, `songId`)"
           },
           {
             "name": "index_cached_song_metadata_serverId_title_songId",
@@ -1339,7 +1358,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '386603c46d8dc49470332927af89a4dc')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '909a167314c1e72cb8e91d82720e0545')"
     ]
   }
 }
