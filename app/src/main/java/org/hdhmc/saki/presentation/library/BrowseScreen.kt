@@ -129,6 +129,7 @@ fun BrowseScreen(
     onRefreshCurrentTab: () -> Unit,
     onSelectAlbumFeed: (AlbumListType) -> Unit,
     onLoadMoreAlbums: () -> Unit,
+    onLoadPreviousSongs: () -> Unit,
     onLoadMoreSongs: () -> Unit,
     onUpdateAlbumViewMode: (AlbumViewMode) -> Unit,
     onOpenArtist: (String) -> Unit,
@@ -288,6 +289,7 @@ fun BrowseScreen(
                         onRefreshCurrentTab = onRefreshCurrentTab,
                         onSelectAlbumFeed = onSelectAlbumFeed,
                         onLoadMoreAlbums = onLoadMoreAlbums,
+                        onLoadPreviousSongs = onLoadPreviousSongs,
                         onLoadMoreSongs = onLoadMoreSongs,
                         onUpdateAlbumViewMode = onUpdateAlbumViewMode,
                         onOpenArtist = onOpenArtist,
@@ -391,6 +393,7 @@ private fun BrowsePager(
     onRefreshCurrentTab: () -> Unit,
     onSelectAlbumFeed: (AlbumListType) -> Unit,
     onLoadMoreAlbums: () -> Unit,
+    onLoadPreviousSongs: () -> Unit,
     onLoadMoreSongs: () -> Unit,
     onUpdateAlbumViewMode: (AlbumViewMode) -> Unit,
     onOpenArtist: (String) -> Unit,
@@ -536,6 +539,8 @@ private fun BrowsePager(
 
                             BrowseSection.SONGS -> SongsPage(
                                 songs = uiState.songs,
+                                songsOffset = uiState.songsOffset,
+                                hasPrevious = uiState.hasPreviousSongs,
                                 hasMore = uiState.hasMoreSongs,
                                 server = currentServer,
                                 cachedSongsBySongId = cachedSongsBySongId,
@@ -543,9 +548,11 @@ private fun BrowsePager(
                                 downloadingSongIds = uiState.downloadingSongIds,
                                 isOfflineDegraded = isOfflineDegraded,
                                 isLoading = uiState.isSongsLoading,
+                                isLoadingPrevious = uiState.isSongsLoadingPrevious,
                                 isLoadingMore = uiState.isSongsLoadingMore,
                                 error = uiState.songsError?.asString(),
                                 bottomOverlayPadding = bottomOverlayPadding,
+                                onLoadPrevious = onLoadPreviousSongs,
                                 onLoadMore = onLoadMoreSongs,
                                 onPlaySongs = onPlaySongs,
                                 onPlayLibrarySongs = onPlayLibrarySongs,
@@ -1378,6 +1385,8 @@ private fun PlaylistsPage(
 @Composable
 private fun SongsPage(
     songs: List<Song>,
+    songsOffset: Int,
+    hasPrevious: Boolean,
     hasMore: Boolean,
     server: ServerConfig,
     cachedSongsBySongId: Map<String, CachedSong>,
@@ -1385,9 +1394,11 @@ private fun SongsPage(
     downloadingSongIds: Set<String>,
     isOfflineDegraded: Boolean,
     isLoading: Boolean,
+    isLoadingPrevious: Boolean,
     isLoadingMore: Boolean,
     error: String?,
     bottomOverlayPadding: Dp,
+    onLoadPrevious: () -> Unit,
     onLoadMore: () -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
     onPlayLibrarySongs: (Int) -> Unit,
@@ -1395,7 +1406,20 @@ private fun SongsPage(
     onShowSongActions: (Song) -> Unit,
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(listState, hasMore, isLoading, isLoadingMore, songs.size) {
+    LaunchedEffect(listState, hasPrevious, isLoading, isLoadingPrevious, songsOffset, songs.size) {
+        snapshotFlow {
+            if (!hasPrevious || isLoading || isLoadingPrevious || songs.isEmpty()) {
+                false
+            } else {
+                val firstVisibleIndex = listState.layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: 0
+                firstVisibleIndex <= 8
+            }
+        }
+            .distinctUntilChanged()
+            .filter { shouldLoad -> shouldLoad }
+            .collect { onLoadPrevious() }
+    }
+    LaunchedEffect(listState, hasMore, isLoading, isLoadingMore, songsOffset, songs.size) {
         snapshotFlow {
             if (!hasMore || isLoading || isLoadingMore || songs.isEmpty()) {
                 false
@@ -1430,7 +1454,12 @@ private fun SongsPage(
         modifier = Modifier.fillMaxSize(),
         contentPadding = bottomContentPadding(bottomOverlayPadding),
     ) {
-        itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
+        if (isLoadingPrevious) {
+            item(key = "songs-loading-previous") {
+                LoadingStateCard(stringResource(R.string.browse_loading_songs))
+            }
+        }
+        itemsIndexed(songs, key = { index, s -> "${songsOffset + index}-${s.id}" }) { index, song ->
             val isOfflinePlayable = song.isOfflinePlayable(cachedSongsBySongId, streamCachedSongIds)
             SongRow(
                 song = song,

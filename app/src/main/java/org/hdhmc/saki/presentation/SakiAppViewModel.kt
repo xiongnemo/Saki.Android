@@ -406,9 +406,12 @@ class SakiAppViewModel @Inject constructor(
                 selectedAlbum = null,
                 selectedPlaylist = null,
                 songs = emptyList(),
+                songsOffset = 0,
+                hasPreviousSongs = false,
                 hasMoreSongs = true,
                 hasLoadedSongsFromNetwork = false,
                 isSongsLoading = false,
+                isSongsLoadingPrevious = false,
                 isSongsLoadingMore = false,
                 songsError = null,
             )
@@ -518,12 +521,13 @@ class SakiAppViewModel @Inject constructor(
         if (
             !state.hasMoreSongs ||
             state.isSongsLoading ||
+            state.isSongsLoadingPrevious ||
             state.isSongsLoadingMore ||
             state.songs.isEmpty()
         ) {
             return
         }
-        val offset = state.songs.size
+        val offset = state.songsOffset + state.songs.size
 
         viewModelScope.launch {
             mutableUiState.update { it.copy(isSongsLoadingMore = true, songsError = null) }
@@ -548,12 +552,15 @@ class SakiAppViewModel @Inject constructor(
                 }
                 if (uiState.value.selectedServerId == serverId) {
                     mutableUiState.update { current ->
-                        val existingSongIds = current.songs.mapTo(HashSet(current.songs.size)) { it.id }
-                        val newSongs = page.songs.filterNot { it.id in existingSongIds }
-                        val mergedSongs = if (newSongs.isEmpty()) current.songs else current.songs + newSongs
+                        val mergedSongs = current.songs + page.songs
+                        val trimCount = (mergedSongs.size - SONGS_DISPLAY_WINDOW_SIZE).coerceAtLeast(0)
+                        val windowSongs = if (trimCount > 0) mergedSongs.drop(trimCount) else mergedSongs
+                        val windowOffset = current.songsOffset + trimCount
                         current.copy(
-                            songs = mergedSongs,
-                            hasMoreSongs = page.hasMore && newSongs.isNotEmpty(),
+                            songs = windowSongs,
+                            songsOffset = windowOffset,
+                            hasPreviousSongs = windowOffset > 0,
+                            hasMoreSongs = page.hasMore && page.songs.isNotEmpty(),
                             hasLoadedSongsFromNetwork = current.hasLoadedSongsFromNetwork || loadedFromNetwork,
                             isSongsLoadingMore = false,
                             songsError = null,
@@ -566,6 +573,78 @@ class SakiAppViewModel @Inject constructor(
                     mutableUiState.update {
                         it.copy(
                             isSongsLoadingMore = false,
+                            songsError = throwable.localizedOr(R.string.error_load_songs),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun loadPreviousSongs() {
+        val state = uiState.value
+        val serverId = state.selectedServerId ?: return
+        if (
+            !state.hasPreviousSongs ||
+            state.isSongsLoading ||
+            state.isSongsLoadingPrevious ||
+            state.isSongsLoadingMore ||
+            state.songs.isEmpty()
+        ) {
+            return
+        }
+        val offset = (state.songsOffset - SONGS_PAGE_SIZE).coerceAtLeast(0)
+
+        viewModelScope.launch {
+            mutableUiState.update { it.copy(isSongsLoadingPrevious = true, songsError = null) }
+
+            val cachedAt = System.currentTimeMillis()
+            try {
+                var loadedFromNetwork = false
+                val page = if (endpointStatus.value.isOfflineDegraded) {
+                    loadCachedSongsPage(serverId, offset)
+                } else {
+                    try {
+                        fetchSongsPage(serverId, offset, cachedAt).also {
+                            loadedFromNetwork = true
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (networkError: Throwable) {
+                        val cachedPage = loadCachedSongsPage(serverId, offset)
+                        if (cachedPage.songs.isEmpty()) throw networkError
+                        cachedPage
+                    }
+                }
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update { current ->
+                        if (page.songs.isEmpty()) {
+                            return@update current.copy(
+                                hasPreviousSongs = false,
+                                isSongsLoadingPrevious = false,
+                                songsError = null,
+                            )
+                        }
+                        val mergedSongs = page.songs + current.songs
+                        val trimCount = (mergedSongs.size - SONGS_DISPLAY_WINDOW_SIZE).coerceAtLeast(0)
+                        val windowSongs = if (trimCount > 0) mergedSongs.dropLast(trimCount) else mergedSongs
+                        current.copy(
+                            songs = windowSongs,
+                            songsOffset = offset,
+                            hasPreviousSongs = offset > 0,
+                            hasMoreSongs = current.hasMoreSongs || trimCount > 0,
+                            hasLoadedSongsFromNetwork = current.hasLoadedSongsFromNetwork || loadedFromNetwork,
+                            isSongsLoadingPrevious = false,
+                            songsError = null,
+                        )
+                    }
+                }
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
+                if (uiState.value.selectedServerId == serverId) {
+                    mutableUiState.update {
+                        it.copy(
+                            isSongsLoadingPrevious = false,
                             songsError = throwable.localizedOr(R.string.error_load_songs),
                         )
                     }
@@ -896,7 +975,7 @@ class SakiAppViewModel @Inject constructor(
                     serverId = serverId,
                     songs = songs,
                     startIndex = startIndex,
-                    libraryOffset = 0,
+                    libraryOffset = state.songsOffset,
                 )
             }.onSuccess {
                 openNowPlayingRequestsFlow.emit(Unit)
@@ -1278,8 +1357,11 @@ class SakiAppViewModel @Inject constructor(
                 selectedAlbum = if (serverChanged) null else state.selectedAlbum,
                 selectedPlaylist = if (serverChanged) null else state.selectedPlaylist,
                 songs = if (serverChanged) emptyList() else state.songs,
+                songsOffset = if (serverChanged) 0 else state.songsOffset,
+                hasPreviousSongs = if (serverChanged) false else state.hasPreviousSongs,
                 hasMoreSongs = if (serverChanged) true else state.hasMoreSongs,
                 hasLoadedSongsFromNetwork = if (serverChanged) false else state.hasLoadedSongsFromNetwork,
+                isSongsLoadingPrevious = if (serverChanged) false else state.isSongsLoadingPrevious,
                 isSongsLoadingMore = if (serverChanged) false else state.isSongsLoadingMore,
             )
         }
@@ -1500,6 +1582,8 @@ class SakiAppViewModel @Inject constructor(
                 mutableUiState.update {
                     it.copy(
                         songs = songs,
+                        songsOffset = 0,
+                        hasPreviousSongs = false,
                         hasMoreSongs = songs.size >= SONGS_PAGE_SIZE,
                     )
                 }
@@ -1735,6 +1819,8 @@ class SakiAppViewModel @Inject constructor(
                     mutableUiState.update {
                         it.copy(
                             songs = cached,
+                            songsOffset = 0,
+                            hasPreviousSongs = false,
                             hasMoreSongs = cached.size >= SONGS_PAGE_SIZE,
                         )
                     }
@@ -1746,6 +1832,7 @@ class SakiAppViewModel @Inject constructor(
                     mutableUiState.update {
                         it.copy(
                             isSongsLoading = false,
+                            isSongsLoadingPrevious = false,
                             isSongsLoadingMore = false,
                             songsError = null,
                         )
@@ -1758,6 +1845,7 @@ class SakiAppViewModel @Inject constructor(
                 mutableUiState.update {
                     it.copy(
                         isSongsLoading = true,
+                        isSongsLoadingPrevious = false,
                         isSongsLoadingMore = false,
                         songsError = null,
                     )
@@ -1771,9 +1859,12 @@ class SakiAppViewModel @Inject constructor(
                     mutableUiState.update {
                         it.copy(
                             songs = result.songs,
+                            songsOffset = 0,
+                            hasPreviousSongs = false,
                             hasMoreSongs = result.hasMore,
                             hasLoadedSongsFromNetwork = true,
                             isSongsLoading = false,
+                            isSongsLoadingPrevious = false,
                             isSongsLoadingMore = false,
                             songsError = null,
                         )
@@ -1797,15 +1888,19 @@ class SakiAppViewModel @Inject constructor(
                         if (!cached.isNullOrEmpty()) {
                             it.copy(
                                 songs = cached,
+                                songsOffset = 0,
+                                hasPreviousSongs = false,
                                 hasMoreSongs = cached.size >= SONGS_PAGE_SIZE,
                                 hasLoadedSongsFromNetwork = false,
                                 isSongsLoading = false,
+                                isSongsLoadingPrevious = false,
                                 isSongsLoadingMore = false,
                                 songsError = null,
                             )
                         } else {
                             it.copy(
                                 isSongsLoading = false,
+                                isSongsLoadingPrevious = false,
                                 isSongsLoadingMore = false,
                                 songsError = throwable.localizedOr(R.string.error_load_songs),
                             )
@@ -2212,9 +2307,12 @@ data class SakiAppUiState(
     val isPlaylistLoading: Boolean = false,
     val playlistError: UiText? = null,
     val songs: List<Song> = emptyList(),
+    val songsOffset: Int = 0,
+    val hasPreviousSongs: Boolean = false,
     val hasMoreSongs: Boolean = true,
     val hasLoadedSongsFromNetwork: Boolean = false,
     val isSongsLoading: Boolean = false,
+    val isSongsLoadingPrevious: Boolean = false,
     val isSongsLoadingMore: Boolean = false,
     val songsError: UiText? = null,
     val isSongMetadataSyncing: Boolean = false,
