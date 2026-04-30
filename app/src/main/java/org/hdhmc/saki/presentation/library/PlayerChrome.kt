@@ -808,7 +808,16 @@ fun NowPlayingOverlay(
                                         },
                                     )
                                     DropdownMenuItem(
-                                        text = { Text(activeEndpointLabel ?: stringResource(R.string.player_no_endpoint)) },
+                                        text = {
+                                            Text(
+                                                activeEndpointLabel
+                                                    ?: if (isProbing) {
+                                                        stringResource(R.string.player_probing)
+                                                    } else {
+                                                        stringResource(R.string.player_no_endpoint)
+                                                    },
+                                            )
+                                        },
                                         onClick = {
                                             showMenu = false
                                             showEndpointStatus = true

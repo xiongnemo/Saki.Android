@@ -113,8 +113,7 @@ class DefaultPlaybackManager @Inject constructor(
     }
 
     private fun shouldPreferLocalCache(serverId: Long): Boolean {
-        val probeResults = endpointSelector.getLastProbeResults(serverId)
-        return probeResults.isNotEmpty() && probeResults.none { result -> result.reachable }
+        return endpointSelector.isOfflineDegraded(serverId)
     }
 
     private fun resolveQualityForSong(
