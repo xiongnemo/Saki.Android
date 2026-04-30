@@ -17,6 +17,7 @@ import org.hdhmc.saki.data.local.entity.CachedPlaylistDetailEntity
 import org.hdhmc.saki.data.local.entity.CachedPlaylistDetailSongEntity
 import org.hdhmc.saki.data.local.entity.CachedPlaylistEntity
 import org.hdhmc.saki.data.local.entity.CachedSongMetadataEntity
+import org.hdhmc.saki.data.local.entity.CachedSongMetadataOrder
 
 @Dao
 interface LibraryCacheDao {
@@ -309,7 +310,17 @@ interface LibraryCacheDao {
     @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId AND songId IN (:songIds)")
     suspend fun getSongMetadata(serverId: Long, songIds: List<String>): List<CachedSongMetadataEntity>
 
-    @Query("SELECT * FROM cached_song_metadata WHERE serverId = :serverId ORDER BY title COLLATE NOCASE, songId LIMIT :limit OFFSET :offset")
+    @Query("SELECT songId, libraryOrder FROM cached_song_metadata WHERE serverId = :serverId AND songId IN (:songIds)")
+    suspend fun getSongMetadataOrders(serverId: Long, songIds: List<String>): List<CachedSongMetadataOrder>
+
+    @Query(
+        """
+        SELECT * FROM cached_song_metadata
+        WHERE serverId = :serverId
+        ORDER BY libraryOrder, title COLLATE NOCASE, songId
+        LIMIT :limit OFFSET :offset
+        """,
+    )
     suspend fun getSongMetadataPage(serverId: Long, limit: Int, offset: Int): List<CachedSongMetadataEntity>
 
     @Query(

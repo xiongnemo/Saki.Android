@@ -151,24 +151,26 @@ class DefaultLibraryCacheRepository @Inject constructor(
         val cachedAt = System.currentTimeMillis()
         replaceLibrarySongs(serverId, songs)
         dao.pruneUnreferencedSongMetadata(serverId)
-        saveSongMetadataPageInternal(serverId, songs, cachedAt)
+        saveSongMetadataPageInternal(serverId, songs, cachedAt, startOrder = 0)
     }
 
     override suspend fun saveSongsWindow(
         serverId: Long,
         songs: List<Song>,
         cachedAt: Long,
+        startOrder: Int?,
     ): Unit = withContext(ioDispatcher) {
         replaceLibrarySongs(serverId, songs)
-        saveSongMetadataPageInternal(serverId, songs, cachedAt)
+        saveSongMetadataPageInternal(serverId, songs, cachedAt, startOrder)
     }
 
     override suspend fun saveSongMetadataPage(
         serverId: Long,
         songs: List<Song>,
         cachedAt: Long,
+        startOrder: Int?,
     ): Unit = withContext(ioDispatcher) {
-        saveSongMetadataPageInternal(serverId, songs, cachedAt)
+        saveSongMetadataPageInternal(serverId, songs, cachedAt, startOrder)
     }
 
     override suspend fun pruneSongMetadataBefore(
@@ -370,9 +372,25 @@ class DefaultLibraryCacheRepository @Inject constructor(
         serverId: Long,
         songs: List<Song>,
         cachedAt: Long,
+        startOrder: Int?,
     ) {
+        val existingOrders = if (startOrder == null && songs.isNotEmpty()) {
+            songs.map(Song::id)
+                .distinct()
+                .chunked(IN_CLAUSE_QUERY_CHUNK_SIZE)
+                .flatMap { chunk -> dao.getSongMetadataOrders(serverId, chunk) }
+                .associate { it.songId to it.libraryOrder }
+        } else {
+            emptyMap()
+        }
         songs.asSequence()
-            .map { song -> song.toMetadataEntity(serverId, cachedAt) }
+            .mapIndexed { index, song ->
+                song.toMetadataEntity(
+                    serverId = serverId,
+                    cachedAt = cachedAt,
+                    libraryOrder = startOrder?.plus(index) ?: existingOrders[song.id] ?: LIBRARY_ORDER_UNSET,
+                )
+            }
             .chunked(SONG_METADATA_WRITE_CHUNK_SIZE)
             .forEach { chunk -> dao.insertSongMetadata(chunk) }
     }
@@ -642,7 +660,11 @@ class DefaultLibraryCacheRepository @Inject constructor(
         songs = songs,
     )
 
-    private fun Song.toMetadataEntity(serverId: Long, cachedAt: Long) = CachedSongMetadataEntity(
+    private fun Song.toMetadataEntity(
+        serverId: Long,
+        cachedAt: Long,
+        libraryOrder: Int = LIBRARY_ORDER_UNSET,
+    ) = CachedSongMetadataEntity(
         serverId = serverId,
         songId = id,
         parentId = parentId,
@@ -665,6 +687,7 @@ class DefaultLibraryCacheRepository @Inject constructor(
         path = path,
         created = created,
         cachedAt = cachedAt,
+        libraryOrder = libraryOrder,
     )
 
     private fun CachedSongMetadataEntity.toDomain() = Song(
@@ -694,5 +717,6 @@ class DefaultLibraryCacheRepository @Inject constructor(
         const val IN_CLAUSE_QUERY_CHUNK_SIZE = 500
         const val SONG_METADATA_WRITE_CHUNK_SIZE = 500
         const val SEARCH_DUPLICATE_BUFFER_MULTIPLIER = 4
+        const val LIBRARY_ORDER_UNSET = Int.MAX_VALUE
     }
 }

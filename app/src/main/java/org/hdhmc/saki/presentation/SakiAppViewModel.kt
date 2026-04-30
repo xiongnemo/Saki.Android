@@ -1726,6 +1726,7 @@ class SakiAppViewModel @Inject constructor(
                     serverId = serverId,
                     songs = result.songs.take(SONGS_DISPLAY_WINDOW_SIZE),
                     cachedAt = cachedAt,
+                    startOrder = 0,
                 )
                 if (!result.hasMore) {
                     libraryCacheRepository.pruneSongMetadataBefore(serverId, cachedAt)
@@ -1784,7 +1785,7 @@ class SakiAppViewModel @Inject constructor(
             songCount = SONGS_PAGE_SIZE,
             songOffset = offset,
         ).data.songs
-        libraryCacheRepository.saveSongMetadataPage(serverId, songs, cachedAt)
+        libraryCacheRepository.saveSongMetadataPage(serverId, songs, cachedAt, startOrder = offset)
         SongsPageResult(
             songs = songs,
             hasMore = songs.size >= SONGS_PAGE_SIZE,
@@ -1808,7 +1809,7 @@ class SakiAppViewModel @Inject constructor(
                 songOffset = offset,
             ).data.songs
             if (songs.isEmpty()) break
-            libraryCacheRepository.saveSongMetadataPage(serverId, songs, cachedAt)
+            libraryCacheRepository.saveSongMetadataPage(serverId, songs, cachedAt, startOrder = offset)
             syncedCount += songs.size
             if (displaySongs.size < SONGS_DISPLAY_WINDOW_SIZE) {
                 displaySongs.addAll(songs.take(SONGS_DISPLAY_WINDOW_SIZE - displaySongs.size))
@@ -1820,8 +1821,7 @@ class SakiAppViewModel @Inject constructor(
             offset += songs.size
         }
         if (syncedCount > 0) {
-            displaySongs.sortBy { it.title.lowercase() }
-            libraryCacheRepository.saveSongsWindow(serverId, displaySongs, cachedAt)
+            libraryCacheRepository.saveSongsWindow(serverId, displaySongs, cachedAt, startOrder = 0)
             libraryCacheRepository.pruneSongMetadataBefore(serverId, cachedAt)
         }
         syncedCount

@@ -21,8 +21,8 @@ interface LibraryCacheRepository {
     suspend fun getSongs(serverId: Long): List<Song>
     suspend fun getSongsPage(serverId: Long, limit: Int, offset: Int): List<Song>
     suspend fun saveSongs(serverId: Long, songs: List<Song>)
-    suspend fun saveSongsWindow(serverId: Long, songs: List<Song>, cachedAt: Long)
-    suspend fun saveSongMetadataPage(serverId: Long, songs: List<Song>, cachedAt: Long)
+    suspend fun saveSongsWindow(serverId: Long, songs: List<Song>, cachedAt: Long, startOrder: Int? = null)
+    suspend fun saveSongMetadataPage(serverId: Long, songs: List<Song>, cachedAt: Long, startOrder: Int? = null)
     suspend fun pruneSongMetadataBefore(serverId: Long, cachedAt: Long)
     suspend fun searchCached(
         serverId: Long,

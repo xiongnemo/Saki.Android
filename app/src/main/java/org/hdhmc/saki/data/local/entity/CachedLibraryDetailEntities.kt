@@ -10,6 +10,7 @@ import androidx.room.Index
     indices = [
         Index(value = ["serverId", "albumId"]),
         Index(value = ["serverId", "artistId"]),
+        Index(value = ["serverId", "libraryOrder", "title", "songId"]),
         Index(value = ["serverId", "title", "songId"]),
     ],
 )
@@ -37,6 +38,13 @@ data class CachedSongMetadataEntity(
     val path: String?,
     val created: String?,
     val cachedAt: Long,
+    @ColumnInfo(defaultValue = "2147483647")
+    val libraryOrder: Int,
+)
+
+data class CachedSongMetadataOrder(
+    val songId: String,
+    val libraryOrder: Int,
 )
 
 @Entity(tableName = "cached_artist_details", primaryKeys = ["serverId", "artistId"])
