@@ -1755,6 +1755,7 @@ private fun NowPlayingArtworkPagerHost(
     // Any other settled page change comes from the user's pager gesture.
     var programmaticPagerSync by remember { mutableStateOf(false) }
     var lastProgrammaticSettledPage by remember { mutableStateOf<Int?>(null) }
+    var lastPlaybackTargetPage by remember { mutableStateOf(targetPage) }
 
     // Stabilize artwork during deferred queue expansion:
     // update the page count first, then move after any insertion before the
@@ -1767,6 +1768,7 @@ private fun NowPlayingArtworkPagerHost(
         queueIdentity,
         useProgrammaticMotion,
     ) {
+        val expectedPage = lastPlaybackTargetPage
         val isLocalVisualSkip = requestedVisualPage != null && requestedVisualPage != targetPage
         if (isLocalVisualSkip && artworkPagerState.currentPage != visualTargetPage) {
             stableQueue = queue
@@ -1792,17 +1794,21 @@ private fun NowPlayingArtworkPagerHost(
             }
         }
         if (!isLocalVisualSkip && currentTrack.songId == lastTrackId && artworkPagerState.currentPage != targetPage) {
-            val startPage = artworkPagerState.currentPage
+            val userMovedBeforeStabilize =
+                artworkPagerState.currentPage != expectedPage ||
+                    artworkPagerState.settledPage != expectedPage
+            stableQueue = queue
+            withFrameNanos { }
             while (artworkPagerState.isScrollInProgress) {
                 withFrameNanos { }
             }
             val userMovedPager =
-                artworkPagerState.currentPage != startPage ||
-                    artworkPagerState.settledPage != startPage
+                userMovedBeforeStabilize ||
+                    artworkPagerState.currentPage != expectedPage ||
+                    artworkPagerState.settledPage != expectedPage
             if (!userMovedPager && artworkPagerState.currentPage != targetPage) {
                 programmaticPagerSync = true
                 try {
-                    stableQueue = queue
                     artworkPagerState.scrollToPage(targetPage)
                     motionState.position = targetPage.toFloat()
                     withFrameNanos { }
@@ -1812,6 +1818,11 @@ private fun NowPlayingArtworkPagerHost(
                 }
             } else {
                 stableQueue = queue
+                val selectedPage = artworkPagerState.settledPage
+                if (selectedPage != targetPage && selectedPage in queue.indices) {
+                    lastProgrammaticSettledPage = null
+                    latestOnUserSelectQueueItem(selectedPage)
+                }
             }
         } else {
             stableQueue = queue
@@ -1836,6 +1847,7 @@ private fun NowPlayingArtworkPagerHost(
             }
         }
         lastTrackId = currentTrack.songId
+        lastPlaybackTargetPage = targetPage
     }
 
     LaunchedEffect(artworkPagerState, motionState) {
